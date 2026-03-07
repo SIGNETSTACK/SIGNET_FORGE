@@ -97,20 +97,13 @@ docs/html/
 docs/latex/
 
 # ---------------------------------------------------------------------------
-# Local internal workspace artifacts (never commit)
+# Local workspace artifacts
 # ---------------------------------------------------------------------------
-Codex_/
-build-commercial-local/
-CLAUDE.md
-tools/signet_keygen.cpp
-scripts/signet_keygen.sh
-Governance_Files/
-/Signet_Forge_Test
-/Signet_Forge*Pre-Public*
-/Signet-Forge_Launch*
+build-*/
+*.local
 
 # ---------------------------------------------------------------------------
-# Secrets and credentials (never commit)
+# Secrets and credentials
 # ---------------------------------------------------------------------------
 *.env
 *.key
@@ -123,22 +116,10 @@ Governance_Files/
 *.keystore
 
 # ---------------------------------------------------------------------------
-# Internal docs (architecture internals, business strategy — local only)
-# ---------------------------------------------------------------------------
-docs/internal/
-docs/product-knowledge/
-docs/VENDOR_ASSESSMENT.md
-docs/BUSINESS_STRATEGY.md
-docs/REFERENCES.md
-docs/SIGNET_PROJECT_TIMELINE.md
-docs/Signet_Must_Haves_and_Nice_to_Haves.md
-
-# ---------------------------------------------------------------------------
-# Enterprise benchmark data/results (generated, not tracked)
+# Generated data and results
 # ---------------------------------------------------------------------------
 Benchmarking_Protocols/data/
 Benchmarking_Protocols/results/
-build-enterprise-bench/
 
 # ---------------------------------------------------------------------------
 # clangd / LSP index cache
@@ -146,17 +127,7 @@ build-enterprise-bench/
 .cache/
 
 # ---------------------------------------------------------------------------
-# Conversation / session artifacts (not source code)
+# Rust build artifacts
 # ---------------------------------------------------------------------------
-Signet-Parquet_Launch_*
-Signet_Parquet_Test*
-Signet_Parquet*Pre-Public*
-Plan:*
-Benchmarking_Protocols_Summary
-build-server/
-build-server-pq/
-build-minimal/
-build-ffi/
-build-wasm/
 rust/*/target/
 rust/*/Cargo.lock
