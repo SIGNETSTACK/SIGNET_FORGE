@@ -22,7 +22,7 @@ jobs:
         os: [ ubuntu-24.04, macos-14, windows-2022 ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU (Linux aarch64 cross-compile)
         if: runner.os == 'Linux'
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build
         run: pip install build

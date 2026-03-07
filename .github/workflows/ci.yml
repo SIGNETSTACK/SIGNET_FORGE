@@ -23,7 +23,7 @@ jobs:
         os: [ ubuntu-24.04, macos-14 ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Ninja (Ubuntu)
         if: startsWith(matrix.os, 'ubuntu')
@@ -53,7 +53,7 @@ jobs:
       CXX: clang++-18
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang 18 + Ninja
         run: |
@@ -82,7 +82,7 @@ jobs:
       CXX: clang++-18
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang 18 + Ninja
         run: |
@@ -110,7 +110,7 @@ jobs:
       CXX: clang++-18
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang 18 + Ninja
         run: |
@@ -135,7 +135,7 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure
         run: cmake -B build-win -G "Visual Studio 17 2022" -A x64
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Ninja + codec libraries
         run: |
@@ -187,7 +187,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Ninja + build deps
         run: |
@@ -233,7 +233,7 @@ jobs:
       CXX: clang++-18
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang 18 + Ninja
         run: sudo apt-get install -y ninja-build clang-18
@@ -288,7 +288,7 @@ jobs:
       CXX: clang++-18
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang 18 + Ninja + llvm-tools
         run: |
@@ -337,7 +337,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Ninja
         run: sudo apt-get install -y ninja-build
