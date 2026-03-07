@@ -1,0 +1,28 @@
+# Signet Forge — Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: maintainer reviews all PRs
+*                                               @Johnson-Ogundeji
+
+# Encryption (security-critical)
+include/signet/crypto/                          @Johnson-Ogundeji
+
+# BSL 1.1 licensed files (commercial tier)
+include/signet/ai/audit_chain.hpp               @Johnson-Ogundeji
+include/signet/ai/decision_log.hpp              @Johnson-Ogundeji
+include/signet/ai/inference_log.hpp             @Johnson-Ogundeji
+include/signet/ai/compliance/                   @Johnson-Ogundeji
+include/signet/crypto/key_metadata.hpp          @Johnson-Ogundeji
+include/signet/crypto/pme.hpp                   @Johnson-Ogundeji
+include/signet/crypto/post_quantum.hpp          @Johnson-Ogundeji
+
+# License files
+LICENSE                                         @Johnson-Ogundeji
+LICENSE_COMMERCIAL                              @Johnson-Ogundeji
+
+# CI and GitHub config
+.github/                                        @Johnson-Ogundeji
+
+# Build system
+CMakeLists.txt                                  @Johnson-Ogundeji
+CMakePresets.json                               @Johnson-Ogundeji

@@ -1,0 +1,91 @@
+name: Bug Report
+description: Report a bug in Signet Forge
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill out the form below.
+        **For security vulnerabilities**, do NOT open an issue — email johnson@signetstack.io instead (see SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Signet Forge Version
+      description: The version or commit hash you are using.
+      placeholder: "v0.1.0 or commit abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language Binding
+      description: Which language binding are you using?
+      options:
+        - C++ (native)
+        - Python (pybind11)
+        - Rust (signet-forge crate)
+        - WASM / JavaScript
+        - C FFI
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux (x86_64)
+        - Linux (aarch64)
+        - macOS (x86_64)
+        - macOS (arm64)
+        - Windows (x64)
+        - WASM (browser)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: compiler
+    attributes:
+      label: Compiler / Toolchain
+      placeholder: "GCC 13, Clang 18, Apple Clang 17, MSVC 2022, Emscripten 5.x"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What happened? What did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal code or commands to reproduce the issue.
+      render: cpp
+    validations:
+      required: true
+
+  - type: textarea
+    id: cmake-flags
+    attributes:
+      label: CMake Configuration
+      description: Relevant CMake flags (e.g., SIGNET_ENABLE_PQ, SIGNET_ENABLE_COMMERCIAL).
+      render: bash
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Output / Logs
+      description: Compiler errors, runtime output, or sanitizer reports.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,162 @@
+# =============================================================================
+# Signet_Forge — .gitignore
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Build directories (CMakePresets)
+# ---------------------------------------------------------------------------
+build/
+build-asan/
+build-benchmarks/
+build-ci/
+build-coverage/
+build-fuzz/
+build-msan/
+build-python/
+build-tsan/
+build-ubsan/
+
+# ---------------------------------------------------------------------------
+# CMake artefacts
+# ---------------------------------------------------------------------------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+
+# ---------------------------------------------------------------------------
+# Compiled objects and binaries
+# ---------------------------------------------------------------------------
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+
+# ---------------------------------------------------------------------------
+# Python artefacts
+# ---------------------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+.eggs/
+*.whl
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Fuzz artifacts
+# ---------------------------------------------------------------------------
+fuzz/corpus/
+fuzz/crash-*
+fuzz/leak-*
+fuzz/timeout-*
+fuzz/oom-*
+
+# ---------------------------------------------------------------------------
+# Benchmark + test outputs
+# ---------------------------------------------------------------------------
+benchmark_results.txt
+*.parquet
+*.wal
+
+# ---------------------------------------------------------------------------
+# Editor and OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+
+# ---------------------------------------------------------------------------
+# Sanitizer profiles
+# ---------------------------------------------------------------------------
+*.profraw
+*.profdata
+default.profraw
+
+# ---------------------------------------------------------------------------
+# Doxygen output
+# ---------------------------------------------------------------------------
+html/
+docs/doxygen/
+docs/html/
+docs/latex/
+
+# ---------------------------------------------------------------------------
+# Local internal workspace artifacts (never commit)
+# ---------------------------------------------------------------------------
+Codex_/
+build-commercial-local/
+CLAUDE.md
+tools/signet_keygen.cpp
+scripts/signet_keygen.sh
+Governance_Files/
+/Signet_Forge_Test
+/Signet_Forge*Pre-Public*
+/Signet-Forge_Launch*
+
+# ---------------------------------------------------------------------------
+# Secrets and credentials (never commit)
+# ---------------------------------------------------------------------------
+*.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.secret
+*.credentials
+*.jks
+*.keystore
+
+# ---------------------------------------------------------------------------
+# Internal docs (architecture internals, business strategy — local only)
+# ---------------------------------------------------------------------------
+docs/internal/
+docs/product-knowledge/
+docs/VENDOR_ASSESSMENT.md
+docs/BUSINESS_STRATEGY.md
+docs/REFERENCES.md
+docs/SIGNET_PROJECT_TIMELINE.md
+docs/Signet_Must_Haves_and_Nice_to_Haves.md
+
+# ---------------------------------------------------------------------------
+# Enterprise benchmark data/results (generated, not tracked)
+# ---------------------------------------------------------------------------
+Benchmarking_Protocols/data/
+Benchmarking_Protocols/results/
+build-enterprise-bench/
+
+# ---------------------------------------------------------------------------
+# clangd / LSP index cache
+# ---------------------------------------------------------------------------
+.cache/
+
+# ---------------------------------------------------------------------------
+# Conversation / session artifacts (not source code)
+# ---------------------------------------------------------------------------
+Signet-Parquet_Launch_*
+Signet_Parquet_Test*
+Signet_Parquet*Pre-Public*
+Plan:*
+Benchmarking_Protocols_Summary
+build-server/
+build-server-pq/
+build-minimal/
+build-ffi/
+build-wasm/
+rust/*/target/
+rust/*/Cargo.lock

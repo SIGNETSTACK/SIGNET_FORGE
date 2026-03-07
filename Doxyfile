@@ -1,0 +1,28 @@
+# Doxyfile — Signet Forge API Reference
+# Generated for Doxygen 1.16.x
+
+PROJECT_NAME           = "Signet Forge"
+PROJECT_BRIEF          = "C++20 Parquet library with AI-native extensions"
+PROJECT_NUMBER         = 0.1.0
+OUTPUT_DIRECTORY       =
+INPUT                  = include/signet doxygen
+RECURSIVE              = YES
+EXTRACT_ALL            = YES
+JAVADOC_AUTOBRIEF      = YES
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+HTML_EXTRA_STYLESHEET  = doxygen-awesome-css/doxygen-awesome.css
+HTML_COLORSTYLE        = LIGHT
+DISABLE_INDEX          = NO
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+USE_MDFILE_AS_MAINPAGE = doxygen/mainpage.md
+FILE_PATTERNS          = *.hpp *.md
+EXCLUDE_PATTERNS       = */detail/*
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+HAVE_DOT               = NO
+SORT_MEMBER_DOCS       = YES
+WARN_IF_UNDOCUMENTED   = NO
+QUIET                  = YES

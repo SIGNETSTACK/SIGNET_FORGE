@@ -1,0 +1,101 @@
+Business Source License 1.1
+
+Licensor:             Johnson Ogundeji
+
+Licensed Work:        Signet Forge — AI Audit & Compliance Module
+                      The Licensed Work is (c) 2026 Johnson Ogundeji.
+                      Covered files:
+                        include/signet/ai/audit_chain.hpp
+                        include/signet/ai/decision_log.hpp
+                        include/signet/ai/inference_log.hpp
+                        include/signet/ai/compliance/compliance_types.hpp
+                        include/signet/ai/compliance/mifid2_reporter.hpp
+                        include/signet/ai/compliance/eu_ai_act_reporter.hpp
+
+Additional Use Grant: You may use the Licensed Work at no charge solely for
+                      internal testing and evaluation, subject to all of the
+                      following thresholds:
+
+                      (a) duration: up to 30 calendar days from first use;
+
+                      (b) usage volume: up to 50,000,000 processed rows per
+                      calendar month;
+
+                      (c) users: up to 3 distinct internal users;
+
+                      (d) nodes/environments: up to 1 deployment node or
+                      environment; and
+
+                      (e) no external service use: you may not offer the
+                      Licensed Work, or a product substantially incorporating
+                      it, to third parties as a hosted service.
+
+                      Any production use beyond the thresholds above,
+                      any external/third-party use, or any distributed SDK/
+                      library redistribution requires a separate commercial
+                      license from the Licensor.
+
+Change Date:          January 1, 2030
+
+Change License:       Apache License, Version 2.0
+
+-----------------------------------------------------------------------------
+
+For purposes of this license:
+
+"Licensed Work" means the source files identified above, as made available
+by the Licensor.
+
+"Testing and evaluation" means internal pre-production validation,
+benchmarking, QA, pilot, and non-customer-facing staging activities.
+
+"Processed rows" means records read, written, transformed, or emitted by the
+Licensed Work while it is enabled.
+
+"Production use" means deployment of the Licensed Work to process real data
+in a live customer-facing, regulated, revenue-generating, or operational
+business environment.
+
+The Licensor grants you a non-exclusive, non-transferable, non-sublicensable
+license to use, copy, modify, and create derivative works of the Licensed
+Work, subject to the limitations below.
+
+You may not use the Licensed Work for any purpose that is not expressly
+permitted by this license or the Additional Use Grant above.
+
+Effective on the Change Date, or the fourth anniversary of the first
+publicly available distribution of a specific version of the Licensed Work
+under this license, whichever comes first, the Licensor grants you rights
+under the terms of the Change License, and the rights granted in this
+paragraph will terminate.
+
+For all versions of the Licensed Work, this license applies to the version
+made available by the Licensor. You must retain this license notice and the
+SPDX identifier "BUSL-1.1" in any copy or derivative of the Licensed Work.
+
+Nothing in this license grants you any right to use the Licensor's
+trademarks, trade names, or service marks.
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED
+ON AN "AS IS" BASIS. THE LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND
+CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+-----------------------------------------------------------------------------
+
+Commercial Licensing
+
+For any use outside the Additional Use Grant — including production use,
+hosted services, distributed SDKs/libraries, or threshold overages —
+a commercial license is required.
+
+Contact: johnson@signetstack.io
+
+-----------------------------------------------------------------------------
+
+Notice
+
+This license is derived from the Business Source License developed by
+MariaDB Corporation Ab and subsequently adopted by HashiCorp and others.
+The full BSL 1.1 specification is available at:
+https://mariadb.com/bsl11/

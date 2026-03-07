@@ -1,0 +1,133 @@
+# Security Policy
+
+## Supported Versions
+
+| Version | Supported |
+|---------|-----------|
+| 0.1.x   | Yes       |
+| < 0.1   | No        |
+
+Only the latest release receives security patches.
+
+## Reporting a Vulnerability
+
+**Do not open a public GitHub issue for security vulnerabilities.**
+
+Instead, please report them responsibly via email:
+
+**Email**: johnson@signetstack.io
+
+Include the following in your report:
+
+1. Description of the vulnerability
+2. Steps to reproduce (minimal reproducer preferred)
+3. Affected files and/or API surfaces
+4. Potential impact assessment
+5. Suggested fix (if any)
+
+## Response Timeline
+
+| Stage | Timeline |
+|-------|----------|
+| Acknowledgment | Within 48 hours |
+| Initial triage and severity assessment | Within 7 days |
+| Fix development and testing | Within 30 days (critical), 60 days (moderate) |
+| Coordinated disclosure | 90 days from initial report |
+
+We follow a **90-day coordinated disclosure** policy. If we are unable to produce a fix within 90 days, we will work with the reporter to agree on an extended timeline or a partial disclosure.
+
+## Scope
+
+### In Scope
+
+- All code in `include/signet/` (core library headers)
+- Python bindings (`python/signet_forge/`)
+- C FFI layer (`ffi/signet_forge.h`, `ffi/signet_forge_c.cpp`)
+- Rust crate (`rust/signet-forge/`, `rust/signet-forge-sys/`)
+- WASM module (`wasm/signet_wasm.cpp`)
+- CLI tool (`tools/signet_cli.cpp`)
+- Build system (CMakeLists.txt, CMakePresets.json) — supply-chain concerns
+- Encryption implementation (`crypto/aes_core.hpp`, `aes_gcm.hpp`, `aes_ctr.hpp`, `pme.hpp`, `post_quantum.hpp`)
+- WAL data integrity (`ai/wal.hpp`, `ai/wal_mapped_segment.hpp`)
+- Audit chain integrity (`ai/audit_chain.hpp`, `ai/decision_log.hpp`, `ai/inference_log.hpp`)
+
+### Out of Scope
+
+- Third-party dependencies fetched by CMake (Catch2, pybind11) — report to their respective projects
+- Documentation content (not a security surface)
+- Example programs (illustrative, not production code)
+- Benchmark code (not deployed in production)
+
+## Security-Relevant Build Flags
+
+| Flag | Purpose |
+|------|---------|
+| `SIGNET_ENABLE_CRYPTO` | Enables real AES-256-GCM/CTR encryption (otherwise stubs) |
+| `SIGNET_ENABLE_PQ` | Enables post-quantum crypto (Kyber-768, Dilithium-3) via liboqs |
+| `SIGNET_BUILD_AI_AUDIT` | Includes BSL 1.1 audit/compliance module (default ON) |
+| `SIGNET_REQUIRE_REAL_PQ` | Disallows bundled PQ stubs; requires real liboqs |
+| `SIGNET_REQUIRE_COMMERCIAL_LICENSE` | Enforces evaluation tier validation |
+
+## Known Security Limits
+
+The following hard caps are enforced to prevent resource exhaustion from malformed input:
+
+| Limit | Value | File |
+|-------|-------|------|
+| Maximum WAL record size | 64 MB | `ai/wal.hpp` (`WAL_MAX_RECORD_SIZE`) |
+| Maximum Parquet page size | 256 MB | `reader.hpp` (`PARQUET_MAX_PAGE_SIZE`) |
+| Maximum Thrift field count | 65,536 | `thrift/compact.hpp` (`MAX_FIELD_COUNT`) |
+| Maximum Thrift string size | 64 MB | `thrift/compact.hpp` (`MAX_STRING_BYTES`) |
+| Thrift nesting depth | 128 | `thrift/compact.hpp` |
+| RLE bit width range | 0-64 (clamped) | `encoding/rle.hpp` |
+| Thrift collection size | 1,000,000 | `thrift/compact.hpp` (`MAX_COLLECTION_SIZE`) |
+| GCM max plaintext | ~64 GB | `crypto/aes_gcm.hpp` (`MAX_GCM_PLAINTEXT`) |
+| TLV max field length | 64 MB | `crypto/key_metadata.hpp` (`MAX_TLV_LENGTH`) |
+| Compliance field length | 4,096 chars | `compliance/mifid2_reporter.hpp`, `eu_ai_act_reporter.hpp` |
+
+## Security Hardening
+
+Four security hardening passes have been completed, covering 87 confirmed vulnerabilities:
+
+**Pass #1** (6 vulnerabilities):
+- BYTE_STREAM_SPLIT decode out-of-bounds reads
+- RLE bit_width boundary values (0 and 65)
+- Thrift nesting depth exhaustion
+- Bad/truncated Parquet magic bytes
+- Python write_column out-of-bounds
+- Path traversal + invalid chain_id in DecisionLogWriter
+
+**Pass #2** (6 vulnerabilities):
+- WAL oversized record cap (64 MB)
+- FeatureWriter path traversal
+- Parquet page size bomb cap (256 MB)
+- Thrift field-count denial of service (65,536 cap)
+- Thrift string size bomb (64 MB cap)
+- ArrowArray offset overflow
+
+**Pass #3** (23 vulnerabilities across 5 batches, ~20 files):
+- *Encoding/Decoding*: RLE bit_width UB on shift > 64, Dictionary decoder OOB index, BSS integer overflow on count×WIDTH, Delta decoder accumulation overflow
+- *Thrift + Crypto*: Negative list count, MAP size DoS (1M cap), Weak IV generation (replaced with platform CSPRNG: arc4random_buf/getrandom), GCM counter overflow (NIST SP 800-38D), TLV size overflow (64 MB guard)
+- *Interop + AI*: Arrow bridge offset×elem_size overflow, TensorView assert()→throw in production, Decision/Inference log string size truncation, Arrow bridge raw new→RAII make_unique, FeatureWriter symlink bypass on path traversal (weakly_canonical)
+- *Crypto Key Material*: Post-quantum bundled stubs warning + is_real_pq_crypto() runtime query, AES-256 round keys zeroed in destructor, Cipher adapter key vectors zeroed via volatile pointer
+- *Compliance + Low Priority*: Compliance reporter field truncation (4096 cap), noexcept on move constructors, WAL empty record rejection, Hash chain verify_chain() early return on deserialization failure, 64-bit time_t static_assert
+
+**Pass #4** (29 vulnerabilities across 7 batches, all language bindings):
+- *Core C++*: Arena allocator overflow guards, signed index overflow, dictionary num_values validation, batch read count overflow, INT64_MIN negation UB, page size >2GiB guard, decompression ratio bomb (1024:1), NaN exclusion from statistics, schema column() bounds check
+- *Crypto*: AES-CTR counter overflow guard (64 GiB limit)
+- *AI tier*: Feature/embedding count bounds in deserialization, stoll try/catch, StreamingSink path traversal, ColumnBatch OOM limit (100M cells)
+- *C FFI*: try/catch around 5 extern "C" functions (prevents C++ exception UB across FFI), signet_schema_builder_free() cleanup, string column read OOM cleanup
+- *Rust FFI*: SchemaBuilder::new() returns Result (null check), build() only forgets self on success, write_column_string panic→Result, WriterOptions null assert
+- *WASM*: writeFileToMemfs 256 MB file limit, schema/writer column bounds checks, encryption key zeroing (volatile write)
+- *Python*: __init__.py graceful degradation (try/except ImportError), write_column_bool bounds check
+- *Keygen*: parse_hex_hash bare "0x" rejection, expiry_date clamp [1,36500], semicolon injection prevention
+
+Run hardening tests: `ctest -L hardening` — covers all 4 passes (394 total tests)
+
+## Credit
+
+Security researchers who report valid vulnerabilities will be credited in the CHANGELOG (unless they request anonymity).
+
+## PGP Key
+
+A PGP key for encrypted vulnerability reports will be published at a later date. In the interim, use the email address above.

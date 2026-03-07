@@ -1,0 +1,33 @@
+name: Docs
+# Disabled: GitHub Pages requires the repo to be public (or an Enterprise plan).
+# Re-enable the push trigger when the repo is made public.
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install Doxygen
+        run: sudo apt-get install -y doxygen
+      - name: Build docs
+        run: doxygen Doxyfile
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: html
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

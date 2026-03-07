@@ -1,0 +1,321 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "dev",
+            "displayName": "Development",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_EXAMPLES": "ON"
+            }
+        },
+        {
+            "name": "dev-tests",
+            "displayName": "Development with Tests",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_BUILD_EXAMPLES": "ON"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_BUILD_EXAMPLES": "ON",
+                "SIGNET_BUILD_TOOLS": "ON"
+            }
+        },
+        {
+            "name": "asan",
+            "displayName": "AddressSanitizer",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-asan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -g",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
+        },
+        {
+            "name": "tsan",
+            "displayName": "ThreadSanitizer",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-tsan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer -g",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+            }
+        },
+        {
+            "name": "ubsan",
+            "displayName": "UndefinedBehaviorSanitizer",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-ubsan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "CMAKE_CXX_FLAGS": "-fsanitize=undefined -fno-omit-frame-pointer -g -fno-sanitize-recover=all",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=undefined"
+            }
+        },
+        {
+            "name": "msan",
+            "displayName": "MemorySanitizer (Clang only)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-msan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "CMAKE_CXX_FLAGS": "-fsanitize=memory -fno-omit-frame-pointer -g -fPIE",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=memory -pie"
+            }
+        },
+        {
+            "name": "ci",
+            "displayName": "CI Build (Tests + Release flags)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-ci",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_BUILD_EXAMPLES": "ON",
+                "SIGNET_BUILD_TOOLS": "ON"
+            }
+        },
+        {
+            "name": "benchmarks",
+            "displayName": "Benchmarks (Release + Catch2)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-benchmarks",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_BUILD_BENCHMARKS": "ON"
+            }
+        },
+        {
+            "name": "python",
+            "displayName": "Python bindings (pybind11, Release)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-python",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_BUILD_PYTHON": "ON"
+            }
+        },
+        {
+            "name": "minimal",
+            "displayName": "Minimal (zero external deps — embedded/microcontroller)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-minimal",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_MINIMAL_DEPS": "ON",
+                "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_BUILD_EXAMPLES": "ON"
+            }
+        },
+        {
+            "name": "server",
+            "displayName": "Server/Production (ZSTD + LZ4 + Gzip + AI Audit)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-server",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_ENABLE_ZSTD": "ON",
+                "SIGNET_ENABLE_LZ4": "ON",
+                "SIGNET_ENABLE_GZIP": "ON",
+                "SIGNET_BUILD_AI_AUDIT": "ON",
+                "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_BUILD_EXAMPLES": "ON",
+                "SIGNET_BUILD_TOOLS": "ON"
+            }
+        },
+        {
+            "name": "server-pq",
+            "displayName": "Server/Production + Post-Quantum (requires liboqs)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-server-pq",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_ENABLE_ZSTD": "ON",
+                "SIGNET_ENABLE_LZ4": "ON",
+                "SIGNET_ENABLE_GZIP": "ON",
+                "SIGNET_BUILD_AI_AUDIT": "ON",
+                "SIGNET_ENABLE_PQ": "ON",
+                "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_BUILD_EXAMPLES": "ON",
+                "SIGNET_BUILD_TOOLS": "ON"
+            }
+        },
+        {
+            "name": "fuzz",
+            "displayName": "Fuzz (Clang, libFuzzer + ASan)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-fuzz",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_BUILD_FUZZ": "ON"
+            }
+        },
+        {
+            "name": "coverage",
+            "displayName": "Code Coverage (Clang source-based)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-coverage",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SIGNET_BUILD_TESTS": "ON",
+                "CMAKE_CXX_FLAGS": "-fprofile-instr-generate -fcoverage-mapping",
+                "CMAKE_EXE_LINKER_FLAGS": "-fprofile-instr-generate"
+            }
+        },
+        {
+            "name": "wasm",
+            "displayName": "WASM (Emscripten embind, browser-side Parquet + PME encryption)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-wasm",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "SIGNET_BUILD_WASM": "ON",
+                "SIGNET_ENABLE_COMMERCIAL": "ON",
+                "SIGNET_ENABLE_ZSTD": "OFF",
+                "SIGNET_ENABLE_LZ4": "OFF",
+                "SIGNET_ENABLE_GZIP": "OFF",
+                "SIGNET_ENABLE_PQ": "OFF",
+                "SIGNET_BUILD_TESTS": "OFF",
+                "SIGNET_BUILD_BENCHMARKS": "OFF",
+                "SIGNET_BUILD_EXAMPLES": "OFF",
+                "SIGNET_BUILD_TOOLS": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev"
+        },
+        {
+            "name": "dev-tests",
+            "configurePreset": "dev-tests"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan"
+        },
+        {
+            "name": "tsan",
+            "configurePreset": "tsan"
+        },
+        {
+            "name": "ubsan",
+            "configurePreset": "ubsan"
+        },
+        {
+            "name": "ci",
+            "configurePreset": "ci"
+        },
+        {
+            "name": "benchmarks",
+            "configurePreset": "benchmarks"
+        },
+        {
+            "name": "python",
+            "configurePreset": "python"
+        },
+        { "name": "minimal",    "configurePreset": "minimal" },
+        { "name": "server",     "configurePreset": "server" },
+        { "name": "server-pq",  "configurePreset": "server-pq" },
+        { "name": "fuzz",       "configurePreset": "fuzz" },
+        { "name": "coverage",   "configurePreset": "coverage" },
+        { "name": "wasm",       "configurePreset": "wasm" }
+    ],
+    "testPresets": [
+        {
+            "name": "dev-tests",
+            "configurePreset": "dev-tests",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "environment": {
+                "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+            }
+        },
+        {
+            "name": "tsan",
+            "configurePreset": "tsan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "environment": {
+                "TSAN_OPTIONS": "halt_on_error=1"
+            }
+        },
+        {
+            "name": "ubsan",
+            "configurePreset": "ubsan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "environment": {
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+            }
+        },
+        {
+            "name": "ci",
+            "configurePreset": "ci",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "benchmarks",
+            "configurePreset": "benchmarks",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "minimal",
+            "configurePreset": "minimal",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "server",
+            "configurePreset": "server",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "server-pq",
+            "configurePreset": "server-pq",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "coverage",
+            "configurePreset": "coverage",
+            "output": { "outputOnFailure": true }
+        }
+    ]
+}

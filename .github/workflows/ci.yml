@@ -1,0 +1,380 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Standard build + test (Linux + macOS)
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, macos-14 ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install ninja
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci --parallel
+
+      - name: Test
+        run: ctest --preset ci
+
+  # ---------------------------------------------------------------------------
+  # AddressSanitizer + UndefinedBehaviorSanitizer (Ubuntu only)
+  # ---------------------------------------------------------------------------
+  asan:
+    name: ASan + UBSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+      - name: Configure
+        run: cmake --preset asan
+
+      - name: Build
+        run: cmake --build --preset asan --parallel
+
+      - name: Test
+        run: ctest --preset asan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+  # ---------------------------------------------------------------------------
+  # ThreadSanitizer (Ubuntu only — TSan + macOS is unreliable)
+  # ---------------------------------------------------------------------------
+  tsan:
+    name: TSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+      - name: Configure
+        run: cmake --preset tsan
+
+      - name: Build
+        run: cmake --build --preset tsan --parallel
+
+      - name: Test
+        run: ctest --preset tsan
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+
+  # ---------------------------------------------------------------------------
+  # UBSan standalone — stricter flags, all-recover=no (Ubuntu)
+  # ---------------------------------------------------------------------------
+  ubsan:
+    name: UBSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+      - name: Configure
+        run: cmake --preset ubsan
+
+      - name: Build
+        run: cmake --build --preset ubsan --parallel
+
+      - name: Test
+        run: ctest --preset ubsan
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+  # ---------------------------------------------------------------------------
+  # Windows (MSVC) — header-only core only, no sanitizers
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Build & Test (Windows / MSVC)
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build-win -G "Visual Studio 17 2022" -A x64
+             -DSIGNET_BUILD_TESTS=ON -DSIGNET_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build-win --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build-win -C Debug --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Server codecs: ZSTD + LZ4 + Gzip enabled (Ubuntu)
+  # ---------------------------------------------------------------------------
+  server-codecs:
+    name: Server Codecs (Ubuntu)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja + codec libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build libzstd-dev liblz4-dev zlib1g-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-server -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_BUILD_EXAMPLES=ON \
+            -DSIGNET_ENABLE_ZSTD=ON \
+            -DSIGNET_ENABLE_LZ4=ON \
+            -DSIGNET_ENABLE_GZIP=ON \
+            -DSIGNET_BUILD_AI_AUDIT=ON
+
+      - name: Build
+        run: cmake --build build-server --parallel
+
+      - name: Test
+        run: ctest --test-dir build-server --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Post-quantum: real Kyber-768 + Dilithium-3 via liboqs (Ubuntu)
+  # ---------------------------------------------------------------------------
+  post-quantum:
+    name: Post-Quantum PQ (Ubuntu)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja + build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build cmake
+
+      - name: Build + install liboqs (minimal Kyber-768 + Dilithium-3)
+        run: |
+          git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs
+          cmake -S /tmp/liboqs -B /tmp/liboqs-build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DOQS_MINIMAL_BUILD="KEM_kyber_768;KEM_ml_kem_768;SIG_dilithium_3;SIG_ml_dsa_65" \
+            -DOQS_USE_OPENSSL=OFF
+          cmake --build /tmp/liboqs-build --parallel
+          sudo cmake --install /tmp/liboqs-build
+
+      - name: Configure (PQ enabled)
+        run: |
+          cmake -S . -B build-pq -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_ENABLE_PQ=ON \
+            -DSIGNET_BUILD_AI_AUDIT=ON
+
+      - name: Build
+        run: cmake --build build-pq --parallel
+
+      - name: Test (PQ tag first, then full suite)
+        run: |
+          ctest --test-dir build-pq --output-on-failure -L "pq"
+          ctest --test-dir build-pq --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Fuzz testing (libFuzzer + ASan, Clang-18, 60s per harness)
+  # ---------------------------------------------------------------------------
+  fuzz:
+    name: Fuzz (Ubuntu, Clang-18)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18 + Ninja
+        run: sudo apt-get install -y ninja-build clang-18
+
+      - name: Configure
+        run: cmake --preset fuzz
+
+      - name: Build
+        run: cmake --build --preset fuzz --parallel
+
+      - name: Run fuzzers (60s each)
+        run: |
+          mkdir -p fuzz-artifacts
+          for target in fuzz_parquet_reader fuzz_thrift_decoder fuzz_wal_reader \
+                        fuzz_rle_decoder fuzz_delta_decoder fuzz_arrow_import; do
+            echo "=== Fuzzing $target for 60s ==="
+            mkdir -p fuzz-artifacts/$target
+            ./build-fuzz/$target \
+              -max_total_time=60 \
+              -print_final_stats=1 \
+              -artifact_prefix=fuzz-artifacts/$target/ \
+              || true
+          done
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-artifacts
+          path: fuzz-artifacts/
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Fail if crashes found
+        if: always()
+        run: |
+          crashes=$(find fuzz-artifacts -name 'crash-*' -o -name 'leak-*' -o -name 'timeout-*' 2>/dev/null)
+          if [ -n "$crashes" ]; then
+            echo "::error::Fuzz crashes detected — check fuzz-crash-artifacts"
+            echo "$crashes"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Code coverage (Clang source-based → Codecov)
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage (Ubuntu, Clang-18)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18 + Ninja + llvm-tools
+        run: |
+          sudo apt-get install -y ninja-build clang-18 llvm-18
+
+      - name: Configure
+        run: cmake --preset coverage
+
+      - name: Build
+        run: cmake --build --preset coverage --parallel
+
+      - name: Test
+        run: ctest --preset coverage
+        env:
+          LLVM_PROFILE_FILE: "${{ github.workspace }}/build-coverage/default-%p.profraw"
+
+      - name: Merge profiles + export LCOV
+        run: |
+          llvm-profdata-18 merge -sparse build-coverage/*.profraw \
+            -o build-coverage/merged.profdata
+          llvm-cov-18 export \
+            --format=lcov \
+            --instr-profile=build-coverage/merged.profdata \
+            build-coverage/signet_tests \
+            > build-coverage/lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: build-coverage/lcov.info
+          flags: unittests
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Benchmark regression detection (push to main only)
+  # ---------------------------------------------------------------------------
+  benchmarks:
+    name: Benchmarks (Ubuntu)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake --preset benchmarks
+
+      - name: Build
+        run: cmake --build --preset benchmarks --parallel
+
+      - name: Run benchmarks
+        run: |
+          ./build-benchmarks/signet_benchmarks "[bench]" \
+            --benchmark-samples 50 \
+            --reporter console::out=benchmark_results.txt
+
+      - name: Ensure gh-pages branch exists
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            git checkout --orphan gh-pages
+            git reset --hard
+            git commit --allow-empty -m "Initialize gh-pages"
+            git push origin gh-pages
+            git checkout main
+          fi
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: catch2
+          output-file-path: benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          auto-push: true
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false

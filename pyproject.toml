@@ -1,0 +1,68 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "signet-forge"
+version = "0.1.0"
+description = "Standalone C++20 Parquet library with AI-native extensions — Python bindings"
+readme = "README.md"
+# Core library: Apache-2.0. AI Audit & Compliance tier (audit_chain, decision_log,
+# inference_log, MiFID II + EU AI Act reporters): BSL 1.1 (see LICENSE_COMMERCIAL).
+# Build with SIGNET_BUILD_AI_AUDIT=OFF to exclude the BSL tier entirely.
+license = {text = "Apache-2.0 AND LicenseRef-Signet-BUSL-1.1"}
+requires-python = ">=3.10"
+keywords = ["parquet", "columnar", "ai", "compliance", "mifid2", "eu-ai-act", "audit-trail", "feature-store"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: Other/Proprietary License",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "numpy>=1.24"]
+
+[project.urls]
+Homepage = "https://github.com/SIGNETSTACK/signet-forge"
+Repository = "https://github.com/SIGNETSTACK/signet-forge"
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+cmake.args = ["-DSIGNET_BUILD_PYTHON=ON"]
+wheel.packages = ["python/signet_forge"]
+install.components = ["python"]
+
+[tool.scikit-build.cmake.define]
+SIGNET_BUILD_PYTHON    = "ON"
+SIGNET_BUILD_TESTS     = "OFF"
+SIGNET_BUILD_AI_AUDIT  = "ON"
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-*"
+skip = "*-musllinux_i686 *-manylinux_i686 pp*"
+test-requires = ["pytest>=8.0", "numpy>=1.24"]
+test-command = "pytest {project}/python/tests/ -v"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+before-all = "yum install -y ninja-build || apt-get install -y ninja-build"
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]

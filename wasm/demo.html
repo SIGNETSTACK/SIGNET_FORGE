@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signet Forge — Browser Parquet Preview</title>
+<style>
+  :root { --bg: #1a1a2e; --surface: #16213e; --border: #0f3460; --accent: #e94560; --text: #eee; --dim: #888; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.3rem; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--dim); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  #drop-zone { width: 100%; max-width: 800px; border: 2px dashed var(--border); border-radius: 12px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
+  #drop-zone.hover { border-color: var(--accent); background: rgba(233,69,96,0.06); }
+  #drop-zone p { font-size: 1.1rem; margin-bottom: 0.5rem; }
+  #drop-zone .hint { color: var(--dim); font-size: 0.8rem; }
+  #file-input { display: none; }
+  #encryption-panel { width: 100%; max-width: 800px; margin-top: 1rem; }
+  .toggle-row { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--dim); font-size: 0.85rem; user-select: none; }
+  .toggle-row:hover { color: var(--text); }
+  .toggle-row input[type="checkbox"] { accent-color: var(--accent); }
+  .key-inputs { display: none; margin-top: 0.5rem; }
+  .key-inputs.show { display: block; }
+  .key-inputs label { display: block; color: var(--dim); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.2rem; margin-top: 0.5rem; }
+  .key-inputs input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 0.82rem; }
+  .key-inputs input::placeholder { color: #555; }
+  .key-inputs .hint { color: var(--dim); font-size: 0.72rem; margin-top: 0.2rem; }
+  #status { margin-top: 1rem; color: var(--dim); font-size: 0.85rem; min-height: 1.2em; }
+  #status.error { color: var(--accent); }
+  #results { width: 100%; max-width: 900px; margin-top: 1.5rem; display: none; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+  .card h2 { font-size: 1rem; color: var(--accent); margin-bottom: 0.6rem; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; }
+  .meta-item { display: flex; flex-direction: column; overflow: hidden; }
+  .meta-item .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta-item .label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; }
+  .meta-item .value { font-size: 0.95rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--accent); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; position: sticky; top: 0; background: var(--surface); }
+  td { color: var(--text); }
+  .table-scroll { max-height: 500px; overflow-y: auto; }
+  .type-badge { background: rgba(233,69,96,0.15); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+  .encrypted-badge { background: rgba(46,204,113,0.15); color: #2ecc71; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem; }
+  .pager { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.8rem; }
+  .pager button { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 12px; cursor: pointer; font-family: inherit; font-size: 0.8rem; }
+  .pager button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .pager button:disabled { opacity: 0.3; cursor: default; }
+  .pager .page-info { color: var(--dim); font-size: 0.8rem; min-width: 120px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1><span>Signet</span> Forge</h1>
+<p class="subtitle" id="version-text">Loading WASM module...</p>
+
+<div id="drop-zone">
+  <p>Drop a <strong>.parquet</strong> file here</p>
+  <p class="hint">or click to browse</p>
+  <input type="file" id="file-input" accept=".parquet,.parq">
+</div>
+
+<div id="encryption-panel">
+  <label class="toggle-row">
+    <input type="checkbox" id="encrypt-toggle"> Encrypted file (AES-256 PME)
+  </label>
+  <div class="key-inputs" id="key-inputs">
+    <label for="footer-key">Footer key (64 hex chars = 32 bytes)</label>
+    <input type="text" id="footer-key" placeholder="e.g. 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" maxlength="64" spellcheck="false" autocomplete="off">
+    <div class="hint">AES-256 key used to encrypt the Parquet footer</div>
+    <label for="column-key">Default column key (64 hex chars, optional)</label>
+    <input type="text" id="column-key" placeholder="e.g. ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100" maxlength="64" spellcheck="false" autocomplete="off">
+    <div class="hint">AES-256 key applied to all columns (if same key was used for all)</div>
+    <label for="aad-prefix">AAD prefix (optional)</label>
+    <input type="text" id="aad-prefix" placeholder="e.g. signet-pare-benchmark" spellcheck="false" autocomplete="off">
+    <div class="hint">Additional Authenticated Data prefix bound into GCM auth tags</div>
+    <label for="column-keys">Per-column keys (optional JSON)</label>
+    <input type="text" id="column-keys" placeholder='{"price":"hex64...","volume":"hex64..."}' spellcheck="false" autocomplete="off">
+    <div class="hint">Override specific columns with different keys: {"column_name": "hex_key"}</div>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<div id="results">
+  <div class="card" id="meta-card">
+    <h2>File Metadata</h2>
+    <div class="meta-grid" id="meta-grid"></div>
+  </div>
+  <div class="card">
+    <h2>Schema</h2>
+    <table id="schema-table">
+      <thead><tr><th>#</th><th>Column</th><th>Type</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Data Preview <span id="row-count" style="color:var(--dim);font-size:0.8rem"></span></h2>
+    <div class="table-scroll" id="data-scroll">
+      <table id="data-table">
+        <thead><tr></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager" style="display:none">
+      <button id="btn-first" title="First page">&#x21e4;</button>
+      <button id="btn-prev" title="Previous page">&#x2190;</button>
+      <span class="page-info" id="page-info"></span>
+      <button id="btn-next" title="Next page">&#x2192;</button>
+      <button id="btn-last" title="Last page">&#x21e5;</button>
+    </div>
+  </div>
+</div>
+
+<script src="../build-wasm/signet_wasm.js"></script>
+<script>
+(function() {
+  const ROWS_PER_PAGE = 50;
+  const MAX_LOADED_ROWS = 10000;
+
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const status = document.getElementById('status');
+  const results = document.getElementById('results');
+  const encryptToggle = document.getElementById('encrypt-toggle');
+  const keyInputs = document.getElementById('key-inputs');
+
+  let Module = null;
+
+  // Pagination state
+  let allData = [];      // allData[col][row] = string
+  let colHeaders = [];
+  let totalFileRows = 0;
+  let loadedRows = 0;
+  let currentPage = 0;
+  let totalPages = 0;
+
+  // Load WASM module
+  SignetForge().then(mod => {
+    Module = mod;
+    const ver = mod.version();
+    const hasEncryption = typeof mod.ParquetReader.prototype.openEncrypted === 'function';
+    document.getElementById('version-text').textContent = ver +
+      (hasEncryption ? ' + PME encryption' : '');
+  }).catch(err => {
+    document.getElementById('version-text').textContent = 'Failed to load WASM module';
+    console.error(err);
+  });
+
+  // Encryption toggle
+  encryptToggle.addEventListener('change', () => {
+    keyInputs.classList.toggle('show', encryptToggle.checked);
+  });
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('hover');
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+  });
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (fileInput.files.length > 0) handleFile(fileInput.files[0]); });
+
+  // Pagination buttons
+  document.getElementById('btn-first').addEventListener('click', () => goToPage(0));
+  document.getElementById('btn-prev').addEventListener('click', () => goToPage(currentPage - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goToPage(currentPage + 1));
+  document.getElementById('btn-last').addEventListener('click', () => goToPage(totalPages - 1));
+
+  function setStatus(msg, isError) {
+    status.textContent = msg;
+    status.className = isError ? 'error' : '';
+  }
+
+  function handleFile(file) {
+    if (!Module) { setStatus('WASM module not loaded yet — please wait.', true); return; }
+    setStatus('Reading file...', false);
+    results.style.display = 'none';
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const arrayBuffer = e.target.result;
+        const memfsPath = '/tmp/' + file.name;
+
+        // Write to Emscripten MEMFS
+        Module.FS.writeFile(memfsPath, new Uint8Array(arrayBuffer));
+
+        // Open with ParquetReader
+        const pqReader = new Module.ParquetReader();
+        let opened = false;
+        let isEncrypted = false;
+
+        if (encryptToggle.checked) {
+          const footerKey = document.getElementById('footer-key').value.trim();
+          const columnKey = document.getElementById('column-key').value.trim();
+          const aadPrefix = document.getElementById('aad-prefix').value.trim();
+          const columnKeys = document.getElementById('column-keys').value.trim();
+          if (footerKey.length !== 64) {
+            setStatus('Footer key must be exactly 64 hex characters (32 bytes).', true);
+            pqReader.delete();
+            return;
+          }
+          if (columnKey && columnKey.length !== 64) {
+            setStatus('Column key must be exactly 64 hex characters (32 bytes).', true);
+            pqReader.delete();
+            return;
+          }
+          if (typeof pqReader.openEncrypted !== 'function') {
+            setStatus('Encryption not available — WASM built without SIGNET_ENABLE_COMMERCIAL.', true);
+            pqReader.delete();
+            return;
+          }
+          opened = pqReader.openEncrypted(memfsPath, footerKey, columnKey, aadPrefix, columnKeys || '');
+          isEncrypted = true;
+        } else {
+          opened = pqReader.open(memfsPath);
+        }
+
+        if (!opened) {
+          const hint = isEncrypted
+            ? 'Failed to open — wrong key or unsupported encrypted format.'
+            : 'Failed to open Parquet file — may be encrypted (enable the toggle above) or unsupported.';
+          setStatus(hint, true);
+          pqReader.delete();
+          return;
+        }
+
+        const numRows = pqReader.numRows();
+        const numRG = pqReader.numRowGroups();
+        const schema = pqReader.schema();
+        const numCols = schema.numColumns();
+        const createdBy = pqReader.createdBy();
+
+        // Metadata
+        const metaGrid = document.getElementById('meta-grid');
+        metaGrid.innerHTML = '';
+        const metaItems = [
+          ['File', file.name],
+          ['Size', formatBytes(file.size)],
+          ['Rows', numRows.toLocaleString()],
+          ['Row Groups', numRG.toLocaleString()],
+          ['Columns', numCols.toString()],
+          ['Created By', createdBy || 'unknown'],
+        ];
+        if (isEncrypted) metaItems.push(['Encryption', 'AES-256 PME']);
+        metaItems.forEach(([label, value]) => {
+          const div = document.createElement('div');
+          div.className = 'meta-item';
+          if (label === 'File') div.style.gridColumn = '1 / -1';
+          div.innerHTML = '<span class="label">' + escHtml(label) + '</span><span class="value" title="' + escHtml(value) + '">' + escHtml(value) + '</span>';
+          metaGrid.appendChild(div);
+        });
+
+        // Schema table
+        const schemaBody = document.querySelector('#schema-table tbody');
+        schemaBody.innerHTML = '';
+        colHeaders = [];
+        for (let i = 0; i < numCols; i++) {
+          const name = schema.columnName(i);
+          const pt = schema.columnPhysicalType(i);
+          const typeName = Module.physicalTypeName(pt);
+          colHeaders.push(name);
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + i + '</td><td>' + escHtml(name) + '</td><td><span class="type-badge">' + escHtml(typeName) + '</span></td>';
+          schemaBody.appendChild(tr);
+        }
+
+        // Read data across all row groups (up to MAX_LOADED_ROWS)
+        setStatus('Loading data...', false);
+        allData = [];
+        for (let c = 0; c < numCols; c++) allData.push([]);
+
+        totalFileRows = numRows;
+        loadedRows = 0;
+
+        for (let rg = 0; rg < numRG && loadedRows < MAX_LOADED_ROWS; rg++) {
+          for (let c = 0; c < numCols; c++) {
+            const col = pqReader.readColumnAsStrings(rg, c);
+            const len = col.length;
+            const remaining = MAX_LOADED_ROWS - loadedRows;
+            const take = (c === 0) ? Math.min(len, remaining) : Math.min(len, remaining);
+            for (let r = 0; r < take; r++) {
+              allData[c].push(col[r]);
+            }
+          }
+          // Use first column's count to track rows loaded from this RG
+          const rgRows = Math.min(pqReader.readColumnAsStrings(rg, 0).length, MAX_LOADED_ROWS - loadedRows);
+          loadedRows += rgRows;
+        }
+
+        // Fix: use actual loaded count from first column
+        loadedRows = allData[0].length;
+
+        schema.delete();
+        pqReader.delete();
+
+        // Setup pagination
+        totalPages = Math.max(1, Math.ceil(loadedRows / ROWS_PER_PAGE));
+        currentPage = 0;
+
+        // Build header row
+        const dataHead = document.querySelector('#data-table thead tr');
+        dataHead.innerHTML = '';
+        for (let i = 0; i < numCols; i++) {
+          const th = document.createElement('th');
+          th.textContent = colHeaders[i];
+          dataHead.appendChild(th);
+        }
+
+        renderPage();
+        updatePager();
+        document.getElementById('pager').style.display = loadedRows > ROWS_PER_PAGE ? 'flex' : 'none';
+
+        const truncNote = loadedRows < totalFileRows
+          ? ' — first ' + loadedRows.toLocaleString() + ' loaded'
+          : '';
+        document.getElementById('row-count').textContent =
+          '(' + totalFileRows.toLocaleString() + ' rows' + truncNote + ')';
+
+        results.style.display = 'block';
+        setStatus('', false);
+        document.getElementById('data-scroll').scrollTop = 0;
+
+      } catch (err) {
+        setStatus('Error: ' + err.message, true);
+        console.error(err);
+      }
+    };
+    reader.onerror = function() { setStatus('Failed to read file.', true); };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderPage() {
+    const dataBody = document.querySelector('#data-table tbody');
+    dataBody.innerHTML = '';
+    const start = currentPage * ROWS_PER_PAGE;
+    const end = Math.min(start + ROWS_PER_PAGE, loadedRows);
+    const numCols = allData.length;
+
+    for (let r = start; r < end; r++) {
+      const tr = document.createElement('tr');
+      for (let c = 0; c < numCols; c++) {
+        const td = document.createElement('td');
+        const val = allData[c][r] || '';
+        td.textContent = val.length > 80 ? val.substring(0, 77) + '...' : val;
+        if (val.length > 80) td.title = val;
+        tr.appendChild(td);
+      }
+      dataBody.appendChild(tr);
+    }
+  }
+
+  function updatePager() {
+    document.getElementById('page-info').textContent =
+      'Page ' + (currentPage + 1) + ' of ' + totalPages;
+    document.getElementById('btn-first').disabled = currentPage === 0;
+    document.getElementById('btn-prev').disabled = currentPage === 0;
+    document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+    document.getElementById('btn-last').disabled = currentPage >= totalPages - 1;
+  }
+
+  function goToPage(page) {
+    if (page < 0 || page >= totalPages) return;
+    currentPage = page;
+    renderPage();
+    updatePager();
+    document.getElementById('data-scroll').scrollTop = 0;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+})();
+</script>
+</body>
+</html>

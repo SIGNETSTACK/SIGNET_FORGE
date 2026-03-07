@@ -1,0 +1,66 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature. Please describe the problem and your proposed solution.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      options:
+        - Core Parquet (read/write/schema)
+        - Encodings
+        - Compression
+        - Encryption / Post-Quantum
+        - WAL / Streaming
+        - Feature Store
+        - Event Bus / MPMC
+        - AI Audit / Compliance
+        - Python Bindings
+        - Rust Bindings
+        - WASM / Browser
+        - Build System / Packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? Why is it needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this feature work? Include API sketches if applicable.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Would this be a breaking change?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
