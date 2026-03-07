@@ -2,7 +2,7 @@
 
 **C++20 Parquet library with AI-native extensions — zero mandatory dependencies.**
 
-[GitHub Repository](https://github.com/SIGNETSTACK/signet-forge)
+[GitHub Repository](https://github.com/SIGNETSTACK/SIGNET_FORGE)
 
 ---
 

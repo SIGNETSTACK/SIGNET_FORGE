@@ -1,7 +1,12 @@
 name: Docs
-# Disabled: GitHub Pages requires the repo to be public (or an Enterprise plan).
-# Re-enable the push trigger when the repo is made public.
 on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'include/signet/**'
+      - 'doxygen/**'
+      - 'Doxyfile'
+      - '.github/workflows/docs.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
