@@ -47,6 +47,8 @@ jobs:
           cp build-wasm/signet_wasm.js  html/demo/
           cp build-wasm/signet_wasm.wasm html/demo/
           cp wasm/sample.parquet html/demo/
+          cp doxygen/favicon.png html/demo/
+          cp doxygen/logo.png    html/demo/
           # Copy demo.html with fixed script path
           sed 's|../build-wasm/signet_wasm.js|signet_wasm.js|' wasm/demo.html > html/demo/index.html
 
