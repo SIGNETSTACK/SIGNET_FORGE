@@ -33,6 +33,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
@@ -46,6 +47,29 @@
 #include <vector>
 
 namespace signet::forge {
+
+namespace detail::writer {
+
+/// CRC-32 (polynomial 0xEDB88320) for page integrity (Parquet PageHeader.crc).
+inline uint32_t page_crc32(const uint8_t* data, size_t length) noexcept {
+    static constexpr auto make_table = []() {
+        std::array<uint32_t, 256> t{};
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            t[i] = c;
+        }
+        return t;
+    };
+    static constexpr auto table = make_table();
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < length; ++i)
+        crc = table[(crc ^ data[i]) & 0xFFu] ^ (crc >> 8);
+    return crc ^ 0xFFFFFFFFu;
+}
+
+} // namespace detail::writer
 
 /// Configuration options for ParquetWriter.
 ///
@@ -516,6 +540,9 @@ public:
                 ph.type = PageType::DATA_PAGE;
                 ph.uncompressed_page_size = uncompressed_size;
                 ph.compressed_page_size   = compressed_size;
+                // CRC-32 over final page data (post-compression, post-encryption)
+                ph.crc = static_cast<int32_t>(detail::writer::page_crc32(
+                    page_data, page_data_size));
 
                 thrift::DataPageHeader dph;
                 dph.num_values                = static_cast<int32_t>(cw.num_values());
@@ -695,6 +722,13 @@ public:
     [[nodiscard]] expected<WriteStats> close() {
         if (!open_) {
             return WriteStats{};  // Already closed — return empty stats
+        }
+
+        // Validate footer completeness before close (Parquet spec)
+        if (schema_.num_columns() == 0) {
+            file_.close();
+            open_ = false;
+            return Error{ErrorCode::INTERNAL_ERROR, "ParquetWriter: cannot close with empty schema"};
         }
 
         // Flush any remaining data

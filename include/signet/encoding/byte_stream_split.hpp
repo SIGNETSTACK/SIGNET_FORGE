@@ -131,7 +131,7 @@ namespace byte_stream_split {
                                                       size_t size,
                                                       size_t count) {
     constexpr size_t WIDTH = sizeof(float); // 4
-    if (count > size / WIDTH) return {};
+    if (count > SIZE_MAX / WIDTH || count * WIDTH > size) return {};
 
     std::vector<float> out(count);
 
@@ -166,7 +166,7 @@ namespace byte_stream_split {
                                                         size_t size,
                                                         size_t count) {
     constexpr size_t WIDTH = sizeof(double); // 8
-    if (count > size / WIDTH) return {};
+    if (count > SIZE_MAX / WIDTH || count * WIDTH > size) return {};
 
     std::vector<double> out(count);
 

@@ -111,29 +111,136 @@ inline Block128 xor_blocks(const Block128& a, const Block128& b) {
     return {a.hi ^ b.hi, a.lo ^ b.lo};
 }
 
-/// Multiply two elements in GF(2^128) using the GCM reducing polynomial.
+/// "Doubling" in GF(2^128): multiply by x (shift right by 1 in GCM bit ordering).
 ///
-/// Algorithm (schoolbook, bit-serial):
-///   Z = 0
-///   V = Y
-///   for i = 0 to 127:
-///     if bit i of X is set:
-///       Z = Z ^ V
-///     if LSB of V is 0:
-///       V = V >> 1
-///     else:
-///       V = (V >> 1) ^ R
+/// If the LSB (bit 127 in GCM ordering) was set, XOR with the reducing
+/// polynomial R = 0xe1 << 56.  Constant-time: no branches on the input.
+inline Block128 gf128_double(const Block128& V) {
+    uint64_t lsb = V.lo & 1;
+    Block128 result;
+    result.lo = (V.lo >> 1) | ((V.hi & 1) << 63);
+    result.hi = (V.hi >> 1) ^ ((uint64_t(0xe1) << 56) & (uint64_t(0) - lsb));
+    return result;
+}
+
+/// 4-bit precomputed table for constant-time GHASH multiplication.
 ///
-/// Bit ordering: In GCM, bit 0 of a byte is the MSB (leftmost). So bit i
-/// of the 128-bit block X corresponds to:
-///   byte index = i / 8
-///   bit within byte = 7 - (i % 8)  (MSB-first)
+/// Stores M[i] = i * H in GF(2^128) for i in 0..15, where i is treated as
+/// a 4-bit GF(2) polynomial.  Computed at GCM init time from the hash
+/// subkey H = AES_K(0^128).
 ///
-/// Equivalently, in our Block128 representation:
-///   bit 0   = MSB of hi (bit 63 of hi)
-///   bit 63  = LSB of hi (bit 0 of hi)
-///   bit 64  = MSB of lo (bit 63 of lo)
-///   bit 127 = LSB of lo (bit 0 of lo)
+/// Ref: NIST SP 800-38D §6.3, CWE-208 (constant-time requirement).
+struct GHashTable {
+    Block128 entries[16];
+
+    /// Precompute the 16-entry multiplication table from hash subkey H.
+    void init(const Block128& H) {
+        entries[0] = Block128{0, 0};
+        entries[1] = H;
+        entries[2] = gf128_double(H);
+        entries[4] = gf128_double(entries[2]);
+        entries[8] = gf128_double(entries[4]);
+        // Fill remaining entries by XOR (linearity over GF(2))
+        entries[3]  = xor_blocks(entries[2], entries[1]);
+        entries[5]  = xor_blocks(entries[4], entries[1]);
+        entries[6]  = xor_blocks(entries[4], entries[2]);
+        entries[7]  = xor_blocks(entries[4], entries[3]);
+        entries[9]  = xor_blocks(entries[8], entries[1]);
+        entries[10] = xor_blocks(entries[8], entries[2]);
+        entries[11] = xor_blocks(entries[8], entries[3]);
+        entries[12] = xor_blocks(entries[8], entries[4]);
+        entries[13] = xor_blocks(entries[8], entries[5]);
+        entries[14] = xor_blocks(entries[8], entries[6]);
+        entries[15] = xor_blocks(entries[8], entries[7]);
+    }
+};
+
+/// Constant-time 16-entry Block128 table lookup.
+///
+/// Scans all 16 entries on every call, selecting the entry at @p index
+/// via data-independent masking.  Prevents cache-timing side channels.
+inline Block128 ct_table_lookup(const Block128 table[16], uint8_t index) {
+    Block128 result{0, 0};
+    for (uint8_t i = 0; i < 16; ++i) {
+        uint64_t mask = static_cast<uint64_t>(0) - static_cast<uint64_t>(i == index);
+        result.hi |= table[i].hi & mask;
+        result.lo |= table[i].lo & mask;
+    }
+    return result;
+}
+
+/// Constant-time 4-bit reduction table lookup.
+///
+/// When right-shifting a GF(2^128) element by 4 bits, the 4 bits that
+/// fall off the LSB end each contribute a shifted copy of the reducing
+/// polynomial R = 0xe1 << 56.  This table precomputes the XOR of those
+/// contributions for every possible 4-bit value.
+inline uint64_t ct_reduce4(uint8_t index) {
+    static constexpr uint64_t R4[16] = {
+        0x0000000000000000ULL, 0xe100000000000000ULL,
+        0x7080000000000000ULL, 0x9180000000000000ULL,
+        0x3840000000000000ULL, 0xd940000000000000ULL,
+        0x48c0000000000000ULL, 0xa9c0000000000000ULL,
+        0x1c20000000000000ULL, 0xfd20000000000000ULL,
+        0x6ca0000000000000ULL, 0x8da0000000000000ULL,
+        0x2460000000000000ULL, 0xc560000000000000ULL,
+        0x54e0000000000000ULL, 0xb5e0000000000000ULL,
+    };
+    uint64_t result = 0;
+    for (uint8_t i = 0; i < 16; ++i) {
+        uint64_t mask = static_cast<uint64_t>(0) - static_cast<uint64_t>(i == index);
+        result |= R4[i] & mask;
+    }
+    return result;
+}
+
+/// Constant-time GF(2^128) multiplication using the 4-bit precomputed table.
+///
+/// Processes X nibble-by-nibble from MSB to LSB (Horner evaluation).
+/// All table lookups and shifts are data-independent — no branches or
+/// variable-time memory accesses on secret data.
+///
+/// Replaces the schoolbook bit-serial gf128_mul which branched on X.
+///
+/// Ref: NIST SP 800-38D §6.3, CWE-208.
+inline Block128 gf128_mul_ct(const GHashTable& table, const Block128& X) {
+    Block128 Z{0, 0};
+    uint8_t x_bytes[16];
+    store_block(x_bytes, X);
+
+    for (int byte_idx = 0; byte_idx < 16; ++byte_idx) {
+        uint8_t b = x_bytes[byte_idx];
+
+        // Process high nibble (MSB first in GCM bit ordering)
+        {
+            uint8_t rem = static_cast<uint8_t>(Z.lo & 0x0F);
+            Z.lo = (Z.lo >> 4) | (Z.hi << 60);
+            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rem);
+            Block128 entry = ct_table_lookup(table.entries,
+                                             static_cast<uint8_t>((b >> 4) & 0x0F));
+            Z = xor_blocks(Z, entry);
+        }
+
+        // Process low nibble
+        {
+            uint8_t rem = static_cast<uint8_t>(Z.lo & 0x0F);
+            Z.lo = (Z.lo >> 4) | (Z.hi << 60);
+            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rem);
+            Block128 entry = ct_table_lookup(table.entries,
+                                             static_cast<uint8_t>(b & 0x0F));
+            Z = xor_blocks(Z, entry);
+        }
+    }
+
+    return Z;
+}
+
+/// Multiply two elements in GF(2^128) using the schoolbook algorithm.
+///
+/// @note This function branches on X and is NOT constant-time.  It is
+///       used ONLY during table precomputation (where X is a small
+///       public index, not secret data) and for the standalone ghash()
+///       helper.  The AesGcm class uses gf128_mul_ct() on the hot path.
 inline Block128 gf128_mul(const Block128& X, const Block128& Y) {
     Block128 Z; // Accumulator, starts at 0
     Block128 V = Y; // Working copy
@@ -267,13 +374,16 @@ public:
     static constexpr size_t IV_SIZE  = 12;    ///< Standard GCM nonce size in bytes (96 bits).
     static constexpr size_t TAG_SIZE = 16;    ///< Authentication tag size in bytes (128 bits).
 
-    /// Initialize with a 32-byte key. Computes the hash subkey H = AES_K(0^128).
+    /// Initialize with a 32-byte key. Computes the hash subkey H = AES_K(0^128)
+    /// and precomputes the 4-bit GHASH multiplication table for constant-time
+    /// operation (NIST SP 800-38D §6.3, CWE-208).
     explicit AesGcm(const uint8_t key[KEY_SIZE])
         : cipher_(key) {
         // Compute hash subkey: H = AES_K(0^128)
         uint8_t zero_block[16] = {};
         cipher_.encrypt_block(zero_block);
-        H_ = detail::gcm::load_block(zero_block);
+        auto H = detail::gcm::load_block(zero_block);
+        H_table_.init(H);
     }
 
     // -----------------------------------------------------------------------
@@ -296,8 +406,26 @@ public:
     //   4. S = GHASH_H(A || pad || C || pad || [len(A)]_64 || [len(C)]_64)
     //   5. T = MSB_t(GCTR_K(J0, S))  (authentication tag)
     // -----------------------------------------------------------------------
-    /// Maximum plaintext size for a single GCM invocation (NIST SP 800-38D limit).
-    static constexpr uint64_t MAX_GCM_PLAINTEXT = (1ULL << 36) - 32; // ~64 GB
+    /// Set the expected IV size. Default is 12 bytes (96 bits, standard).
+    /// Optionally supports 16 bytes; 16-byte IVs use GHASH-based J0 derivation
+    /// per NIST SP 800-38D §5.2.1.2.
+    /// @param size  Must be 12 or 16.
+    /// @throws std::invalid_argument if size is neither 12 nor 16.
+    void set_iv_size(size_t size) {
+        if (size != 12 && size != 16) {
+            throw std::invalid_argument("AES-GCM: IV size must be 12 or 16 bytes");
+        }
+        iv_size_ = size;
+    }
+
+    /// Get the current IV size (12 or 16 bytes).
+    [[nodiscard]] size_t iv_size() const { return iv_size_; }
+
+    /// Maximum plaintext size for a single GCM invocation (NIST SP 800-38D §5.2.1.1).
+    /// 32-bit counter can address at most (2^32 - 2) blocks of 16 bytes each
+    /// (counter value 1 is reserved for J0).
+    static constexpr uint64_t MAX_GCM_PLAINTEXT =
+        (static_cast<uint64_t>(UINT32_MAX) - 1) * 16; // ~64 GB
 
     /// Authenticated encryption with additional data (AEAD).
     ///
@@ -368,7 +496,7 @@ public:
         }
         Block128 len_b = load_block(len_block);
         X = xor_blocks(X, len_b);
-        X = gf128_mul(X, H_);
+        X = gf128_mul_ct(H_table_, X);
 
         // Step 5: Compute authentication tag T = GCTR_K(J0, S)
         uint8_t S[16];
@@ -466,7 +594,7 @@ public:
         }
         Block128 len_b = load_block(len_block);
         X = xor_blocks(X, len_b);
-        X = gf128_mul(X, H_);
+        X = gf128_mul_ct(H_table_, X);
 
         // Step 3: Compute expected tag T' = GCTR_K(J0, S)
         uint8_t S[16];
@@ -496,10 +624,40 @@ public:
     }
 
 private:
-    Aes256 cipher_;               ///< Underlying AES-256 block cipher.
-    detail::gcm::Block128 H_;     ///< GCM hash subkey: H = AES_K(0^128).
+    Aes256 cipher_;                    ///< Underlying AES-256 block cipher.
+    detail::gcm::GHashTable H_table_;  ///< Precomputed 4-bit GHASH table from H = AES_K(0^128).
+    size_t iv_size_{IV_SIZE};          ///< Current IV size: 12 (default) or 16 bytes.
+
+    /// Derive J0 from an IV of arbitrary (configured) size.
+    /// - 12-byte IV: J0 = IV || 0x00000001 (NIST SP 800-38D §5.2.1.1)
+    /// - 16-byte IV: J0 = GHASH_H(IV || pad || [len(IV)]_64) (§5.2.1.2)
+    void derive_j0(const uint8_t* iv, uint8_t j0[16]) const {
+        using namespace detail::gcm;
+        if (iv_size_ == 12) {
+            std::memcpy(j0, iv, 12);
+            j0[12] = 0x00; j0[13] = 0x00; j0[14] = 0x00; j0[15] = 0x01;
+        } else {
+            // GHASH-based derivation for non-96-bit IV (§5.2.1.2)
+            Block128 X{};
+            // Process IV as GHASH input (single 16-byte block)
+            Block128 iv_block = load_block(iv);
+            X = xor_blocks(X, iv_block);
+            X = gf128_mul_ct(H_table_, X);
+            // Length block: [0]_64 || [len(IV) in bits]_64
+            uint8_t len_block[16] = {};
+            uint64_t iv_bits = static_cast<uint64_t>(iv_size_) * 8;
+            for (int i = 0; i < 8; ++i) {
+                len_block[15 - i] = static_cast<uint8_t>(iv_bits >> (8 * i));
+            }
+            Block128 lb = load_block(len_block);
+            X = xor_blocks(X, lb);
+            X = gf128_mul_ct(H_table_, X);
+            store_block(j0, X);
+        }
+    }
 
     /// Incrementally update GHASH state X with data (zero-padded to 16 bytes).
+    /// Uses the constant-time 4-bit table multiplication (CWE-208).
     detail::gcm::Block128 ghash_update(
         detail::gcm::Block128 X,
         const uint8_t* data, size_t data_size) const {
@@ -510,7 +668,7 @@ private:
         for (size_t i = 0; i < full_blocks; ++i) {
             Block128 block = load_block(data + i * 16);
             X = xor_blocks(X, block);
-            X = gf128_mul(X, H_);
+            X = gf128_mul_ct(H_table_, X);
         }
 
         // Handle partial last block (zero-padded)
@@ -520,7 +678,7 @@ private:
             std::memcpy(padded, data + full_blocks * 16, remainder);
             Block128 block = load_block(padded);
             X = xor_blocks(X, block);
-            X = gf128_mul(X, H_);
+            X = gf128_mul_ct(H_table_, X);
         }
 
         return X;

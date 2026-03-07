@@ -101,9 +101,10 @@ public:
         for (const auto& path : log_files) {
             auto rdr_result = DecisionLogReader::open(path);
             if (!rdr_result) {
-                // Skip unreadable files but note chain failure
-                chain_ok = false;
-                continue;
+                // Fail on unreadable files — silent skip risks incomplete reports (CWE-754)
+                return Error{ErrorCode::IO_ERROR,
+                             "MiFID2Reporter: cannot open log file '" + path +
+                             "': " + rdr_result.error().message};
             }
             auto& rdr = *rdr_result;
 
@@ -270,11 +271,11 @@ private:
             o += ind2 + ind + "\"field_05_instrument\":" + sp
                + "\"" + j(rec.symbol) + "\"," + nl;
             o += ind2 + ind + "\"field_06_price\":" + sp
-               + double_str(rec.price) + "," + nl;
+               + double_str(rec.price, opts.price_significant_digits) + "," + nl;
             o += ind2 + ind + "\"field_07_quantity\":" + sp
                + double_str(rec.quantity) + "," + nl;
             o += ind2 + ind + "\"field_08_timestamp_utc\":" + sp
-               + "\"" + ns_to_iso8601(rec.timestamp_ns) + "\"," + nl;
+               + "\"" + ns_to_iso8601(rec.timestamp_ns, opts.timestamp_granularity) + "\"," + nl;
             o += ind2 + ind + "\"field_09_decision_type\":" + sp
                + "\"" + decision_type_str(rec.decision_type) + "\"," + nl;
             o += ind2 + ind + "\"field_10_venue\":" + sp
@@ -305,16 +306,15 @@ private:
 
     static std::string record_to_json_line(const DecisionRecord& rec,
                                             const ReportOptions& opts) {
-        (void)opts;
         std::string o = "{";
-        o += "\"ts\":\"" + ns_to_iso8601(rec.timestamp_ns) + "\",";
+        o += "\"ts\":\"" + ns_to_iso8601(rec.timestamp_ns, opts.timestamp_granularity) + "\",";
         o += "\"order_id\":\"" + j(rec.order_id) + "\",";
         o += "\"algo\":\"" + j(std::to_string(rec.strategy_id)) + "\",";
         o += "\"model\":\"" + j(rec.model_version) + "\",";
         o += "\"instrument\":\"" + j(rec.symbol) + "\",";
         o += "\"venue\":\"" + j(rec.venue) + "\",";
         o += "\"type\":\"" + decision_type_str(rec.decision_type) + "\",";
-        o += "\"price\":" + double_str(rec.price) + ",";
+        o += "\"price\":" + double_str(rec.price, opts.price_significant_digits) + ",";
         o += "\"qty\":" + double_str(rec.quantity) + ",";
         o += "\"risk_gate\":\"" + risk_result_str(rec.risk_result) + "\",";
         o += "\"output\":" + double_str(rec.model_output) + ",";
@@ -331,7 +331,7 @@ private:
                                    const ReportOptions& opts) {
         std::string out = csv_header();
         for (const auto& rec : records) {
-            out += csv_escape(ns_to_iso8601(rec.timestamp_ns))         + ",";
+            out += csv_escape(ns_to_iso8601(rec.timestamp_ns, opts.timestamp_granularity)) + ",";
             out += csv_escape(rec.order_id)                            + ",";
             out += csv_escape(opts.firm_id.empty()
                                   ? std::to_string(rec.strategy_id) : opts.firm_id)    + ",";
@@ -340,7 +340,7 @@ private:
             out += csv_escape(rec.symbol)                              + ",";
             out += csv_escape(rec.venue)                               + ",";
             out += csv_escape(decision_type_str(rec.decision_type))    + ",";
-            out += double_str(rec.price)                               + ",";
+            out += double_str(rec.price, opts.price_significant_digits) + ",";
             out += double_str(rec.quantity)                            + ",";
             out += csv_escape(risk_result_str(rec.risk_result))        + ",";
             out += double_str(rec.model_output)                        + ",";
@@ -361,7 +361,8 @@ private:
                 system_clock::now().time_since_epoch()).count());
     }
 
-    static std::string ns_to_iso8601(int64_t ns) {
+    static std::string ns_to_iso8601(int64_t ns,
+                                     TimestampGranularity gran = TimestampGranularity::NANOS) {
         static_assert(sizeof(std::time_t) >= 8,
             "Signet compliance reporters require 64-bit time_t for timestamps beyond 2038");
         if (ns <= 0) return "1970-01-01T00:00:00.000000000Z";
@@ -378,8 +379,22 @@ private:
         char date_buf[32];
         std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%dT%H:%M:%S", utc);
         char full_buf[48];
-        std::snprintf(full_buf, sizeof(full_buf), "%s.%09lldZ",
-                      date_buf, static_cast<long long>(ns_part));
+        // MiFID II RTS 24 Art.2(2): configurable timestamp granularity
+        switch (gran) {
+            case TimestampGranularity::MILLIS:
+                std::snprintf(full_buf, sizeof(full_buf), "%s.%03lldZ",
+                              date_buf, static_cast<long long>(ns_part / 1'000'000LL));
+                break;
+            case TimestampGranularity::MICROS:
+                std::snprintf(full_buf, sizeof(full_buf), "%s.%06lldZ",
+                              date_buf, static_cast<long long>(ns_part / 1'000LL));
+                break;
+            case TimestampGranularity::NANOS:
+            default:
+                std::snprintf(full_buf, sizeof(full_buf), "%s.%09lldZ",
+                              date_buf, static_cast<long long>(ns_part));
+                break;
+        }
         return full_buf;
     }
 
@@ -445,9 +460,9 @@ private:
         return out;
     }
 
-    static std::string double_str(double v) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%.10g", v);
+    static std::string double_str(double v, int significant_digits = 10) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%.*g", significant_digits, v);
         return buf;
     }
 

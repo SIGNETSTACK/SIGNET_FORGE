@@ -452,3 +452,34 @@ TEST_CASE("EventBus Tier-3 sink integration routes batches to StreamingSink", "[
     bus.detach_sink();
     REQUIRE(!bus.has_sink());
 }
+
+// ===========================================================================
+// Hardening Pass #4 Tests
+// ===========================================================================
+
+TEST_CASE("MpmcRing rejects zero capacity", "[event_bus][hardening]") {
+    // H-18: Zero-capacity guard
+    REQUIRE_THROWS_AS(
+        (MpmcRing<int>(0)),
+        std::invalid_argument
+    );
+}
+
+TEST_CASE("MpmcRing requires power-of-two capacity", "[event_bus][hardening]") {
+    // H-18: Power-of-two capacity for masked index arithmetic
+    // Implementation rounds up to next power of 2 (minimum 2)
+    MpmcRing<int> ring2(2);
+    REQUIRE(ring2.capacity() == 2);
+
+    // Capacity 4 (2^2) should work
+    MpmcRing<int> ring4(4);
+    REQUIRE(ring4.capacity() == 4);
+
+    // Non-power-of-two should be rounded up
+    MpmcRing<int> ring3(3);
+    REQUIRE(ring3.capacity() == 4); // Rounded up to next power of 2
+
+    // Capacity 1 rounds up to 2
+    MpmcRing<int> ring1(1);
+    REQUIRE(ring1.capacity() == 2);
+}

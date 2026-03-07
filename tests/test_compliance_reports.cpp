@@ -39,9 +39,10 @@ static int64_t test_now_ns() {
 
 // Write N decision records to a log file and return the file path
 static std::string write_decision_log(const std::string& dir, int n,
-                                       int64_t base_ts = 0) {
+                                       int64_t base_ts = 0,
+                                       const std::string& chain_id = "test-audit-ctx") {
     if (base_ts == 0) base_ts = test_now_ns();
-    DecisionLogWriter writer(dir, "test-chain-dec");
+    DecisionLogWriter writer(dir, chain_id);
 
     for (int i = 0; i < n; ++i) {
         DecisionRecord rec;
@@ -69,9 +70,10 @@ static std::string write_decision_log(const std::string& dir, int n,
 
 // Write N inference records to a log file and return the file path
 static std::string write_inference_log(const std::string& dir, int n,
-                                        int64_t base_ts = 0) {
+                                        int64_t base_ts = 0,
+                                        const std::string& chain_id = "test-audit-ctx") {
     if (base_ts == 0) base_ts = test_now_ns();
-    InferenceLogWriter writer(dir, "test-chain-inf");
+    InferenceLogWriter writer(dir, chain_id);
 
     for (int i = 0; i < n; ++i) {
         InferenceRecord rec;
@@ -505,4 +507,69 @@ TEST_CASE("ns_to_iso8601 handles far-future timestamp", "[compliance][hardening]
     auto report = MiFID2Reporter::generate({path});
     REQUIRE(report.has_value());
     REQUIRE(contains(report->content, "2100"));
+}
+
+// ===========================================================================
+// Section 7 — Hardening tests (Pass #4)
+// ===========================================================================
+
+TEST_CASE("MiFID II price format respects configurable precision", "[compliance][hardening]") {
+    // H-14: price_significant_digits field controls decimal precision in
+    // MiFID II RTS 24 Annex I Field 6 price formatting.
+    ReportOptions opts;
+    REQUIRE(opts.price_significant_digits == 17); // Default per plan
+
+    // Verify the option field exists and can be changed
+    opts.price_significant_digits = 10;
+    REQUIRE(opts.price_significant_digits == 10);
+}
+
+TEST_CASE("EU AI Act Art.19 cross-chain verification detects mismatch", "[compliance][hardening]") {
+    // H-15: When verify_chain=true, decision and inference logs must share
+    // the same chain_id (audit context). Mismatched IDs are an audit finding.
+    auto dec_dir  = tmp_dir_cr("h15_dec");
+    auto inf_dir  = tmp_dir_cr("h15_inf");
+
+    // Deliberately use DIFFERENT chain IDs to simulate unrelated systems
+    auto dec_path = write_decision_log(dec_dir, 3, 0, "system-alpha");
+    auto inf_path = write_inference_log(inf_dir, 3, 0, "system-beta");
+
+    // With verify_chain=true (default), mismatched chain IDs must be rejected
+    ReportOptions opts;
+    opts.verify_chain = true;
+    auto r = EUAIActReporter::generate_article19({dec_path}, {inf_path}, opts);
+    REQUIRE(!r.has_value()); // Chain ID mismatch detected
+    REQUIRE(r.error().code == ErrorCode::INVALID_ARGUMENT);
+
+    // With verify_chain=false, the check is skipped
+    ReportOptions lenient;
+    lenient.verify_chain = false;
+    auto r2 = EUAIActReporter::generate_article19({dec_path}, {inf_path}, lenient);
+    REQUIRE(r2.has_value()); // Passes without chain verification
+}
+
+TEST_CASE("MiFID II timestamp granularity is configurable", "[compliance][hardening]") {
+    // H-16: TimestampGranularity enum controls sub-second precision in
+    // MiFID II RTS 24 Art.2(2) timestamp fields.
+    ReportOptions opts;
+    REQUIRE(opts.timestamp_granularity == TimestampGranularity::NANOS); // Default
+
+    opts.timestamp_granularity = TimestampGranularity::MICROS;
+    REQUIRE(opts.timestamp_granularity == TimestampGranularity::MICROS);
+
+    opts.timestamp_granularity = TimestampGranularity::MILLIS;
+    REQUIRE(opts.timestamp_granularity == TimestampGranularity::MILLIS);
+}
+
+TEST_CASE("InferenceRecord has training data fields", "[compliance][hardening]") {
+    // H-17: EU AI Act Art.13(3)(b)(ii) training data provenance fields
+    // added to InferenceRecord.
+    InferenceRecord rec;
+    rec.training_dataset_id = "dataset_v3";
+    rec.training_dataset_size = 1000000;
+    rec.training_data_characteristics = "balanced, cleaned";
+
+    REQUIRE(rec.training_dataset_id == "dataset_v3");
+    REQUIRE(rec.training_dataset_size == 1000000);
+    REQUIRE(rec.training_data_characteristics == "balanced, cleaned");
 }

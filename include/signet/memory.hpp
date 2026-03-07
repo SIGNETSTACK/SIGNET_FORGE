@@ -175,6 +175,8 @@ private:
     /// Round up to the nearest multiple of alignment.
     static size_t align_up(size_t offset, size_t alignment) {
         size_t mask = alignment - 1;
+        // Overflow guard: if offset + mask would wrap, return SIZE_MAX (CWE-190)
+        if (offset > SIZE_MAX - mask) return SIZE_MAX;
         return (offset + mask) & ~mask;
     }
 };

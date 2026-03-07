@@ -32,6 +32,8 @@
 #include <cstdint>
 #include <cstring>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -246,6 +248,16 @@ struct ZOrderSorter {
         if (num_rows == 0 || columns.empty()) return {};
 
         size_t n_cols = columns.size();
+
+        // Validate that each column's count matches num_rows (CWE-787: OOB write)
+        for (size_t c = 0; c < n_cols; ++c) {
+            if (columns[c].count != num_rows) {
+                throw std::out_of_range(
+                    "ZOrderSorter::sort: column " + std::to_string(c) +
+                    " count (" + std::to_string(columns[c].count) +
+                    ") != num_rows (" + std::to_string(num_rows) + ")");
+            }
+        }
 
         // Normalize all values to uint32_t
         std::vector<std::vector<uint32_t>> normalized(n_cols);

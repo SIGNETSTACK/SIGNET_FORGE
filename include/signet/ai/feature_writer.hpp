@@ -57,6 +57,8 @@ struct FeatureVector {
     int64_t             timestamp_ns = 0;    ///< Observation timestamp in nanoseconds.
     int32_t             version      = 1;    ///< Version number (for late-arriving corrections).
     std::vector<double> values;              ///< One value per FeatureGroupDef::feature_names.
+    std::string              computation_dag;   ///< DAG description of feature computation (EU AI Act Art.12)
+    std::vector<int64_t>     source_row_ids;    ///< Source row IDs used in computation
 };
 
 // ============================================================================
@@ -250,21 +252,15 @@ public:
 
         const size_t nfeat = opts_.group.feature_names.size();
 
-        auto clear_pending = [&]() {
-            pending_ = 0;
-            entity_buf_.clear();
-            ts_buf_.clear();
-            ver_buf_.clear();
-            for (auto& fb : feat_bufs_) fb.clear();
-        };
-        { auto r = current_writer_->write_column(0, entity_buf_.data(), entity_buf_.size()); if (!r) { clear_pending(); return r; } }
-        { auto r = current_writer_->write_column<int64_t>(1, ts_buf_.data(), ts_buf_.size()); if (!r) { clear_pending(); return r; } }
-        { auto r = current_writer_->write_column<int32_t>(2, ver_buf_.data(), ver_buf_.size()); if (!r) { clear_pending(); return r; } }
+        // Do NOT clear buffers on write failure — preserve data for retry (CWE-459)
+        { auto r = current_writer_->write_column(0, entity_buf_.data(), entity_buf_.size()); if (!r) return r; }
+        { auto r = current_writer_->write_column<int64_t>(1, ts_buf_.data(), ts_buf_.size()); if (!r) return r; }
+        { auto r = current_writer_->write_column<int32_t>(2, ver_buf_.data(), ver_buf_.size()); if (!r) return r; }
         for (size_t i = 0; i < nfeat; ++i) {
             auto r = current_writer_->write_column<double>(3 + i, feat_bufs_[i].data(), feat_bufs_[i].size());
-            if (!r) { clear_pending(); return r; }
+            if (!r) return r;
         }
-        { auto r = current_writer_->flush_row_group(); if (!r) { clear_pending(); return r; } }
+        { auto r = current_writer_->flush_row_group(); if (!r) return r; }
 
         current_file_rows_ += pending_;
         pending_ = 0;
@@ -276,10 +272,11 @@ public:
         // Roll to new file if this one is full
         if (current_file_rows_ >= opts_.max_file_rows) {
             auto r = current_writer_->close();
-            register_file(current_file_path_);
             current_writer_.reset();
             current_file_rows_ = 0;
             if (!r) return r.error();
+            // Register file only after confirmed successful close
+            register_file(current_file_path_);
         }
 
         return expected<void>{};
@@ -298,10 +295,11 @@ public:
         }
         if (current_writer_) {
             auto cr = current_writer_->close();
-            if (current_file_rows_ > 0) register_file(current_file_path_);
             current_writer_.reset();
+            if (!cr) { current_file_rows_ = 0; return cr.error(); }
+            // Register file only after confirmed successful close
+            if (current_file_rows_ > 0) register_file(current_file_path_);
             current_file_rows_ = 0;
-            if (!cr) return cr.error();
         }
         return expected<void>{};
     }

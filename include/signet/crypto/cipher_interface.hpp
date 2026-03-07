@@ -37,9 +37,13 @@
 #  include <stdlib.h>  // arc4random_buf
 #elif defined(__linux__)
 #  include <sys/random.h>  // getrandom
-#else
-#  include <random>  // fallback: std::random_device
+#elif defined(_WIN32)
+#  include <windows.h>
+#  include <bcrypt.h>
 #endif
+
+#include <cerrno>
+#include <stdexcept>
 
 namespace signet::forge::crypto {
 
@@ -101,22 +105,20 @@ inline void fill_random_bytes(uint8_t* buf, size_t size) {
     size_t written = 0;
     while (written < size) {
         ssize_t ret = getrandom(buf + written, size - written, 0);
-        if (ret < 0) break; // should not happen; fall through if it does
+        if (ret < 0) {
+            if (errno == EINTR) continue;  // retry on signal interrupt
+            // Real error — zero partial output to avoid leaking partial randomness
+            volatile unsigned char* p = buf;
+            for (size_t i = 0; i < size; ++i) p[i] = 0;
+            throw std::runtime_error("signet: getrandom() failed");
+        }
         written += static_cast<size_t>(ret);
     }
+#elif defined(_WIN32)
+    BCryptGenRandom(NULL, buf, static_cast<ULONG>(size),
+                    BCRYPT_USE_SYSTEM_PREFERRED_RNG);
 #else
-    // Fallback: std::random_device with full-word extraction
-    std::random_device rd;
-    constexpr size_t WORD = sizeof(std::random_device::result_type);
-    size_t i = 0;
-    for (; i + WORD <= size; i += WORD) {
-        auto val = rd();
-        std::memcpy(buf + i, &val, WORD);
-    }
-    if (i < size) {
-        auto val = rd();
-        std::memcpy(buf + i, &val, size - i);
-    }
+    throw std::runtime_error("signet: no secure RNG available on this platform");
 #endif
 }
 
@@ -240,10 +242,14 @@ public:
         }
     }
 
-    /// Destructor: securely zeroes key material.
+    /// Destructor: securely zeroes key material (CWE-244: heap inspection).
+    /// Uses volatile write + compiler barrier to prevent dead-store elimination.
     ~AesGcmCipher() override {
         volatile uint8_t* p = key_.data();
         for (size_t i = 0; i < key_.size(); ++i) p[i] = 0;
+#if defined(__GNUC__) || defined(__clang__)
+        __asm__ __volatile__("" ::: "memory");
+#endif
     }
 
     [[nodiscard]] bool is_authenticated() const noexcept override { return true; }
@@ -310,10 +316,14 @@ public:
         return plaintext;
     }
 
-    /// Destructor: securely zeroes key material.
+    /// Destructor: securely zeroes key material (CWE-244: heap inspection).
+    /// Uses volatile write + compiler barrier to prevent dead-store elimination.
     ~AesCtrCipher() override {
         volatile uint8_t* p = key_.data();
         for (size_t i = 0; i < key_.size(); ++i) p[i] = 0;
+#if defined(__GNUC__) || defined(__clang__)
+        __asm__ __volatile__("" ::: "memory");
+#endif
     }
 
     /// @return Always false (CTR mode has no authentication).

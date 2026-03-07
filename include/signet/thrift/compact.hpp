@@ -376,7 +376,11 @@ public:
             }
             size = static_cast<int32_t>(raw);
         }
-        if (size < 0) { error_ = true; return {0, 0}; }
+        if (size < 0) {
+            // L-2: structured error for negative list size (likely corrupt data)
+            error_ = true;
+            return {0, 0};
+        }
         if (static_cast<uint32_t>(size) > MAX_COLLECTION_SIZE) {
             error_ = true; return {0, 0};
         }
@@ -502,7 +506,7 @@ private:
     bool           pending_bool_;
     bool           pending_bool_valid_;
 
-    static constexpr size_t   MAX_NESTING_DEPTH   = 128;              ///< Max struct nesting depth.
+    static constexpr size_t   MAX_NESTING_DEPTH   = 64;               ///< Reduced from 128 for embedded safety (CWE-674)
     static constexpr size_t   MAX_FIELD_COUNT     = 65536;            ///< Max fields per struct.
     static constexpr uint32_t MAX_STRING_BYTES    = 64u * 1024u * 1024u;  ///< 64 MB max string/binary field.
     static constexpr uint32_t MAX_COLLECTION_SIZE = 1'000'000u;       ///< 1M max entries for LIST/SET/MAP.

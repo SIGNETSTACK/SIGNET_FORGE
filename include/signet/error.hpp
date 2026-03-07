@@ -47,6 +47,10 @@ enum class ErrorCode {
     CORRUPT_FOOTER,
     /// A data page failed integrity checks (bad CRC, truncated, or exceeds size limits).
     CORRUPT_PAGE,
+    /// Decoded data is corrupt or inconsistent (e.g. out-of-range dictionary index).
+    CORRUPT_DATA,
+    /// A caller-supplied argument is outside the valid range or violates a precondition.
+    INVALID_ARGUMENT,
     /// The file uses an encoding not supported by this build (e.g. BYTE_STREAM_SPLIT on integers).
     UNSUPPORTED_ENCODING,
     /// The file uses a compression codec not linked into this build (ZSTD, LZ4, Gzip).

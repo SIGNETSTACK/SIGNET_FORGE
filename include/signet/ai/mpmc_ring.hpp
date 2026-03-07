@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 
 namespace signet::forge {
@@ -51,11 +52,24 @@ public:
     /// Construct a ring buffer with the given capacity.
     ///
     /// The actual capacity is rounded up to the next power of two (minimum 2).
+    /// Power-of-two capacity is required for correct index masking (pos & mask_).
     ///
     /// @param capacity  Requested capacity; will be rounded up to a power of two.
+    ///                  Must be >= 1.
+    /// @throws std::invalid_argument if capacity is 0.
+    ///
+    /// @note Wraparound safety: the enqueue_/dequeue_ cursors are size_t (64-bit
+    ///       on modern platforms). At 1 GHz sustained push rate, UINT64_MAX wraps
+    ///       after ~584 years — a theoretical-only concern. The masking arithmetic
+    ///       (pos & mask_) remains correct across the wraparound boundary because
+    ///       capacity is always a power of two.
     explicit MpmcRing(size_t capacity) {
+        if (capacity == 0) {
+            throw std::invalid_argument("MpmcRing capacity must be >= 1");
+        }
         size_t cap = 2;
         while (cap < capacity) cap <<= 1;
+        // Invariant: cap is a power of two (enforced by construction above)
         capacity_ = cap;
         mask_     = cap - 1;
 

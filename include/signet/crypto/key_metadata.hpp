@@ -206,6 +206,9 @@ struct TlvField {
 /// Maximum TLV field length (64 MB cap to prevent memory exhaustion from malformed data).
 static constexpr uint32_t MAX_TLV_LENGTH = 64u * 1024u * 1024u;
 
+/// Maximum total metadata size (1 MB cap to prevent memory exhaustion from crafted payloads, CWE-770).
+static constexpr size_t MAX_METADATA_SIZE = 1024 * 1024;
+
 /// Parse the next TLV field from a buffer.
 ///
 /// On success, advances @p offset past the field and populates @p field.
@@ -312,6 +315,11 @@ struct EncryptionKeyMetadata {
 
         using namespace detail::meta;
 
+        if (size > MAX_METADATA_SIZE) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "key metadata exceeds 1 MB limit (CWE-770)"};
+        }
+
         EncryptionKeyMetadata meta;
         size_t offset = 0;
         bool found_mode = false;
@@ -393,6 +401,11 @@ struct FileEncryptionProperties {
         const uint8_t* data, size_t size) {
 
         using namespace detail::meta;
+
+        if (size > MAX_METADATA_SIZE) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "key metadata exceeds 1 MB limit (CWE-770)"};
+        }
 
         FileEncryptionProperties props;
         size_t offset = 0;

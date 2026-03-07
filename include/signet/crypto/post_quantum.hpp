@@ -763,10 +763,11 @@ inline expected<std::array<uint8_t, 32>> x25519(
     if (!license) return license.error();
 
     auto result = x25519_raw(scalar, u_coord);
-    // RFC 7748 §6.1: check for all-zero output (degenerate case)
-    uint8_t all_zero = 0;
-    for (auto b : result) all_zero |= b;
-    if (all_zero == 0) {
+    // Constant-time zero check: OR all 32 bytes, then compare (RFC 7748 §6.1, CWE-208)
+    uint8_t acc = 0;
+    for (size_t i = 0; i < 32; ++i) acc |= result[i];
+    // acc == 0 means degenerate key (all-zero output)
+    if (acc == 0) {
         return Error{ErrorCode::ENCRYPTION_ERROR,
                      "X25519: degenerate output (all-zero) — invalid input point"};
     }

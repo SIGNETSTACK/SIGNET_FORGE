@@ -446,6 +446,10 @@ private:
     std::vector<PageInfo> pages_;
 
     /// Detect boundary order from the min_values sequence.
+    ///
+    // TODO: type-aware comparison (signed vs unsigned vs byte) per Parquet spec
+    // Currently uses lexicographic byte comparison which is correct for
+    // BYTE_ARRAY and big-endian encoded numeric types (CWE-843).
     [[nodiscard]] static ColumnIndex::BoundaryOrder detect_boundary_order(
             const std::vector<std::string>& values) {
 

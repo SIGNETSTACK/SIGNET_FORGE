@@ -364,6 +364,11 @@ private:
         const std::string& extra,
         const uint8_t* data, size_t size) const {
 
+        // Validate module_type range [0..5] per Parquet PME spec (CWE-20)
+        if (module_type > 5) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "PME module_type out of range [0..5] (CWE-20)"};
+        }
         std::string aad = build_aad(config_.aad_prefix, module_type, extra);
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         return cipher->encrypt(data, size, aad);
@@ -611,6 +616,11 @@ private:
         const std::string& extra,
         const uint8_t* data, size_t size) const {
 
+        // Validate module_type range [0..5] per Parquet PME spec (CWE-20)
+        if (module_type > 5) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "PME module_type out of range [0..5] (CWE-20)"};
+        }
         std::string aad = build_aad(config_.aad_prefix, module_type, extra);
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         return cipher->decrypt(data, size, aad);

@@ -114,9 +114,9 @@ inline uint64_t decode_varint(const uint8_t* data, size_t& pos, size_t size) {
 inline void bit_pack_8(std::vector<uint8_t>& out, const uint64_t* values, int bit_width) {
     if (bit_width == 0) return; // all zeros, no bytes needed
 
-    // Total bits = 8 * bit_width, total bytes = bit_width
+    // Total bits = 8 * bit_width; bytes = ceil(8 * bit_width / 8) = bit_width
     size_t start = out.size();
-    out.resize(start + static_cast<size_t>(bit_width), 0);
+    out.resize(start + (8 * static_cast<size_t>(bit_width) + 7) / 8, 0);
     uint8_t* dst = out.data() + start;
 
     int bit_offset = 0; // absolute bit position in dst
@@ -534,11 +534,10 @@ public:
             if (group_count == 0) return false;
 
             size_t total_values = group_count * 8;
-            // Prevent huge allocations from remaining large group_count
-            static constexpr size_t MAX_BP_VALUES = 8 * 1024 * 1024; // 8M
-            if (total_values > MAX_BP_VALUES) return false;
-
             size_t total_bytes = group_count * static_cast<size_t>(bit_width_);
+            // Byte-based cap: prevent huge allocations from corrupt varints (CWE-770)
+            static constexpr size_t MAX_BP_BYTES = 256 * 1024 * 1024; // 256 MB
+            if (total_bytes > MAX_BP_BYTES) return false;
 
             if (pos_ + total_bytes > size_) {
                 // Truncated data: only decode what we can

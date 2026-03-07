@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — Static Audit Follow-Up (2026-03-07)
+
+- 11 additional fixes from cross-referencing 15 static audit findings against Pass #5
+- 6 new fixes: page CRC-32 in writer (Parquet spec compliance), mmap parity gaps (negative page size + num_values cap), reader row_group OOB bounds check, Z-Order column count validation (CWE-787), Float16 shift UB + 6 unaligned cast fixes (CWE-704), feature flush data loss prevention (error path ordering)
+- 5 partial completions: getrandom EINTR retry, delta zigzag unsigned shift, statistics typed merge (PhysicalType dispatch), compliance error reporting (5 silent skips → errors), WAL fsync return checks
+- 1 deferred: Feature Store composite `(timestamp_ns, version)` tie-breaker — API contract change deferred to Feature Store v2
+
+### Security — Hardening Pass #5 (2026-03-07)
+
+- 53 security and correctness fixes across crypto, encoding, I/O, AI, and compliance subsystems
+- 8 CRITICAL: constant-time GHASH (4-bit table lookup), GCM counter overflow guard, RLE resize formula, dictionary error reporting, BYTE_ARRAY bounds validation (read + write), INT4 sign extension (portable branchless), verify_chain early-return on tamper detection
+- 18 HIGH: secure key zeroing (volatile + compiler barrier), move-only ciphers (AesCtr), CSPRNG hardening (BCryptGenRandom for Windows, hard-fail on unsupported), overflow guards (BSS, delta, mmap footer, arena), typed statistics (PhysicalType tracking), NaN exclusion from num_values, xxHash endianness enforcement, configurable compliance (price precision, timestamp granularity), training metadata (EU AI Act Art.13), Art.19 cross-chain verification, monotonic now_ns(), MPMC ring validation
+- 18 MEDIUM: constant-time X25519 zero check, TLV metadata caps (1 MB), PME module_type validation, reduced Thrift nesting (128 to 64), Arrow offset/length caps, bloom filter seed enforcement, writer close validation, SHA-256 FIPS test vector, WAL empty record tracking, instrument validator callback, feature computation lineage, inference training metadata
+- 9 LOW: 64-bit Snappy hash positions, Thrift structured errors, GCM IV size configuration (12/16 bytes), mmap decompression pre-validation; 4 no-ops (correct per spec)
+- ~29 new tests (all tagged `[hardening]`), 2 new ErrorCodes (CORRUPT_DATA, INVALID_ARGUMENT)
+- Standards: NIST SP 800-38D, NIST SP 800-38A, FIPS 197, FIPS 180-4, RFC 7748, MiFID II RTS 24, EU AI Act Art.12/13/19
+
 ## [0.1.0] - 2026-03-04
 
 Initial public release of Signet Forge.

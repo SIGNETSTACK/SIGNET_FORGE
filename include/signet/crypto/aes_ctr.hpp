@@ -73,6 +73,9 @@ public:
     explicit AesCtr(const uint8_t key[KEY_SIZE])
         : cipher_(key) {}
 
+    AesCtr(const AesCtr&) = delete;
+    AesCtr& operator=(const AesCtr&) = delete;
+
     // -----------------------------------------------------------------------
     // process -- Encrypt or decrypt data using AES-CTR
     //

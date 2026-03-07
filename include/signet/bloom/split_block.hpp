@@ -322,6 +322,11 @@ private:
     /// Default constructor for internal use by factory methods (with_size, from_data).
     SplitBlockBloomFilter() = default;
 
+    /// Per Parquet spec: bloom filter hash seed must be 0. The xxHash64
+    /// functions in xxhash.hpp default to seed=0, satisfying this requirement.
+    static constexpr uint64_t kBloomSeed = 0;
+    static_assert(kBloomSeed == 0, "Parquet spec requires bloom filter seed = 0");
+
     /// Salt values from the Parquet specification.
     ///
     /// These 8 constants are multiplied by the lower 32 bits of the hash to

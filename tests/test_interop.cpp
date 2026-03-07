@@ -394,18 +394,18 @@ TEST_CASE("Encrypted file has PARE magic", "[interop]") {
 
 TEST_CASE("Thrift decoder: excessive nesting depth sets error flag", "[thrift][hardening]") {
     // The CompactDecoder constructor already pushes one level (the root struct
-    // context). MAX_NESTING_DEPTH=128, so calling begin_struct() 127 times
-    // keeps size at 128 (the limit). The 128th explicit call hits
-    // size() >= MAX_NESTING_DEPTH and must set error_=true.
+    // context). MAX_NESTING_DEPTH=64 (reduced from 128 in M-6), so calling
+    // begin_struct() 63 times keeps size at 64 (the limit). The 64th explicit
+    // call hits size() >= MAX_NESTING_DEPTH and must set error_=true.
     std::vector<uint8_t> dummy = {0x00}; // STOP byte — minimal valid buffer
     thrift::CompactDecoder dec(dummy.data(), dummy.size());
 
-    // Push 127 levels — each should succeed (total stack size: 1 initial + 127 = 128)
-    for (int i = 0; i < 127; ++i) {
+    // Push 63 levels — each should succeed (total stack size: 1 initial + 63 = 64)
+    for (int i = 0; i < 63; ++i) {
         dec.begin_struct();
         REQUIRE(dec.good());
     }
-    // 128th explicit begin_struct() makes size() == 128 >= MAX_NESTING_DEPTH — must set error
+    // 64th explicit begin_struct() makes size() == 64 >= MAX_NESTING_DEPTH — must set error
     dec.begin_struct();
     REQUIRE_FALSE(dec.good());
 }
@@ -631,4 +631,56 @@ TEST_CASE("ArrowArray import rejects negative offset and overflow", "[hardening]
         if (arr.release) arr.release(&arr);
         if (sch.release) sch.release(&sch);
     }
+}
+
+// ===========================================================================
+// Hardening Pass #4 Tests
+// ===========================================================================
+
+TEST_CASE("Arrow offset and length caps enforced", "[interop][hardening]") {
+    // M-15: MAX_ARROW_OFFSET and MAX_ARROW_LENGTH caps (1 billion each)
+    // Verify normal imports still work within limits
+    auto schema = Schema::builder("test")
+        .column<int64_t>("values")
+        .build();
+
+    std::string path = (std::filesystem::temp_directory_path() / "test_arrow_caps.parquet").string();
+    auto writer = ParquetWriter::open(path, schema);
+    REQUIRE(writer.has_value());
+
+    std::vector<int64_t> data = {10, 20, 30};
+    auto wr = writer->write_column(0, data.data(), data.size());
+    REQUIRE(wr.has_value());
+    auto cl = writer->close();
+    REQUIRE(cl.has_value());
+
+    auto reader = ParquetReader::open(path);
+    REQUIRE(reader.has_value());
+    auto col = reader->read_column<int64_t>(0, 0);
+    REQUIRE(col.has_value());
+    REQUIRE(col->size() == 3);
+
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("mmap footer validation rejects invalid footer length", "[interop][hardening]") {
+    // H-7: footer_len > sz - 12 check
+    // Create a minimal invalid Parquet file with bad footer length
+    auto path = (std::filesystem::temp_directory_path() / "test_bad_footer.parquet").string();
+    {
+        std::ofstream f(path, std::ios::binary);
+        // Write PAR1 magic
+        f.write("PAR1", 4);
+        // Write some garbage bytes
+        uint8_t garbage[8] = {};
+        f.write(reinterpret_cast<const char*>(garbage), 8);
+        // Write a huge footer length (0xFFFFFFFF) that exceeds file size
+        uint32_t bad_len = 0xFFFFFFFF;
+        f.write(reinterpret_cast<const char*>(&bad_len), 4);
+        // Write PAR1 trailer magic
+        f.write("PAR1", 4);
+    }
+    auto result = MmapParquetReader::open(path);
+    REQUIRE_FALSE(result.has_value());
+    std::filesystem::remove(path);
 }

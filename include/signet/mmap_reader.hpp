@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -368,7 +369,13 @@ public:
     /// Retrieve summary information for a specific row group.
     /// @param index  Zero-based row group index.
     /// @return A RowGroupInfo struct.
+    /// @throws std::out_of_range if index >= num_row_groups().
     [[nodiscard]] RowGroupInfo row_group(size_t index) const {
+        if (index >= metadata_.row_groups.size()) {
+            throw std::out_of_range("MmapParquetReader::row_group: index " +
+                std::to_string(index) + " >= " +
+                std::to_string(metadata_.row_groups.size()));
+        }
         const auto& rg = metadata_.row_groups[index];
         return {rg.num_rows,
                 rg.total_byte_size,
@@ -694,6 +701,13 @@ private:
         }
 
         size_t hdr_size = page_dec.position();
+
+        // Reject negative page sizes from crafted files (CWE-191)
+        if (ph.compressed_page_size < 0 || ph.uncompressed_page_size < 0) {
+            return Error{ErrorCode::CORRUPT_PAGE,
+                         "mmap: negative page size in PageHeader"};
+        }
+
         size_t compressed_size = static_cast<size_t>(ph.compressed_page_size);
         const uint8_t* pdata = page_start + hdr_size;
 
@@ -708,6 +722,12 @@ private:
         if (codec != Compression::UNCOMPRESSED) {
             size_t uncompressed_size = static_cast<size_t>(
                 ph.uncompressed_page_size);
+            // L-9: Pre-validate decompressed size to prevent allocation bombs (CWE-770)
+            static constexpr size_t MMAP_MAX_PAGE_SIZE2 = 256ULL * 1024ULL * 1024ULL;
+            if (uncompressed_size == 0 || uncompressed_size > MMAP_MAX_PAGE_SIZE2) {
+                return Error{ErrorCode::CORRUPT_PAGE,
+                             "mmap: uncompressed page size out of range (0 or > 256 MB)"};
+            }
             auto dec_result = decompress(codec, pdata, pdata_size,
                                          uncompressed_size);
             if (!dec_result) {
@@ -779,6 +799,12 @@ private:
         if (col_meta.codec != Compression::UNCOMPRESSED) {
             size_t uncompressed_size = static_cast<size_t>(
                 page_header.uncompressed_page_size);
+            // L-9: Pre-validate decompressed size to prevent allocation bombs (CWE-770)
+            static constexpr size_t MMAP_MAX_PAGE_SIZE = 256ULL * 1024ULL * 1024ULL;
+            if (uncompressed_size == 0 || uncompressed_size > MMAP_MAX_PAGE_SIZE) {
+                return Error{ErrorCode::CORRUPT_PAGE,
+                             "mmap: uncompressed page size out of range (0 or > 256 MB)"};
+            }
             auto decompressed = decompress(col_meta.codec,
                                            page_data, page_data_size,
                                            uncompressed_size);
@@ -802,6 +828,14 @@ private:
             num_values = page_header.data_page_header_v2->num_values;
         } else {
             num_values = col_meta.num_values;
+        }
+
+        // Cap num_values to prevent OOM from crafted files (CWE-770)
+        static constexpr int64_t MMAP_MAX_VALUES_PER_PAGE = 100'000'000;
+        if (num_values < 0 || num_values > MMAP_MAX_VALUES_PER_PAGE) {
+            return Error{ErrorCode::CORRUPT_PAGE,
+                         "mmap: num_values out of range (" +
+                         std::to_string(num_values) + ")"};
         }
 
         // Determine physical type and type_length

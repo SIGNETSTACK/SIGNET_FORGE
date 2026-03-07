@@ -96,11 +96,22 @@ inline constexpr size_t HASH_CHAIN_ENTRY_SIZE = 112;
 /// Uses std::chrono::high_resolution_clock for the best available
 /// resolution on the platform. On most systems this is nanosecond
 /// or better.
+///
+/// Guarantees monotonically increasing timestamps within each thread
+/// (MiFID II RTS 24 Art.2 timestamp ordering, CWE-362 race guard).
+/// If the clock returns a value <= the last observed value (e.g. due
+/// to NTP adjustment or coarse clock granularity), the result is
+/// bumped to last_ns + 1.
 inline int64_t now_ns() {
     auto tp = std::chrono::high_resolution_clock::now();
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                   tp.time_since_epoch());
-    return static_cast<int64_t>(ns.count());
+    int64_t result = static_cast<int64_t>(ns.count());
+    // Monotonic guard: ensure strictly increasing timestamps (MiFID II RTS 24, CWE-362)
+    static thread_local int64_t last_ns = 0;
+    if (result <= last_ns) result = last_ns + 1;
+    last_ns = result;
+    return result;
 }
 
 /// Convert a 32-byte SHA-256 hash to a lowercase hexadecimal string (64 chars).
@@ -584,6 +595,7 @@ public:
 
             // Check 1: sequence number must match position
             if (entry.sequence_number != static_cast<int64_t>(i)) {
+                result.valid           = false; // defensive: CWE-705
                 result.entries_checked = static_cast<int64_t>(i);
                 result.first_bad_index = static_cast<int64_t>(i);
                 result.error_message   = "entry " + std::to_string(i)
@@ -594,6 +606,7 @@ public:
 
             // Check 2: prev_hash must match expected
             if (entry.prev_hash != expected_prev_hash) {
+                result.valid           = false; // defensive: MiFID II RTS 24 Art.4
                 result.entries_checked = static_cast<int64_t>(i);
                 result.first_bad_index = static_cast<int64_t>(i);
                 result.error_message   = "entry " + std::to_string(i)
@@ -603,6 +616,7 @@ public:
 
             // Check 3: entry_hash must be self-consistent
             if (!entry.verify()) {
+                result.valid           = false; // defensive: tamper detection
                 result.entries_checked = static_cast<int64_t>(i);
                 result.first_bad_index = static_cast<int64_t>(i);
                 result.error_message   = "entry " + std::to_string(i)
@@ -612,6 +626,7 @@ public:
 
             // Check 4: timestamp must be non-decreasing
             if (i > 0 && entry.timestamp_ns < entries[i - 1].timestamp_ns) {
+                result.valid           = false; // defensive: ordering violation
                 result.entries_checked = static_cast<int64_t>(i);
                 result.first_bad_index = static_cast<int64_t>(i);
                 result.error_message   = "entry " + std::to_string(i)

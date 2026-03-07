@@ -1703,3 +1703,54 @@ TEST_CASE("InferenceLogWriter row lineage E2E hash chain", "[audit][lineage]") {
         CHECK((*versions)[i] == "1");
     }
 }
+
+// ===================================================================
+// Hardening Pass #4 — Audit chain integrity + SHA-256 FIPS vector
+// ===================================================================
+
+TEST_CASE("verify_chain returns false on first tampered entry", "[audit_chain][hardening]") {
+    AuditChainWriter writer;
+
+    // Append some entries
+    uint8_t data1[] = "entry1";
+    uint8_t data2[] = "entry2";
+    uint8_t data3[] = "entry3";
+    writer.append(data1, sizeof(data1) - 1, 1000);
+    writer.append(data2, sizeof(data2) - 1, 2000);
+    writer.append(data3, sizeof(data3) - 1, 3000);
+
+    // Copy entries and tamper with entry_hash of the second
+    auto entries = writer.entries();
+    REQUIRE(entries.size() == 3);
+    entries[1].entry_hash[0] ^= 0xFF; // Flip a byte in the hash
+
+    auto result = AuditChainVerifier::verify(entries);
+    REQUIRE(!result.valid);
+    // After C-8 fix, result.valid is explicitly set to false
+}
+
+TEST_CASE("now_ns returns monotonically increasing values", "[audit_chain][hardening]") {
+    // Call now_ns() rapidly and verify monotonicity
+    int64_t prev = now_ns();
+    for (int i = 0; i < 1000; ++i) {
+        int64_t curr = now_ns();
+        REQUIRE(curr >= prev);
+        prev = curr;
+    }
+}
+
+TEST_CASE("SHA-256 matches FIPS 180-4 test vector", "[audit_chain][hardening]") {
+    // FIPS 180-4 Example: sha256("abc") == ba7816bf...
+    const uint8_t msg[] = "abc";
+    auto hash = crypto::detail::sha256::sha256(msg, 3);
+
+    // Convert to hex
+    std::string hex;
+    hex.reserve(64);
+    for (auto b : hash) {
+        char buf[3];
+        std::snprintf(buf, sizeof(buf), "%02x", b);
+        hex += buf;
+    }
+    REQUIRE(hex == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}

@@ -133,9 +133,10 @@ TEST_CASE("Dictionary string encode/decode", "[encoding][dictionary]") {
                                         PhysicalType::BYTE_ARRAY);
 
     auto decoded = dec.decode(idx_page.data(), idx_page.size(), input.size());
-    REQUIRE(decoded.size() == input.size());
+    REQUIRE(decoded.has_value());
+    REQUIRE(decoded->size() == input.size());
     for (size_t i = 0; i < input.size(); ++i) {
-        REQUIRE(decoded[i] == input[i]);
+        REQUIRE((*decoded)[i] == input[i]);
     }
 }
 
@@ -159,9 +160,10 @@ TEST_CASE("Dictionary int64 encode/decode", "[encoding][dictionary]") {
                                     PhysicalType::INT64);
 
     auto decoded = dec.decode(idx_page.data(), idx_page.size(), input.size());
-    REQUIRE(decoded.size() == input.size());
+    REQUIRE(decoded.has_value());
+    REQUIRE(decoded->size() == input.size());
     for (size_t i = 0; i < input.size(); ++i) {
-        REQUIRE(decoded[i] == input[i]);
+        REQUIRE((*decoded)[i] == input[i]);
     }
 }
 
@@ -382,7 +384,7 @@ TEST_CASE("DictionaryDecoder: OOB index returns empty", "[encoding][dict][harden
     idx_page.push_back(0x05); // value = 5 (OOB!)
 
     auto result = dec.decode(idx_page.data(), idx_page.size(), 1);
-    REQUIRE(result.empty()); // must return empty, not crash
+    REQUIRE(!result.has_value()); // must return error, not crash
 }
 
 TEST_CASE("DictionaryDecoder: truncated page returns empty", "[encoding][dict][hardening]") {
@@ -427,4 +429,89 @@ TEST_CASE("Delta decode_int64: overflow stops gracefully", "[encoding][delta][ha
     REQUIRE(decoded[0] == values[0]);
     REQUIRE(decoded[1] == values[1]);
     REQUIRE(decoded[2] == values[2]);
+}
+
+// ===================================================================
+// Hardening Pass #4 Tests
+// ===================================================================
+
+TEST_CASE("RLE bit-pack resize formula is byte-correct", "[encoding][hardening]") {
+    // Test that bit_pack_8 correctly sizes output for various bit widths
+    // The fix changed: start + bit_width -> start + (8 * bit_width + 7) / 8
+
+    for (int bw = 1; bw <= 8; ++bw) {
+        std::vector<uint32_t> values = {0, 1, 2, 3, 4, 5, 6, 7};
+        // Clamp values to fit within bit_width
+        for (auto& v : values) v &= ((1u << bw) - 1);
+
+        // Encode using the static convenience method
+        auto encoded = RleEncoder::encode(values.data(), values.size(), bw);
+        REQUIRE(!encoded.empty());
+
+        // Decode and verify roundtrip identity
+        auto decoded = RleDecoder::decode(encoded.data(), encoded.size(),
+                                           bw, values.size());
+        REQUIRE(decoded.size() == 8);
+        for (size_t i = 0; i < 8; ++i) {
+            REQUIRE(decoded[i] == values[i]);
+        }
+    }
+}
+
+TEST_CASE("Dictionary decoder returns error on corrupt index", "[encoding][hardening]") {
+    // Build a 2-entry dictionary ("hello", "world")
+    DictionaryEncoder<std::string> enc;
+    enc.put("hello");
+    enc.put("world");
+    enc.flush();
+
+    auto dict_page = enc.dictionary_page();
+
+    // Manually craft an RLE index page with an OOB index (value=5, dict has 2 entries)
+    // Format: [1-byte bit_width] [RLE payload: header + value]
+    // bit_width = 3 (enough for index 5), RLE run: header=0x02 (run of 1), value=5
+    std::vector<uint8_t> bad_idx;
+    bad_idx.push_back(3);    // bit_width byte
+    bad_idx.push_back(0x02); // RLE header: run of 1
+    bad_idx.push_back(0x05); // value = 5 (OOB for 2-entry dict)
+
+    DictionaryDecoder<std::string> dec(dict_page.data(), dict_page.size(),
+                                        enc.dictionary_size(),
+                                        PhysicalType::BYTE_ARRAY);
+
+    auto result = dec.decode(bad_idx.data(), bad_idx.size(), 1);
+    // After C-4 fix, OOB indices return an error instead of silent corruption
+    REQUIRE(!result.has_value());
+}
+
+TEST_CASE("BSS decode rejects overflow in count*width", "[encoding][hardening]") {
+    // byte_stream_split decode with count that overflows when multiplied by width
+    // The fix adds: if (count > SIZE_MAX / WIDTH || count * WIDTH > size) return {};
+    uint8_t data[16] = {};
+    auto result = byte_stream_split::decode_double(data, 16, SIZE_MAX);
+    REQUIRE(result.empty());
+}
+
+TEST_CASE("Delta encoding handles large signed values without UB", "[encoding][hardening]") {
+    // H-5: Values with large deltas that would overflow signed subtraction.
+    // The fix casts to uint64_t before computing deltas.
+    // Use enough values to fill a delta block (min 128) for reliable round-trip.
+    std::vector<int64_t> values;
+    values.reserve(128);
+    // Alternate between large negative and large positive values
+    for (int i = 0; i < 128; ++i) {
+        if (i % 2 == 0)
+            values.push_back(std::numeric_limits<int64_t>::min() / 2 + i);
+        else
+            values.push_back(std::numeric_limits<int64_t>::max() / 2 - i);
+    }
+
+    auto encoded = delta::encode_int64(values.data(), values.size());
+    REQUIRE(!encoded.empty());
+
+    auto decoded = delta::decode_int64(encoded.data(), encoded.size(), values.size());
+    REQUIRE(decoded.size() == values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        REQUIRE(decoded[i] == values[i]);
+    }
 }

@@ -77,7 +77,8 @@ inline constexpr size_t VALUES_PER_MINIBLOCK    = DEFAULT_BLOCK_SIZE / DEFAULT_M
 /// @return   The zigzag-encoded unsigned 64-bit value.
 /// @see zigzag_decode
 [[nodiscard]] inline uint64_t zigzag_encode(int64_t n) {
-    return static_cast<uint64_t>((n << 1) ^ (n >> 63));
+    // Cast to unsigned before left shift to avoid signed overflow UB (CWE-190)
+    return (static_cast<uint64_t>(n) << 1) ^ static_cast<uint64_t>(n >> 63);
 }
 
 /// Zigzag-encode a signed 32-bit integer to an unsigned representation.
@@ -353,7 +354,8 @@ inline void bit_unpack_values(const uint8_t* src,
         // if min_delta <= 0 (non-negative result), else just 0.
         std::vector<uint64_t> adjusted(DEFAULT_BLOCK_SIZE);
         for (size_t i = 0; i < block_remaining; ++i) {
-            adjusted[i] = static_cast<uint64_t>(block_deltas[i] - min_delta);
+            // Use unsigned arithmetic to avoid signed overflow UB
+            adjusted[i] = static_cast<uint64_t>(block_deltas[i]) - static_cast<uint64_t>(min_delta);
         }
         // Pad positions: store 0 (the padding deltas are 0, so adjusted = 0 - min_delta)
         // Cast to unsigned before negation to avoid signed overflow UB when min_delta == INT64_MIN

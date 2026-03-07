@@ -1514,3 +1514,31 @@ TEST_CASE("WAL rejects empty record", "[wal][hardening]") {
     REQUIRE(entries->size() == 1);
     REQUIRE((*entries)[0].seq == 0);
 }
+
+// ===========================================================================
+// Hardening Pass #4 Tests
+// ===========================================================================
+
+TEST_CASE("WAL tracks rejected empty record count", "[wal][hardening]") {
+    // M-13: WAL stats should track rejected_empty_count
+    TempDir td("wal_empty_stats");
+    std::string path = td.file("test_empty.wal");
+
+    auto w = WalWriter::open(path);
+    REQUIRE(w.has_value());
+
+    // Attempt to append empty records
+    auto r1 = w->append(static_cast<const uint8_t*>(nullptr), size_t{0});
+    auto r2 = w->append(static_cast<const uint8_t*>(nullptr), size_t{0});
+
+    // Append a valid record
+    uint8_t data[] = "valid";
+    auto r3 = w->append(data, sizeof(data));
+    REQUIRE(r3.has_value());
+
+    // Check that rejected_empty_count is tracked
+    REQUIRE(w->rejected_empty_count() >= 2);
+
+    auto cl = w->close();
+    REQUIRE(cl.has_value());
+}

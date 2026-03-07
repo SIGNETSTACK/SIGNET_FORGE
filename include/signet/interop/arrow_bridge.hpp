@@ -531,6 +531,16 @@ public:
         // Arrow C Data Interface doesn't carry buffer sizes, so this is a
         // defense-in-depth cap. 1 billion elements ≈ 8 GB for float64.
         static constexpr int64_t MAX_IMPORT_ELEMENTS = 1'000'000'000;
+        static constexpr int64_t MAX_ARROW_OFFSET = 1'000'000'000LL;
+        static constexpr int64_t MAX_ARROW_LENGTH = 1'000'000'000LL;
+
+        if (array->offset > MAX_ARROW_OFFSET) {
+            return Error{ErrorCode::INVALID_ARGUMENT, "ArrowArray offset exceeds 1B cap (CWE-190)"};
+        }
+        if (array->length > MAX_ARROW_LENGTH) {
+            return Error{ErrorCode::INVALID_ARGUMENT, "ArrowArray length exceeds 1B cap (CWE-190)"};
+        }
+
         if (length > MAX_IMPORT_ELEMENTS) {
             return Error{ErrorCode::IO_ERROR,
                          "ArrowArray length exceeds import limit (1 billion elements)"};

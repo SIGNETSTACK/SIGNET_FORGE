@@ -170,6 +170,22 @@ inline void rot_word(uint8_t word[4]) {
     word[3] = tmp;
 }
 
+/// Securely zero memory that held key material (CWE-244, NIST SP 800-38D §8.3).
+///
+/// Uses volatile write + compiler barrier to prevent dead-store elimination.
+/// This is the approach used by libsodium and BoringSSL — portable across
+/// all compilers and platforms without relying on non-standard APIs.
+inline void secure_zero(void* ptr, size_t len) {
+    if (len == 0) return;
+    volatile unsigned char* p = static_cast<volatile unsigned char*>(ptr);
+    for (size_t i = 0; i < len; ++i) p[i] = 0;
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__ __volatile__("" ::: "memory");
+#elif defined(_MSC_VER)
+    _ReadWriteBarrier();
+#endif
+}
+
 } // namespace detail::aes
 
 // ===========================================================================
@@ -198,10 +214,7 @@ public:
 
     /// Destructor: securely zero round keys to prevent key material leakage.
     ~Aes256() {
-        volatile uint8_t* p = round_keys_;
-        for (size_t i = 0; i < sizeof(round_keys_); ++i) {
-            p[i] = 0;
-        }
+        detail::aes::secure_zero(round_keys_, sizeof(round_keys_));
     }
 
     /// Encrypt a single 16-byte block in-place (FIPS-197 Section 5.1).
@@ -303,6 +316,7 @@ private:
             round_keys_[i * 4 + 2] = round_keys_[(i - NK) * 4 + 2] ^ temp[2];
             round_keys_[i * 4 + 3] = round_keys_[(i - NK) * 4 + 3] ^ temp[3];
         }
+        detail::aes::secure_zero(temp, sizeof(temp));
     }
 
     // -----------------------------------------------------------------------

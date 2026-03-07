@@ -79,6 +79,16 @@ struct InferenceRecord {
     std::string          session_id;           ///< Session identifier
     std::string          metadata_json;        ///< Additional JSON metadata
 
+    // EU AI Act Art.13(3)(b)(ii): training data provenance fields
+    std::string          training_dataset_id;           ///< Training data identifier
+    int64_t              training_dataset_size{0};      ///< Number of samples in training dataset
+    std::string          training_data_characteristics; ///< Description of training data properties
+
+    // EU AI Act Art.12/13: additional training metadata (M-18)
+    int64_t              model_training_end_ns{0};          ///< Timestamp when model training completed (EU AI Act Art.12)
+    int64_t              model_training_data_cutoff_ns{0};  ///< Latest data timestamp used in training
+    std::string          model_retraining_schedule;         ///< Cron or description of retraining schedule (EU AI Act Art.13)
+
     /// Serialize the record to a deterministic byte sequence.
     /// Format: each field written sequentially as little-endian values.
     /// Strings: 4-byte LE length prefix + raw bytes.

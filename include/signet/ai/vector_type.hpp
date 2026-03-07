@@ -134,6 +134,10 @@ inline uint16_t f32_to_f16(float val) noexcept {
         // Subnormal in float16: shift mantissa right, adding the implicit 1
         uint32_t full_mantissa = mantissa | 0x800000u; // add implicit leading 1
         int32_t shift = -1 - unbiased_exp - 14 + 24;   // = -unbiased_exp - 14 + 23
+        // Guard: shift >= 32 is UB for uint32_t (CWE-682)
+        if (shift < 0 || shift >= 32) {
+            return h_sign; // too small for float16 subnormal — rounds to zero
+        }
         // Round to nearest even
         uint32_t rounded = full_mantissa >> shift;
         uint32_t remainder = full_mantissa & ((1u << shift) - 1u);
@@ -229,18 +233,20 @@ public:
             case VectorElementType::FLOAT64: {
                 size_t offset = buf_.size();
                 buf_.resize(offset + bpv);
-                auto* dst = reinterpret_cast<double*>(buf_.data() + offset);
+                // Use memcpy to avoid unaligned double writes (CWE-704)
                 for (size_t i = 0; i < dim; ++i) {
-                    dst[i] = static_cast<double>(data[i]);
+                    double d = static_cast<double>(data[i]);
+                    std::memcpy(buf_.data() + offset + i * sizeof(double), &d, sizeof(d));
                 }
                 break;
             }
             case VectorElementType::FLOAT16: {
                 size_t offset = buf_.size();
                 buf_.resize(offset + bpv);
-                auto* dst = reinterpret_cast<uint16_t*>(buf_.data() + offset);
+                // Use memcpy to avoid unaligned uint16_t writes (CWE-704)
                 for (size_t i = 0; i < dim; ++i) {
-                    dst[i] = f32_to_f16(data[i]);
+                    uint16_t h = f32_to_f16(data[i]);
+                    std::memcpy(buf_.data() + offset + i * 2, &h, sizeof(h));
                 }
                 break;
             }
@@ -345,16 +351,20 @@ public:
                     break;
                 }
                 case VectorElementType::FLOAT64: {
-                    const auto* src_d = reinterpret_cast<const double*>(src);
+                    // Use memcpy to avoid unaligned double reads (CWE-704)
                     for (size_t j = 0; j < dim; ++j) {
-                        vec[j] = static_cast<float>(src_d[j]);
+                        double d;
+                        std::memcpy(&d, src + j * sizeof(double), sizeof(d));
+                        vec[j] = static_cast<float>(d);
                     }
                     break;
                 }
                 case VectorElementType::FLOAT16: {
-                    const auto* src_h = reinterpret_cast<const uint16_t*>(src);
+                    // Use memcpy to avoid unaligned uint16_t reads (CWE-704)
                     for (size_t j = 0; j < dim; ++j) {
-                        vec[j] = f16_to_f32(src_h[j]);
+                        uint16_t h;
+                        std::memcpy(&h, src + j * 2, sizeof(h));
+                        vec[j] = f16_to_f32(h);
                     }
                     break;
                 }
@@ -434,16 +444,20 @@ public:
                 break;
             }
             case VectorElementType::FLOAT64: {
-                const auto* src_d = reinterpret_cast<const double*>(src);
+                // Use memcpy to avoid unaligned double reads (CWE-704)
                 for (size_t j = 0; j < dim; ++j) {
-                    vec[j] = static_cast<float>(src_d[j]);
+                    double d;
+                    std::memcpy(&d, src + j * sizeof(double), sizeof(d));
+                    vec[j] = static_cast<float>(d);
                 }
                 break;
             }
             case VectorElementType::FLOAT16: {
-                const auto* src_h = reinterpret_cast<const uint16_t*>(src);
+                // Use memcpy to avoid unaligned uint16_t reads (CWE-704)
                 for (size_t j = 0; j < dim; ++j) {
-                    vec[j] = f16_to_f32(src_h[j]);
+                    uint16_t h;
+                    std::memcpy(&h, src + j * 2, sizeof(h));
+                    vec[j] = f16_to_f32(h);
                 }
                 break;
             }

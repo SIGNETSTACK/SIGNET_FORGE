@@ -111,7 +111,8 @@ public:
         if constexpr (std::is_same_v<T, bool>) {
             update_numeric(static_cast<uint8_t>(value ? 1 : 0));
         } else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
-            if (std::isnan(value)) return; // NaN does not count toward num_values_
+            // NaN values do not count toward num_values_ (Parquet spec S2.4)
+            if (std::isnan(value)) return;
             update_float(value);
         } else if constexpr (std::is_same_v<T, std::string>) {
             update_string(value);
@@ -157,6 +158,8 @@ public:
 
     /// Reconstruct the typed minimum value from stored bytes.
     /// @tparam T  The original value type used during update().
+    /// @note Caller is responsible for matching T to the PhysicalType tracked by type_.
+    ///       Mismatched types produce undefined byte-reinterpretation (CWE-843).
     template <typename T>
     [[nodiscard]] T min_as() const {
         if constexpr (std::is_same_v<T, bool>) {
@@ -170,6 +173,8 @@ public:
 
     /// Reconstruct the typed maximum value from stored bytes.
     /// @tparam T  The original value type used during update().
+    /// @note Caller is responsible for matching T to the PhysicalType tracked by type_.
+    ///       Mismatched types produce undefined byte-reinterpretation (CWE-843).
     template <typename T>
     [[nodiscard]] T max_as() const {
         if constexpr (std::is_same_v<T, bool>) {
@@ -186,6 +191,13 @@ public:
     /// Set the distinct-value count (e.g. from a dictionary encoder).
     /// @param count  The number of distinct values.
     void set_distinct_count(int64_t count) { distinct_count_ = count; }
+
+    /// Set the physical type for type-aware min/max comparison during merge.
+    /// @param t  The Parquet physical type of the column.
+    void set_type(PhysicalType t) { type_ = t; }
+
+    /// Get the physical type associated with these statistics.
+    [[nodiscard]] PhysicalType type() const { return type_; }
 
     // -- Merge two statistics (useful for combining page stats into chunk stats) -
 
@@ -207,13 +219,8 @@ public:
                 max_value_  = other.max_value_;
                 has_min_max_ = true;
             } else {
-                // Byte-level comparison: assumes caller merges same-typed stats
-                if (other.min_value_ < min_value_) {
-                    min_value_ = other.min_value_;
-                }
-                if (other.max_value_ > max_value_) {
-                    max_value_ = other.max_value_;
-                }
+                // Use typed comparison for numeric types (CWE-697: incorrect comparison)
+                merge_min_max(other.min_value_, other.max_value_);
             }
         }
 
@@ -230,6 +237,41 @@ private:
     std::vector<uint8_t>   min_value_;
     std::vector<uint8_t>   max_value_;
     bool                   has_min_max_    = false;
+    PhysicalType           type_           = PhysicalType::INT32;
+
+    // -- Typed merge helpers (used by merge()) -----------------------------------
+
+    /// Merge min/max using physical-type-aware comparison.
+    void merge_min_max(const std::vector<uint8_t>& other_min,
+                       const std::vector<uint8_t>& other_max) {
+        switch (type_) {
+            case PhysicalType::INT32:
+                typed_merge<int32_t>(other_min, other_max); break;
+            case PhysicalType::INT64:
+                typed_merge<int64_t>(other_min, other_max); break;
+            case PhysicalType::FLOAT:
+                typed_merge<float>(other_min, other_max); break;
+            case PhysicalType::DOUBLE:
+                typed_merge<double>(other_min, other_max); break;
+            default:
+                // BOOLEAN, BYTE_ARRAY, FIXED_LEN_BYTE_ARRAY: lexicographic is correct
+                if (other_min < min_value_) min_value_ = other_min;
+                if (other_max > max_value_) max_value_ = other_max;
+                break;
+        }
+    }
+
+    /// Typed comparison for merge: reconstitute native values from LE bytes.
+    template <typename T>
+    void typed_merge(const std::vector<uint8_t>& other_min_bytes,
+                     const std::vector<uint8_t>& other_max_bytes) {
+        T cur_min = from_le_bytes<T>(min_value_);
+        T cur_max = from_le_bytes<T>(max_value_);
+        T o_min   = from_le_bytes<T>(other_min_bytes);
+        T o_max   = from_le_bytes<T>(other_max_bytes);
+        if (o_min < cur_min) min_value_ = other_min_bytes;
+        if (o_max > cur_max) max_value_ = other_max_bytes;
+    }
 
     // -- Internal update helpers -----------------------------------------------
 

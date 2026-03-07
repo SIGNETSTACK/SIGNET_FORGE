@@ -959,3 +959,90 @@ TEST_CASE("QuantizedVectorWriter make_descriptor", "[quantized][writer-reader]")
     // INT8: 1 byte per element, so type_length = dimension
     REQUIRE(desc.type_length == static_cast<int32_t>(params.bytes_per_vector()));
 }
+
+// ===================================================================
+// Section 10: Hardening Pass #4 [hardening]
+// ===================================================================
+
+TEST_CASE("INT4 sign extension is platform-agnostic", "[vector_type][hardening]") {
+    // C-7: INT4 unpacking uses (nibble ^ 0x08) - 0x08 for platform-agnostic
+    // sign extension. Range is [-8, 7] for 4-bit signed integers (though
+    // SYMMETRIC_INT4 clamps to [-7, 7]).
+    // Pack known values and verify dequantization produces correct signs.
+    constexpr uint32_t dim = 16;
+
+    // Build a vector whose values span [-7, 7] (the quantizable INT4 range)
+    // Repeat to fill 16 dims: -7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,0
+    std::vector<float> original(dim);
+    for (int i = 0; i < 15; ++i) {
+        original[static_cast<size_t>(i)] = static_cast<float>(i - 7); // -7..+7
+    }
+    original[15] = 0.0f;
+
+    auto params = QuantizationParams::compute(original.data(), 1, dim,
+                                              QuantizationScheme::SYMMETRIC_INT4);
+    REQUIRE(params.scheme == QuantizationScheme::SYMMETRIC_INT4);
+
+    Quantizer quantizer(params);
+    std::vector<uint8_t> qbuf(params.bytes_per_vector());
+    quantizer.quantize(original.data(), qbuf.data());
+
+    Dequantizer dequantizer(params);
+    std::vector<float> recovered(dim);
+    dequantizer.dequantize(qbuf.data(), recovered.data());
+
+    // Verify signs are correct (negative inputs -> negative outputs, positive -> positive)
+    for (size_t i = 0; i < original.size(); ++i) {
+        if (original[i] < 0) {
+            REQUIRE(recovered[i] < 0.0f);
+        } else if (original[i] > 0) {
+            REQUIRE(recovered[i] > 0.0f);
+        }
+    }
+}
+
+TEST_CASE("Quantization handles small-range inputs", "[vector_type][hardening]") {
+    // H-11: When input range is very small, scale factor is tiny.
+    // Added documentation about MiFID II Annex I Field 6 precision.
+    constexpr uint32_t dim = 3;
+    float tiny_range[] = {1.0f, 1.0f + 1e-7f, 1.0f + 2e-7f};
+
+    auto params = QuantizationParams::compute(tiny_range, 1, dim,
+                                              QuantizationScheme::SYMMETRIC_INT8);
+    REQUIRE(params.scheme == QuantizationScheme::SYMMETRIC_INT8);
+
+    Quantizer quantizer(params);
+    std::vector<uint8_t> qbuf(params.bytes_per_vector());
+    quantizer.quantize(tiny_range, qbuf.data());
+
+    Dequantizer dequantizer(params);
+    std::vector<float> recovered(dim);
+    dequantizer.dequantize(qbuf.data(), recovered.data());
+    REQUIRE(recovered.size() == dim);
+}
+
+TEST_CASE("Dequantization clamps to original range", "[vector_type][hardening]") {
+    // H-12: Added std::clamp post-dequantization to ensure no dequantized
+    // value exceeds the original representable range.
+    constexpr uint32_t dim = 4;
+    float data[] = {-100.0f, 0.0f, 50.0f, 100.0f};
+
+    auto params = QuantizationParams::compute(data, 1, dim,
+                                              QuantizationScheme::SYMMETRIC_INT8);
+
+    Quantizer quantizer(params);
+    std::vector<uint8_t> qbuf(params.bytes_per_vector());
+    quantizer.quantize(data, qbuf.data());
+
+    Dequantizer dequantizer(params);
+    std::vector<float> recovered(dim);
+    dequantizer.dequantize(qbuf.data(), recovered.data());
+
+    // Clamping ensures no dequantized value exceeds the original range
+    float orig_min = *std::min_element(std::begin(data), std::end(data));
+    float orig_max = *std::max_element(std::begin(data), std::end(data));
+    for (float v : recovered) {
+        REQUIRE(v >= orig_min - 1.0f); // Small tolerance for float precision
+        REQUIRE(v <= orig_max + 1.0f);
+    }
+}

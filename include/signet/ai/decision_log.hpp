@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -490,6 +491,13 @@ public:
         }
     }
 
+    /// Set an optional symbol/instrument validator callback (MiFID II RTS 24).
+    /// If set, each record's `symbol` is validated before logging. Invalid
+    /// symbols cause log() to return INVALID_ARGUMENT.
+    void set_instrument_validator(std::function<bool(const std::string&)> validator) {
+        instrument_validator_ = std::move(validator);
+    }
+
     /// Log a trading decision. Returns the hash chain entry.
     ///
     /// The record is serialized, hashed, and appended to the hash chain.
@@ -498,6 +506,12 @@ public:
     [[nodiscard]] inline expected<HashChainEntry> log(const DecisionRecord& record) {
         auto usage = commercial::record_usage_rows("DecisionLogWriter::log", 1);
         if (!usage) return usage.error();
+
+        // Validate symbol if an instrument validator is registered (MiFID II RTS 24)
+        if (instrument_validator_ && !instrument_validator_(record.symbol)) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "DecisionLog: invalid symbol '" + record.symbol + "' (MiFID II RTS 24)"};
+        }
 
         // Serialize the record for hashing
         auto data = record.serialize();
@@ -676,6 +690,7 @@ private:
     std::string                         current_file_path_;
     int64_t                             total_records_{0};
     int64_t                             file_count_{0};
+    std::function<bool(const std::string&)> instrument_validator_; ///< Optional symbol validator (MiFID II RTS 24)
 
     /// Format a double to string with enough precision for round-tripping.
     static inline std::string double_to_string(double v) {

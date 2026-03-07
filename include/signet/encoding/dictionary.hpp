@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 
 #include "signet/encoding/rle.hpp"
+#include "signet/error.hpp"
 #include "signet/types.hpp"
 
 #include <algorithm>
@@ -430,12 +431,12 @@ public:
     /// @param indices_data  Pointer to the indices page (1-byte bit_width + RLE payload).
     /// @param indices_size  Size of the indices page in bytes.
     /// @param num_values    Number of values to decode.
-    /// @return              Decoded values, or empty on out-of-bounds index.
+    /// @return              Decoded values, or CORRUPT_DATA error on out-of-bounds index (CWE-754).
     /// @see DictionaryEncoder::indices_page
-    [[nodiscard]] std::vector<T> decode(const uint8_t* indices_data,
-                                         size_t indices_size,
-                                         size_t num_values) const {
-        if (indices_size == 0 || num_values == 0) return {};
+    [[nodiscard]] expected<std::vector<T>> decode(const uint8_t* indices_data,
+                                                   size_t indices_size,
+                                                   size_t num_values) const {
+        if (indices_size == 0 || num_values == 0) return std::vector<T>{};
 
         // First byte is the bit_width
         int bw = static_cast<int>(indices_data[0]);
@@ -449,7 +450,12 @@ public:
         std::vector<T> result;
         result.reserve(indices.size());
         for (uint32_t idx : indices) {
-            if (static_cast<size_t>(idx) >= dict_values_.size()) return {};
+            if (static_cast<size_t>(idx) >= dict_values_.size()) {
+                return Error{ErrorCode::CORRUPT_DATA,
+                             "dictionary index " + std::to_string(idx)
+                             + " out of range (dict size="
+                             + std::to_string(dict_values_.size()) + ")"};
+            }
             result.push_back(dict_values_[idx]);
         }
         return result;

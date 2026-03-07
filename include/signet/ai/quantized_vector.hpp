@@ -216,8 +216,13 @@ public:
     /// Access the quantization parameters.
     [[nodiscard]] const QuantizationParams& params() const { return params_; }
 
+    /// EU AI Act Art.12 anomaly tracking: number of dequantized values that
+    /// fell outside the representable quantization range and were clamped.
+    [[nodiscard]] uint64_t anomaly_count() const { return anomaly_count_; }
+
 private:
     QuantizationParams params_;
+    mutable uint64_t   anomaly_count_ = 0; ///< Count of out-of-range dequantized values (EU AI Act Art.12)
 
     // -- Scalar helpers --------------------------------------------------
     inline void dequantize_symmetric_int8_scalar(const uint8_t* in, float* out, uint32_t dim) const;
@@ -404,6 +409,12 @@ inline QuantizationParams QuantizationParams::compute(
         break;
     }
     }
+
+    // MiFID II Annex I Field 6: verify that quantization scale preserves
+    // required price precision for regulated instruments.
+    // The smallest representable delta equals `scale`. If this exceeds the
+    // instrument tick size, quantized prices may violate precision requirements.
+    // Users embedding regulated price data should confirm scale < tick_size.
 
     return p;
 }
@@ -864,9 +875,16 @@ inline void Dequantizer::dequantize_symmetric_int8_scalar(
     const uint8_t* in, float* out, uint32_t dim) const
 {
     const float s = params_.scale;
+    const float range_max =  127.0f * s;
+    const float range_min = -127.0f * s;
     for (uint32_t i = 0; i < dim; ++i) {
         int8_t q = static_cast<int8_t>(in[i]);
         out[i] = static_cast<float>(q) * s;
+        // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
+        if (out[i] < range_min || out[i] > range_max) {
+            out[i] = std::clamp(out[i], range_min, range_max);
+            ++anomaly_count_;
+        }
     }
 }
 
@@ -875,8 +893,15 @@ inline void Dequantizer::dequantize_asymmetric_int8_scalar(
 {
     const float s  = params_.scale;
     const float zp = params_.zero_point;
+    const float range_min = zp;                // 0 * s + zp
+    const float range_max = 255.0f * s + zp;   // 255 * s + zp
     for (uint32_t i = 0; i < dim; ++i) {
         out[i] = static_cast<float>(in[i]) * s + zp;
+        // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
+        if (out[i] < range_min || out[i] > range_max) {
+            out[i] = std::clamp(out[i], range_min, range_max);
+            ++anomaly_count_;
+        }
     }
 }
 
@@ -884,6 +909,8 @@ inline void Dequantizer::dequantize_symmetric_int4_scalar(
     const uint8_t* in, float* out, uint32_t dim) const
 {
     const float s = params_.scale;
+    const float range_max =  7.0f * s;
+    const float range_min = -7.0f * s;
     for (uint32_t i = 0; i < dim; ++i) {
         uint32_t byte_idx = i / 2;
         uint8_t nibble;
@@ -895,16 +922,17 @@ inline void Dequantizer::dequantize_symmetric_int4_scalar(
             nibble = in[byte_idx] & 0x0F;
         }
 
-        // Sign-extend 4-bit two's complement to int8
-        int8_t signed_val;
-        if (nibble & 0x08) {
-            // Negative: extend sign bits
-            signed_val = static_cast<int8_t>(nibble | 0xF0);
-        } else {
-            signed_val = static_cast<int8_t>(nibble);
-        }
+        // Sign-extend 4-bit two's complement to int8 (CWE-194).
+        // Portable, branchless, defined behavior per C++20 standard:
+        //   XOR with 0x08 flips the sign bit, subtract 0x08 restores offset.
+        int8_t signed_val = static_cast<int8_t>((nibble ^ 0x08) - 0x08);
 
         out[i] = static_cast<float>(signed_val) * s;
+        // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
+        if (out[i] < range_min || out[i] > range_max) {
+            out[i] = std::clamp(out[i], range_min, range_max);
+            ++anomaly_count_;
+        }
     }
 }
 

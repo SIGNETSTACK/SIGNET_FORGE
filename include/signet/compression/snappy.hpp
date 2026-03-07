@@ -279,22 +279,23 @@ public:
         // genuine byte match, we emit any pending literals followed by a copy
         // element.
 
-        std::array<uint32_t, kHashTableSize> table{};
-        // Sentinel: 0xFFFFFFFF means "no entry". We use this rather than 0
+        // Use uint64_t positions to support inputs > 4 GB (L-1).
+        std::array<uint64_t, kHashTableSize> table{};
+        // Sentinel: UINT64_MAX means "no entry". We use this rather than 0
         // because position 0 is a valid position.
-        table.fill(0xFFFFFFFF);
+        table.fill(UINT64_MAX);
 
         size_t pos          = 0;     // Current scan position in `data`.
         size_t literal_start = 0;    // Start of pending literal run.
 
         while (pos + 4 <= size) {
             uint32_t h = hash4(data + pos);
-            uint32_t candidate = table[h];
-            table[h] = static_cast<uint32_t>(pos);
+            uint64_t candidate = table[h];
+            table[h] = pos;
 
             // Check for a genuine match: the candidate must exist, the 4
             // bytes must match, and the offset must be positive.
-            if (candidate != 0xFFFFFFFF &&
+            if (candidate != UINT64_MAX &&
                 pos - candidate <= 65535 &&
                 load_le32(data + pos) == load_le32(data + candidate)) {
 
@@ -317,7 +318,7 @@ public:
                 size_t match_end = pos + ml;
                 pos++;
                 while (pos < match_end && pos + 4 <= size) {
-                    table[hash4(data + pos)] = static_cast<uint32_t>(pos);
+                    table[hash4(data + pos)] = pos;
                     pos++;
                 }
                 pos = match_end;

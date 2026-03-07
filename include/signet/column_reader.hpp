@@ -204,12 +204,14 @@ public:
 
         uint32_t len;
         std::memcpy(&len, data_ + pos_, 4);
-        pos_ += 4;
 
-        if (pos_ + len > size_) {
+        // Bounds check before advancing pos_: use subtraction to avoid
+        // pos_+len wraparound on crafted files (CWE-125, CWE-190).
+        if (static_cast<size_t>(len) > size_ - pos_ - 4) {
             return Error{ErrorCode::CORRUPT_PAGE,
                          "BYTE_ARRAY data read past end of page data"};
         }
+        pos_ += 4;
 
         std::string val(reinterpret_cast<const char*>(data_ + pos_), len);
         pos_ += len;
@@ -238,12 +240,14 @@ public:
 
         uint32_t len;
         std::memcpy(&len, data_ + pos_, 4);
-        pos_ += 4;
 
-        if (pos_ + len > size_) {
+        // Bounds check before advancing pos_: use subtraction to avoid
+        // pos_+len wraparound on crafted files (CWE-125, CWE-190).
+        if (static_cast<size_t>(len) > size_ - pos_ - 4) {
             return Error{ErrorCode::CORRUPT_PAGE,
                          "BYTE_ARRAY data read past end of page data"};
         }
+        pos_ += 4;
 
         std::string_view val(reinterpret_cast<const char*>(data_ + pos_), len);
         pos_ += len;
@@ -290,12 +294,14 @@ public:
         }
         uint32_t len;
         std::memcpy(&len, data_ + pos_, 4);
-        pos_ += 4;
 
-        if (pos_ + len > size_) {
+        // Bounds check before advancing pos_: use subtraction to avoid
+        // pos_+len wraparound on crafted files (CWE-125, CWE-190).
+        if (static_cast<size_t>(len) > size_ - pos_ - 4) {
             return Error{ErrorCode::CORRUPT_PAGE,
                          "BYTE_ARRAY data read past end of page data"};
         }
+        pos_ += 4;
         std::vector<uint8_t> val(data_ + pos_, data_ + pos_ + len);
         pos_ += len;
         ++values_read_;

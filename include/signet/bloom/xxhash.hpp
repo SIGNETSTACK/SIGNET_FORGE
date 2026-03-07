@@ -64,6 +64,8 @@ inline uint64_t read_u64_le(const uint8_t* p) {
     // x86, x86_64, and ARM (little-endian mode) are fine.
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     v = __builtin_bswap64(v);
+#elif !defined(__BYTE_ORDER__)
+#  error "Cannot determine endianness — define __BYTE_ORDER__"
 #endif
     return v;
 }
@@ -77,6 +79,8 @@ inline uint32_t read_u32_le(const uint8_t* p) {
     std::memcpy(&v, p, 4);
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     v = __builtin_bswap32(v);
+#elif !defined(__BYTE_ORDER__)
+#  error "Cannot determine endianness — define __BYTE_ORDER__"
 #endif
     return v;
 }

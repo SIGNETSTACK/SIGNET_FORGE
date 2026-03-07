@@ -27,6 +27,17 @@ enum class ReportFormat {
     CSV,     ///< Comma-separated values with header row
 };
 
+/// Timestamp granularity for MiFID II RTS 24 Art.2(2) compliance.
+///
+/// Controls the sub-second precision emitted in ISO 8601 timestamp fields.
+/// RTS 24 requires nanosecond precision for high-frequency trading; lower
+/// granularities may be appropriate for non-HFT reporting regimes.
+enum class TimestampGranularity {
+    NANOS,   ///< 9 sub-second digits (default, MiFID II HFT compliant)
+    MICROS,  ///< 6 sub-second digits
+    MILLIS,  ///< 3 sub-second digits
+};
+
 /// Which regulatory standard a compliance report satisfies.
 enum class ComplianceStandard {
     MIFID2_RTS24,       ///< MiFID II RTS 24 — algorithmic trading records
@@ -80,6 +91,14 @@ struct ReportOptions {
     /// Low-confidence threshold for EU AI Act anomaly counting.
     /// Inferences with confidence below this value are flagged.
     float low_confidence_threshold = 0.5f;
+
+    /// Significant digits for price fields (MiFID II RTS 24 Annex I Field 6).
+    /// Default 17 preserves full double-precision round-trip fidelity.
+    int price_significant_digits = 17;
+
+    /// Timestamp sub-second granularity (MiFID II RTS 24 Art.2(2)).
+    /// Default NANOS for HFT regulatory compliance.
+    TimestampGranularity timestamp_granularity = TimestampGranularity::NANOS;
 };
 
 /// The generated compliance report returned to the caller.

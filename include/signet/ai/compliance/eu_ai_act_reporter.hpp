@@ -99,7 +99,9 @@ public:
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
-            if (!rdr_result) { chain_ok = false; continue; }
+            if (!rdr_result) return Error{ErrorCode::IO_ERROR,
+                "EUAIActReporter: cannot open log file '" + path +
+                "': " + rdr_result.error().message};
             auto& rdr = *rdr_result;
 
             if (opts.verify_chain) {
@@ -161,7 +163,9 @@ public:
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
-            if (!rdr_result) { chain_ok = false; continue; }
+            if (!rdr_result) return Error{ErrorCode::IO_ERROR,
+                "EUAIActReporter: cannot open log file '" + path +
+                "': " + rdr_result.error().message};
             auto& rdr = *rdr_result;
             if (opts.verify_chain) {
                 auto vr = rdr.verify_chain();
@@ -222,7 +226,9 @@ public:
 
         for (const auto& path : decision_log_files) {
             auto rdr_result = DecisionLogReader::open(path);
-            if (!rdr_result) { dec_chain_ok = false; continue; }
+            if (!rdr_result) return Error{ErrorCode::IO_ERROR,
+                "EUAIActReporter: cannot open decision log '" + path +
+                "': " + rdr_result.error().message};
             auto& rdr = *rdr_result;
             if (opts.verify_chain) {
                 auto vr = rdr.verify_chain();
@@ -247,7 +253,9 @@ public:
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
-            if (!rdr_result) { inf_chain_ok = false; continue; }
+            if (!rdr_result) return Error{ErrorCode::IO_ERROR,
+                "EUAIActReporter: cannot open inference log '" + path +
+                "': " + rdr_result.error().message};
             auto& rdr = *rdr_result;
             if (opts.verify_chain) {
                 auto vr = rdr.verify_chain();
@@ -263,6 +271,20 @@ public:
                 if (rec.timestamp_ns >= opts.start_ns &&
                     rec.timestamp_ns <= opts.end_ns)
                     inf_records.push_back(std::move(rec));
+        }
+
+        // EU AI Act Art.19: cross-chain verification — when verify_chain is
+        // enabled and both log types are present, their chain IDs must match
+        // to confirm they belong to the same audit context. A mismatch means
+        // the decision and inference logs were produced by unrelated systems,
+        // which is an audit finding that must be surfaced.
+        if (opts.verify_chain &&
+            !dec_chain_id.empty() && !inf_chain_id.empty() &&
+            dec_chain_id != inf_chain_id) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "EU AI Act Art.19: decision chain_id ('" + dec_chain_id +
+                         "') != inference chain_id ('" + inf_chain_id +
+                         "'). Logs must share an audit context."};
         }
 
         const bool chain_ok = dec_chain_ok && inf_chain_ok;
@@ -503,7 +525,34 @@ private:
         o += ind2 + "\"avg_batch_size\":" + sp
            + dbl(ps.total > 0
                  ? static_cast<double>(ps.total_batches) / ps.total
-                 : 0.0) + nl;
+                 : 0.0);
+        // EU AI Act Art.13(3)(b)(ii): training data provenance (if available)
+        {
+            std::string td_id, td_chars;
+            int64_t td_size = 0;
+            for (const auto& r : records) {
+                if (td_id.empty() && !r.training_dataset_id.empty())
+                    td_id = r.training_dataset_id;
+                if (r.training_dataset_size > td_size)
+                    td_size = r.training_dataset_size;
+                if (td_chars.empty() && !r.training_data_characteristics.empty())
+                    td_chars = r.training_data_characteristics;
+            }
+            if (!td_id.empty() || td_size > 0 || !td_chars.empty()) {
+                o += "," + nl;
+                if (!td_id.empty())
+                    o += ind2 + "\"training_dataset_id\":" + sp
+                       + "\"" + j(td_id) + "\"," + nl;
+                o += ind2 + "\"training_dataset_size\":" + sp
+                   + std::to_string(td_size);
+                if (!td_chars.empty()) {
+                    o += "," + nl;
+                    o += ind2 + "\"training_data_characteristics\":" + sp
+                       + "\"" + j(td_chars) + "\"";
+                }
+            }
+        }
+        o += nl;
         o += ind + "}," + nl;
         o += ind + "\"limitations_and_risks\":" + sp + "{" + nl;
         o += ind2 + "\"anomaly_count\":" + sp + std::to_string(ps.anomaly_count) + "," + nl;

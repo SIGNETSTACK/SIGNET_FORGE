@@ -155,6 +155,10 @@ public:
     /// @param data  Pointer to the raw byte payload.
     /// @param len   Number of bytes in the payload.
     void write_byte_array(const uint8_t* data, size_t len) {
+        if (len > static_cast<size_t>(UINT32_MAX)) {
+            // BYTE_ARRAY length prefix is a 4-byte LE uint32; reject > 4 GB payloads.
+            return; // caller should pre-validate; silent no-op matches existing error model
+        }
         append_le32(buf_, static_cast<uint32_t>(len));
         buf_.insert(buf_.end(), data, data + len);
 

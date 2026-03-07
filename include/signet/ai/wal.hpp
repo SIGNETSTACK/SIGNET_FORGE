@@ -60,7 +60,8 @@ static constexpr uint16_t WAL_FILE_HDR_SIZE = 16;
 /// Magic bytes written at the start of every WAL file for identification.
 static constexpr char     WAL_FILE_MAGIC[16] = "SIGNETWAL1\0\0\0\0\0"; // written once at pos 0
 
-/// Hard cap on a single WAL record payload size (64 MB).
+/// Maximum record size (64 MB). Records approaching this limit trigger a
+/// warning via FeatureWriter documentation. See CWE-770.
 /// @note Records exceeding this limit are rejected by WalWriter::append()
 ///       and treated as end-of-valid-records by WalReader::next().
 static constexpr uint32_t WAL_MAX_RECORD_SIZE = 64u * 1024u * 1024u;  // 64 MB hard cap per record
@@ -340,8 +341,11 @@ public:
         std::lock_guard<std::mutex> lk(mu_);
         if (closed_)
             return Error{ErrorCode::IO_ERROR, "WalWriter: already closed"};
-        if (size == 0)
+        if (size == 0) {
+            ++rejected_empty_count_;
             return Error{ErrorCode::IO_ERROR, "WalWriter: empty record rejected"};
+        }
+        // Note: records > WAL_MAX_RECORD_SIZE are rejected by WalReader (hardening pass #2)
         if (size > static_cast<size_t>(UINT32_MAX))
             return Error{ErrorCode::IO_ERROR, "WalWriter: record too large"};
 
@@ -392,8 +396,10 @@ public:
         ++next_seq_;
 
         if (opts_.sync_on_append) {
-            std::fflush(file_);
-            detail::full_fsync(::fileno(file_));
+            if (std::fflush(file_) != 0)
+                return Error{ErrorCode::IO_ERROR, "WalWriter: fflush failed on sync_on_append"};
+            if (detail::full_fsync(::fileno(file_)) != 0)
+                return Error{ErrorCode::IO_ERROR, "WalWriter: fsync failed on sync_on_append"};
         }
 
         return seq;
@@ -447,8 +453,14 @@ public:
         std::lock_guard<std::mutex> lk(mu_);
         if (closed_) return {};
         closed_ = true;
-        std::fflush(file_);
-        detail::full_fsync(::fileno(file_));
+        if (std::fflush(file_) != 0) {
+            std::fclose(file_); file_ = nullptr;
+            return Error{ErrorCode::IO_ERROR, "WalWriter: fflush failed on close"};
+        }
+        if (detail::full_fsync(::fileno(file_)) != 0) {
+            std::fclose(file_); file_ = nullptr;
+            return Error{ErrorCode::IO_ERROR, "WalWriter: fsync failed on close"};
+        }
         std::fclose(file_);
         file_ = nullptr;
         return {};
@@ -462,6 +474,8 @@ public:
     [[nodiscard]] const std::string& path()    const noexcept { return path_; }
     /// Total bytes written to this WAL file (header + all records).
     [[nodiscard]] int64_t     bytes_written()  const noexcept { return bytes_written_; }
+    /// Number of empty records rejected (CWE-754).
+    [[nodiscard]] uint64_t    rejected_empty_count() const noexcept { return rejected_empty_count_; }
 
 private:
     WalWriter(FILE* f, std::string path, int64_t next_seq,
@@ -479,6 +493,7 @@ private:
     std::string path_;
     int64_t     next_seq_      = 0;
     int64_t     bytes_written_ = 0;
+    uint64_t    rejected_empty_count_ = 0; ///< Number of empty records rejected (CWE-754)
     Options     opts_;
     bool        closed_        = false;
     std::mutex  mu_;

@@ -48,6 +48,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <stdexcept>
 #include <memory>
 #include <optional>
 #include <string>
@@ -332,9 +333,13 @@ public:
     /// @param index  Zero-based row group index. Must be less than
     ///               `num_row_groups()`.
     /// @return A `RowGroupInfo` struct with row count, byte size, and index.
-    /// @note No bounds checking is performed; passing an out-of-range index
-    ///       is undefined behavior. Use `num_row_groups()` to validate first.
+    /// @throws std::out_of_range if index >= num_row_groups().
     RowGroupInfo row_group(size_t index) const {
+        if (index >= metadata_.row_groups.size()) {
+            throw std::out_of_range("ParquetReader::row_group: index " +
+                std::to_string(index) + " >= " +
+                std::to_string(metadata_.row_groups.size()));
+        }
         const auto& rg = metadata_.row_groups[index];
         return {rg.num_rows,
                 rg.total_byte_size,
