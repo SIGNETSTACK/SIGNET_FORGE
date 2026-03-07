@@ -9,6 +9,8 @@ Zero mandatory dependencies. Header-mostly. Interoperable with Arrow, DuckDB, Sp
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](python/)
 [![codecov](https://codecov.io/gh/SIGNETSTACK/signet-forge/graph/badge.svg)](https://codecov.io/gh/SIGNETSTACK/signet-forge)
 
+[**Try it in your browser — drag & drop any .parquet file**](https://signetstack.github.io/SIGNET_FORGE/demo/) | [**API Reference**](https://signetstack.github.io/SIGNET_FORGE/)
+
 ---
 
 ## Why Signet?
