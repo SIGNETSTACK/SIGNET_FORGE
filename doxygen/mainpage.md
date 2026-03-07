@@ -2,7 +2,7 @@
 
 **C++20 Parquet library with AI-native extensions — zero mandatory dependencies.**
 
-[GitHub Repository](https://github.com/SIGNETSTACK/SIGNET_FORGE)
+[GitHub Repository](https://github.com/SIGNETSTACK/SIGNET_FORGE) | [Browser Parquet Demo](demo/index.html)
 
 ---
 
@@ -77,7 +77,7 @@ auto col = reader.read_column<double>(0, 1).value(); // row group 0, column 1
 ```cmake
 include(FetchContent)
 FetchContent_Declare(signet_forge
-    GIT_REPOSITORY https://github.com/SIGNETSTACK/signet-forge.git
+    GIT_REPOSITORY https://github.com/SIGNETSTACK/SIGNET_FORGE.git
     GIT_TAG        main)
 FetchContent_MakeAvailable(signet_forge)
 target_link_libraries(your_target PRIVATE signet::forge)
