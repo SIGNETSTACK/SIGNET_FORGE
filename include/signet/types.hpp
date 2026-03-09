@@ -33,6 +33,11 @@ enum class PhysicalType : int32_t {
 /// Logical types add semantic meaning on top of a PhysicalType.  For example,
 /// a STRING column is stored as BYTE_ARRAY but interpreted as UTF-8 text.
 /// @see PhysicalType, ColumnDescriptor
+// Windows <mmsystem.h> defines TIME_MS as a macro — undefine to avoid collision.
+#ifdef TIME_MS
+#undef TIME_MS
+#endif
+
 enum class LogicalType : int32_t {
     NONE       = 0,   ///< No logical annotation — raw physical type.
     STRING     = 1,   ///< UTF-8 string (stored as BYTE_ARRAY).

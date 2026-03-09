@@ -452,7 +452,7 @@ TEST_CASE("Symmetric INT8 quantize/dequantize roundtrip", "[quantized][int8][sym
         REQUIRE(recovered[v].size() == dim);
         for (uint32_t d = 0; d < dim; ++d) {
             float err = std::abs(recovered[v][d] - data[v * dim + d]);
-            max_error = std::max(max_error, err);
+            max_error = (std::max)(max_error, err);
         }
     }
 
@@ -550,7 +550,7 @@ TEST_CASE("Asymmetric INT8 quantize/dequantize roundtrip", "[quantized][int8][as
         REQUIRE(recovered[v].size() == dim);
         for (uint32_t d = 0; d < dim; ++d) {
             float err = std::abs(recovered[v][d] - data[v * dim + d]);
-            max_error = std::max(max_error, err);
+            max_error = (std::max)(max_error, err);
         }
     }
 
@@ -674,7 +674,7 @@ TEST_CASE("INT4 error bounds", "[quantized][int4]") {
 
         for (uint32_t d = 0; d < dim; ++d) {
             float err = std::abs(dbuf[d] - input[d]);
-            max_error = std::max(max_error, err);
+            max_error = (std::max)(max_error, err);
             REQUIRE(err <= params.scale / 2.0f + 1e-6f);
         }
     }
@@ -775,7 +775,7 @@ TEST_CASE("Batch write/read quantized INT8", "[quantized][writer-reader]") {
         REQUIRE(result[v].size() == dim);
         for (uint32_t d = 0; d < dim; ++d) {
             float err = std::abs(result[v][d] - data[v * dim + d]);
-            max_error = std::max(max_error, err);
+            max_error = (std::max)(max_error, err);
         }
     }
 

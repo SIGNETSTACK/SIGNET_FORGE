@@ -377,7 +377,7 @@ public:
         if (size == 15) {
             // Large list: size follows as varint
             uint32_t raw = read_varint32();
-            if (raw > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+            if (raw > static_cast<uint32_t>((std::numeric_limits<int32_t>::max)())) {
                 error_ = true;
                 return {0, 0};
             }

@@ -535,8 +535,8 @@ inline void bit_unpack_values(const uint8_t* src,
                 prev = new_val;
 #else
                 // Manual overflow check for MSVC: detect sign-change
-                if ((delta > 0 && prev > std::numeric_limits<int64_t>::max() - delta) ||
-                    (delta < 0 && prev < std::numeric_limits<int64_t>::min() - delta)) {
+                if ((delta > 0 && prev > (std::numeric_limits<int64_t>::max)() - delta) ||
+                    (delta < 0 && prev < (std::numeric_limits<int64_t>::min)() - delta)) {
                     return result; // overflow — return partial result
                 }
                 prev += delta;
@@ -567,7 +567,7 @@ inline void bit_unpack_values(const uint8_t* src,
     std::vector<int32_t> result(wide.size());
     for (size_t i = 0; i < wide.size(); ++i) {
         // CWE-681: Incorrect Conversion between Numeric Types — range check before int64→int32 narrowing
-        if (wide[i] < std::numeric_limits<int32_t>::min() || wide[i] > std::numeric_limits<int32_t>::max()) return {};
+        if (wide[i] < (std::numeric_limits<int32_t>::min)() || wide[i] > (std::numeric_limits<int32_t>::max)()) return {};
         result[i] = static_cast<int32_t>(wide[i]);
     }
     return result;

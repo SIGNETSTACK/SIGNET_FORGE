@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n";
 
     // 6. Print data rows (cap at 20 to keep output readable).
-    size_t limit = std::min(rows->size(), size_t(20));
+    size_t limit = (std::min)(rows->size(), size_t(20));
     for (size_t r = 0; r < limit; ++r) {
         for (size_t c = 0; c < (*rows)[r].size(); ++c) {
             if (c > 0) std::cout << "\t";

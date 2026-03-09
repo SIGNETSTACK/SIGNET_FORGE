@@ -868,7 +868,7 @@ int main(int argc, char* argv[]) {
             std::cout << "  " << std::setw(16) << "timestamp_ms"
                       << "  " << std::setw(10) << "symbol"
                       << "  " << std::setw(14) << "bid_price" << "\n";
-            size_t show = std::min(size_t(3), ts_r->size());
+            size_t show = (std::min)(size_t(3), ts_r->size());
             for (size_t i = 0; i < show; ++i) {
                 std::cout << "  " << std::setw(16) << (*ts_r)[i]
                           << "  " << std::setw(10) << (*sym_r)[i]

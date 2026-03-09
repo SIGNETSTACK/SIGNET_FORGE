@@ -64,7 +64,7 @@ public:
         }
 
         // CWE-190: Integer Overflow (liblz4 uses int for sizes)
-        if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        if (size > static_cast<size_t>((std::numeric_limits<int>::max)())) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "LZ4: input exceeds int32 limit"};
         }
@@ -111,12 +111,12 @@ public:
         }
 
         // CWE-190: Integer Overflow (liblz4 uses int for sizes)
-        if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        if (size > static_cast<size_t>((std::numeric_limits<int>::max)())) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "LZ4: compressed input exceeds int32 limit"};
         }
         // CWE-190: Integer Overflow (liblz4 uses int for sizes)
-        if (uncompressed_size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        if (uncompressed_size > static_cast<size_t>((std::numeric_limits<int>::max)())) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "LZ4: uncompressed size exceeds int32 limit"};
         }

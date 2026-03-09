@@ -71,7 +71,7 @@ public:
         // accurate upper bound once the stream is initialized, but we
         // need a reasonable initial allocation before that.
         // CWE-190: Integer Overflow (zlib uses uInt for sizes)
-        if (size > std::numeric_limits<uInt>::max()) {
+        if (size > (std::numeric_limits<uInt>::max)()) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "GZIP: input exceeds uInt limit"};
         }
@@ -136,12 +136,12 @@ public:
         }
 
         // CWE-190: Integer Overflow (zlib uses uInt for sizes)
-        if (size > std::numeric_limits<uInt>::max()) {
+        if (size > (std::numeric_limits<uInt>::max)()) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "GZIP: compressed input exceeds uInt limit"};
         }
         // CWE-190: Integer Overflow (zlib uses uInt for sizes)
-        if (uncompressed_size > std::numeric_limits<uInt>::max()) {
+        if (uncompressed_size > (std::numeric_limits<uInt>::max)()) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "GZIP: uncompressed size exceeds uInt limit"};
         }

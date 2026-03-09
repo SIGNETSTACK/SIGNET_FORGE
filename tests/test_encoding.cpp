@@ -416,9 +416,9 @@ TEST_CASE("Delta decode_int64: overflow stops gracefully", "[encoding][delta][ha
     // Encode values that will cause accumulation overflow during decode
     // Start at INT64_MAX - 1, with a delta that causes overflow
     std::vector<int64_t> values = {
-        std::numeric_limits<int64_t>::max() - 10,
-        std::numeric_limits<int64_t>::max() - 5,
-        std::numeric_limits<int64_t>::max()
+        (std::numeric_limits<int64_t>::max)() - 10,
+        (std::numeric_limits<int64_t>::max)() - 5,
+        (std::numeric_limits<int64_t>::max)()
     };
     auto encoded = delta::encode_int64(values.data(), values.size());
     REQUIRE(!encoded.empty());
@@ -501,9 +501,9 @@ TEST_CASE("Delta encoding handles large signed values without UB", "[encoding][h
     // Alternate between large negative and large positive values
     for (int i = 0; i < 128; ++i) {
         if (i % 2 == 0)
-            values.push_back(std::numeric_limits<int64_t>::min() / 2 + i);
+            values.push_back((std::numeric_limits<int64_t>::min)() / 2 + i);
         else
-            values.push_back(std::numeric_limits<int64_t>::max() / 2 - i);
+            values.push_back((std::numeric_limits<int64_t>::max)() / 2 - i);
     }
 
     auto encoded = delta::encode_int64(values.data(), values.size());

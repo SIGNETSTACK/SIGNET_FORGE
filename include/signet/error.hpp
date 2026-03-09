@@ -480,7 +480,7 @@ parse_claims(const std::string& text) {
     for (char ch : text) {
         if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
         const uint64_t digit = static_cast<uint64_t>(ch - '0');
-        if (value > (std::numeric_limits<uint64_t>::max() - digit) / 10ull) {
+        if (value > ((std::numeric_limits<uint64_t>::max)() - digit) / 10ull) {
             return false;
         }
         value = (value * 10ull) + digit;
@@ -493,7 +493,7 @@ parse_claims(const std::string& text) {
 /// Parse a decimal string into a uint32_t; return false on empty, non-digit, or out-of-range.
 [[nodiscard]] inline bool parse_u32(const std::string& text, uint32_t& out) {
     uint64_t value = 0;
-    if (!parse_u64(text, value) || value > std::numeric_limits<uint32_t>::max()) {
+    if (!parse_u64(text, value) || value > (std::numeric_limits<uint32_t>::max)()) {
         return false;
     }
     out = static_cast<uint32_t>(value);
@@ -985,7 +985,7 @@ inline void ensure_usage_state_loaded_locked(UsageState& st) {
     if (policy.max_rows_month > 0) {
         if (rows_increment > 0) {
             if (st.rows_this_month >
-                std::numeric_limits<uint64_t>::max() - rows_increment) {
+                (std::numeric_limits<uint64_t>::max)() - rows_increment) {
                 return Error{ErrorCode::LICENSE_LIMIT_EXCEEDED,
                              std::string(feature_name) +
                              ": usage counter overflow; commercial license required"};

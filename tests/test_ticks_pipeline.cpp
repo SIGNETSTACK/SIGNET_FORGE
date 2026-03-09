@@ -93,7 +93,7 @@ static bool write_ticks(const fs::path& path,
 
     // Extract typed column vectors and write in row-group-sized chunks
     for (size_t off = 0; off < ticks.size(); off += row_group_size) {
-        size_t n = std::min(row_group_size, ticks.size() - off);
+        size_t n = (std::min)(row_group_size, ticks.size() - off);
 
         std::vector<int64_t>     ts(n);
         std::vector<std::string> sym(n), exch(n);

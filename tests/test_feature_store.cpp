@@ -413,7 +413,7 @@ TEST_CASE("FeatureReader history for unknown entity returns empty", "[feature_st
     auto fr = FeatureReader::open(ropts);
     REQUIRE(fr.has_value());
 
-    auto h = fr->history("NOPE", 0, std::numeric_limits<int64_t>::max());
+    auto h = fr->history("NOPE", 0, (std::numeric_limits<int64_t>::max)());
     REQUIRE(h.has_value());
     REQUIRE(h->empty());
 }

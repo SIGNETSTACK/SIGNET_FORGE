@@ -264,7 +264,7 @@ inline bool write_tick_parquet(const std::string& path,
     size_t n = data.size();
     size_t offset = 0;
     while (offset < n) {
-        size_t chunk = std::min(rg_size, n - offset);
+        size_t chunk = (std::min)(rg_size, n - offset);
         auto i = static_cast<int64_t>(chunk);
 
         (void)writer.write_column(TickCol::TS,     data.ts.data()       + offset, i);
