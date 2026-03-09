@@ -516,13 +516,14 @@ inline void fe_cswap(Fe& a, Fe& b, uint64_t swap) {
 /// Constant-time addition chain — no data-dependent branching (CWE-208).
 /// Uses the standard Itoh-Tsujii-style chain for GF(2^255-19) inversion.
 inline Fe fe_inv(const Fe& z) {
-    // z^1 already have
+    // Constant-time addition chain for z^(p-2) mod p, p = 2^255 - 19
+    // Follows NaCl ref10 / SUPERCOP — branch-free (CWE-208 compliant)
     Fe t0 = fe_sq(z);                                       // z^2
-    Fe t1 = fe_sq(fe_sq(fe_sq(t0)));                        // z^16
-    t1 = fe_mul(t1, z);                                     // z^17  (unused name kept for symmetry)
-    t0 = fe_mul(t1, t0);                                    // z^19
-    Fe t2 = fe_sq(t0);                                      // z^38
-    t2 = fe_mul(t2, t1);                                    // z^(2^5-1)
+    Fe t1 = fe_sq(fe_sq(t0));                               // z^8
+    t1 = fe_mul(t1, z);                                     // z^9
+    t0 = fe_mul(t0, t1);                                    // z^11
+    Fe t2 = fe_sq(t0);                                      // z^22
+    t2 = fe_mul(t2, t1);                                    // z^(2^5-1) = z^31
     // z^(2^10-1)
     Fe a = t2; for (int i = 0; i < 5; ++i) a = fe_sq(a);
     a = fe_mul(a, t2);
@@ -668,13 +669,13 @@ inline void fe_cswap(Fe& a, Fe& b, uint64_t swap) {
 }
 
 inline Fe fe_inv(const Fe& z) {
-    // Same addition chain, but using 10-limb operations
-    Fe t0 = fe_sq(z);
-    Fe t1 = fe_sq(fe_sq(fe_sq(t0)));
-    t1 = fe_mul(t1, z);
-    t0 = fe_mul(t1, t0);
-    Fe t2 = fe_sq(t0);
-    t2 = fe_mul(t2, t1);
+    // Same addition chain (ref10), but using 10-limb operations
+    Fe t0 = fe_sq(z);                                       // z^2
+    Fe t1 = fe_sq(fe_sq(t0));                               // z^8
+    t1 = fe_mul(t1, z);                                     // z^9
+    t0 = fe_mul(t0, t1);                                    // z^11
+    Fe t2 = fe_sq(t0);                                      // z^22
+    t2 = fe_mul(t2, t1);                                    // z^31 = z^(2^5-1)
     Fe a = t2;
     for (int i=0;i<5;i++) a=fe_sq(a);
     a=fe_mul(a,t2);

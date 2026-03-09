@@ -123,7 +123,7 @@ inline void fill_random_bytes(uint8_t* buf, size_t size) {
         written += static_cast<size_t>(ret);
     }
 #elif defined(_WIN32)
-    if (size > static_cast<size_t>(std::numeric_limits<ULONG>::max())) {
+    if (size > static_cast<size_t>((std::numeric_limits<ULONG>::max)())) {
         throw std::runtime_error("csprng_fill: size exceeds ULONG max");
     }
     NTSTATUS status = BCryptGenRandom(NULL, buf, static_cast<ULONG>(size),
@@ -397,11 +397,11 @@ public:
 
     /// Construct from a key vector (must be 32 bytes for AES-256).
     explicit AesGcmCipher(const std::vector<uint8_t>& key)
-        : key_{} { std::memcpy(key_.data(), key.data(), std::min(key.size(), key_.size())); }
+        : key_{} { std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size())); }
 
     /// Construct from a raw key pointer and length.
     explicit AesGcmCipher(const uint8_t* key, size_t key_len)
-        : key_{} { std::memcpy(key_.data(), key, std::min(key_len, key_.size())); }
+        : key_{} { std::memcpy(key_.data(), key, (std::min)(key_len, key_.size())); }
 
     /// Register a callback invoked when the key approaches its invocation limit.
     /// NIST SP 800-38D §8.2 requires key rotation before 2^32 random-IV GCM
@@ -517,11 +517,11 @@ class AesCtrCipher final : public ICipher {
 public:
     /// Construct from a key vector (must be 32 bytes for AES-256).
     explicit AesCtrCipher(const std::vector<uint8_t>& key)
-        : key_{} { std::memcpy(key_.data(), key.data(), std::min(key.size(), key_.size())); }
+        : key_{} { std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size())); }
 
     /// Construct from a raw key pointer and length.
     explicit AesCtrCipher(const uint8_t* key, size_t key_len)
-        : key_{} { std::memcpy(key_.data(), key, std::min(key_len, key_.size())); }
+        : key_{} { std::memcpy(key_.data(), key, (std::min)(key_len, key_.size())); }
 
     [[nodiscard]] expected<std::vector<uint8_t>> encrypt(
         const uint8_t* data, size_t size,
