@@ -341,7 +341,10 @@ public:
     }
 
     // Move-only
-    SecureKeyBuffer(SecureKeyBuffer&& other) noexcept : data_(std::move(other.data_)) {}
+    SecureKeyBuffer(SecureKeyBuffer&& other) noexcept : data_(std::move(other.data_)) {
+        if (!data_.empty())
+            detail::secure_mem::lock_memory(data_.data(), data_.size());
+    }
     SecureKeyBuffer& operator=(SecureKeyBuffer&& other) noexcept {
         if (this != &other) {
             detail::secure_mem::secure_zero(data_.data(), data_.size());
@@ -397,11 +400,17 @@ public:
 
     /// Construct from a key vector (must be 32 bytes for AES-256).
     explicit AesGcmCipher(const std::vector<uint8_t>& key)
-        : key_{} { std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size())); }
+        : key_{}, gcm_(nullptr) {
+        std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size()));
+        gcm_ = std::make_unique<AesGcm>(key_.data());
+    }
 
     /// Construct from a raw key pointer and length.
     explicit AesGcmCipher(const uint8_t* key, size_t key_len)
-        : key_{} { std::memcpy(key_.data(), key, (std::min)(key_len, key_.size())); }
+        : key_{}, gcm_(nullptr) {
+        std::memcpy(key_.data(), key, (std::min)(key_len, key_.size()));
+        gcm_ = std::make_unique<AesGcm>(key_.data());
+    }
 
     /// Register a callback invoked when the key approaches its invocation limit.
     /// NIST SP 800-38D §8.2 requires key rotation before 2^32 random-IV GCM
@@ -444,11 +453,10 @@ public:
         }
 
         auto iv = detail::cipher::generate_iv(AesGcm::IV_SIZE);
-        AesGcm gcm(key_.data());
 
         auto result = aad.empty()
-            ? gcm.encrypt(data, size, iv.data())
-            : gcm.encrypt(data, size, iv.data(),
+            ? gcm_->encrypt(data, size, iv.data())
+            : gcm_->encrypt(data, size, iv.data(),
                            reinterpret_cast<const uint8_t*>(aad.data()),
                            aad.size());
 
@@ -469,13 +477,12 @@ public:
         if (!iv_result) return iv_result.error();
         const auto& [iv, ciphertext, ct_size] = *iv_result;
 
-        AesGcm gcm(key_.data());
         if (!aad.empty()) {
-            return gcm.decrypt(ciphertext, ct_size, iv,
+            return gcm_->decrypt(ciphertext, ct_size, iv,
                                reinterpret_cast<const uint8_t*>(aad.data()),
                                aad.size());
         } else {
-            return gcm.decrypt(ciphertext, ct_size, iv);
+            return gcm_->decrypt(ciphertext, ct_size, iv);
         }
     }
 
@@ -497,6 +504,7 @@ public:
 
 private:
     std::array<uint8_t, 32> key_{}; ///< Fixed-size key (CWE-244: avoids std::vector reallocation leaks).
+    std::unique_ptr<AesGcm> gcm_; ///< Reused AesGcm instance (M-C6: avoid per-call construction).
     mutable std::atomic<uint64_t> invocation_count_{0}; ///< NIST SP 800-38D §8.2 invocation counter.
     RotationCallback rotation_callback_; ///< Optional key rotation notification callback.
     uint64_t rotation_threshold_{DEFAULT_ROTATION_THRESHOLD}; ///< Invocation count to trigger callback.
@@ -517,11 +525,17 @@ class AesCtrCipher final : public ICipher {
 public:
     /// Construct from a key vector (must be 32 bytes for AES-256).
     explicit AesCtrCipher(const std::vector<uint8_t>& key)
-        : key_{} { std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size())); }
+        : key_{}, ctr_(nullptr) {
+        std::memcpy(key_.data(), key.data(), (std::min)(key.size(), key_.size()));
+        ctr_ = std::make_unique<AesCtr>(key_.data());
+    }
 
     /// Construct from a raw key pointer and length.
     explicit AesCtrCipher(const uint8_t* key, size_t key_len)
-        : key_{} { std::memcpy(key_.data(), key, (std::min)(key_len, key_.size())); }
+        : key_{}, ctr_(nullptr) {
+        std::memcpy(key_.data(), key, (std::min)(key_len, key_.size()));
+        ctr_ = std::make_unique<AesCtr>(key_.data());
+    }
 
     [[nodiscard]] expected<std::vector<uint8_t>> encrypt(
         const uint8_t* data, size_t size,
@@ -533,9 +547,9 @@ public:
         }
 
         auto iv = detail::cipher::generate_iv(AesCtr::IV_SIZE);
-        AesCtr ctr(key_.data());
-        std::vector<uint8_t> ciphertext = ctr.encrypt(data, size, iv.data());
-        return detail::cipher::prepend_iv(iv, ciphertext);
+        auto ct_result = ctr_->encrypt(data, size, iv.data());
+        if (!ct_result) return ct_result.error();
+        return detail::cipher::prepend_iv(iv, *ct_result);
     }
 
     [[nodiscard]] expected<std::vector<uint8_t>> decrypt(
@@ -551,9 +565,9 @@ public:
         if (!iv_result) return iv_result.error();
         const auto& [iv, ciphertext, ct_size] = *iv_result;
 
-        AesCtr ctr(key_.data());
-        std::vector<uint8_t> plaintext = ctr.decrypt(ciphertext, ct_size, iv);
-        return plaintext;
+        auto pt_result = ctr_->decrypt(ciphertext, ct_size, iv);
+        if (!pt_result) return pt_result.error();
+        return std::move(*pt_result);
     }
 
     /// Destructor: securely zeroes key material (CWE-244: heap inspection).
@@ -577,6 +591,7 @@ public:
 
 private:
     std::array<uint8_t, 32> key_{}; ///< Fixed-size key (CWE-244: avoids std::vector reallocation leaks).
+    std::unique_ptr<AesCtr> ctr_; ///< Reused AesCtr instance (M-C6: avoid per-call construction).
 };
 
 // ===========================================================================
@@ -704,7 +719,9 @@ inline std::vector<uint8_t> hex_decode(const char* hex) {
         auto exp = hex_decode("601ec313775789a5b7a7f504bbf3d228");
 
         AesCtr ctr(key.data());
-        auto ct = ctr.encrypt(pt.data(), pt.size(), iv.data());
+        auto ct_result = ctr.encrypt(pt.data(), pt.size(), iv.data());
+        if (!ct_result.has_value()) return false;
+        auto& ct = *ct_result;
         if (ct.size() != pt.size()) return false;
         if (std::memcmp(ct.data(), exp.data(), pt.size()) != 0) return false;
     }

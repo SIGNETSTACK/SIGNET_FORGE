@@ -313,6 +313,10 @@ private:
     /// @param[out] out Pre-sized vector to receive the normalized values.
     static void normalize_column(const ZOrderColumn& col,
                                   std::vector<uint32_t>& out) {
+        if (col.data == nullptr) {
+            throw std::invalid_argument(
+                "ZOrderSorter: column data pointer is null");
+        }
         switch (col.type) {
             case PhysicalType::INT32: {
                 // CWE-704, C++ [basic.align] — alignment check before pointer cast

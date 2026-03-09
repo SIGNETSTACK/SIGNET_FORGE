@@ -160,7 +160,9 @@ public:
     using PreDeleteCallback = std::function<bool(const std::string& path)>;
 
     explicit LogRetentionManager(RetentionPolicy policy = {})
-        : policy_(std::move(policy)) {}
+        : policy_(std::move(policy)) {
+        (void)commercial::require_feature("LogRetentionManager");
+    }
 
     /// Set the archival callback.
     void set_archive_callback(ArchiveCallback cb) {

@@ -422,13 +422,13 @@ TEST_CASE("EventBus Tier-3 sink integration routes batches to StreamingSink", "[
 
     auto sink_result = StreamingSink::create(sopts);
     REQUIRE(sink_result.has_value());
-    auto& sink = *sink_result;
+    auto sink_ptr = std::make_shared<StreamingSink>(std::move(*sink_result));
 
     EventBusOptions eopts;
     eopts.tier2_capacity = 64;
     eopts.enable_tier3   = true;
     EventBus bus(eopts);
-    bus.attach_sink(&sink);
+    bus.attach_sink(sink_ptr);
     REQUIRE(bus.has_sink());
 
     // Publish 3 batches
@@ -440,8 +440,8 @@ TEST_CASE("EventBus Tier-3 sink integration routes batches to StreamingSink", "[
     }
 
     // Flush and close sink
-    REQUIRE(sink.flush().has_value());
-    REQUIRE(sink.stop().has_value());
+    REQUIRE(sink_ptr->flush().has_value());
+    REQUIRE(sink_ptr->stop().has_value());
 
     // stats: 3 published, 0 dropped, 0 tier3_drops
     auto s = bus.stats();

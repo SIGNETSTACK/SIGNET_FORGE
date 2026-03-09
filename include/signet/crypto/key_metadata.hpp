@@ -400,6 +400,13 @@ struct EncryptionKeyMetadata {
 
         // Key material (INTERNAL) or key ID (EXTERNAL)
         if (key_mode == KeyMode::INTERNAL && !key_material.empty()) {
+#ifdef SIGNET_PRODUCTION_MODE
+            // CR-1 / FIPS 140-3 §7.7: INTERNAL key mode is forbidden in production
+            // builds — raw AES key material must never be serialized into metadata.
+            throw std::runtime_error(
+                "KeyMode::INTERNAL is disabled in production builds "
+                "(SIGNET_PRODUCTION_MODE). Use EXTERNAL key management.");
+#endif
 #ifndef SIGNET_SUPPRESS_INTERNAL_KEY_WARNING
             static bool warned = false;
             if (!warned) {

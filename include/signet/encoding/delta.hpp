@@ -89,7 +89,7 @@ inline constexpr size_t VALUES_PER_MINIBLOCK    = DEFAULT_BLOCK_SIZE / DEFAULT_M
 /// @return   The zigzag-encoded unsigned 32-bit value.
 /// @see zigzag_decode32
 [[nodiscard]] inline uint32_t zigzag_encode32(int32_t n) {
-    return static_cast<uint32_t>((n << 1) ^ (n >> 31));
+    return (static_cast<uint32_t>(n) << 1) ^ static_cast<uint32_t>(n >> 31);
 }
 
 /// Zigzag-decode an unsigned 64-bit integer back to its signed representation.
@@ -150,6 +150,7 @@ inline size_t encode_uvarint(std::vector<uint8_t>& buf, uint64_t value) {
 /// @return      The decoded unsigned integer, or 0 on failure.
 /// @see encode_uvarint
 [[nodiscard]] inline uint64_t decode_uvarint(const uint8_t* data, size_t& pos, size_t size) {
+    const size_t start_pos = pos;
     uint64_t result = 0;
     int shift = 0;
     while (pos < size) {
@@ -159,8 +160,9 @@ inline size_t encode_uvarint(std::vector<uint8_t>& buf, uint64_t value) {
             return result;
         }
         shift += 7;
-        if (shift >= 64) break; // overflow protection
+        if (shift >= 64) { pos = start_pos; break; } // overflow protection
     }
+    pos = start_pos;
     return result;
 }
 
@@ -358,11 +360,9 @@ inline void bit_unpack_values(const uint8_t* src,
             // Use unsigned arithmetic to avoid signed overflow UB
             adjusted[i] = static_cast<uint64_t>(block_deltas[i]) - static_cast<uint64_t>(min_delta);
         }
-        // Pad positions: store 0 (the padding deltas are 0, so adjusted = 0 - min_delta)
-        // Cast to unsigned before negation to avoid signed overflow UB when min_delta == INT64_MIN
-        uint64_t neg_min_delta = static_cast<uint64_t>(0) - static_cast<uint64_t>(min_delta);
+        // Pad positions: store 0 so padding doesn't inflate bit_width
         for (size_t i = block_remaining; i < DEFAULT_BLOCK_SIZE; ++i) {
-            adjusted[i] = neg_min_delta;
+            adjusted[i] = 0;
         }
 
         // Compute bit widths per miniblock
@@ -440,6 +440,7 @@ inline void bit_unpack_values(const uint8_t* src,
                                                         size_t num_values) {
     std::vector<int64_t> result;
     if (num_values == 0 || size == 0) return result;
+    if (num_values > 256 * 1024 * 1024) return result; // 256M value cap
     result.reserve(num_values);
 
     size_t pos = 0;

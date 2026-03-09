@@ -122,8 +122,14 @@ public:
             static_assert(!std::is_same_v<T, T>,
                           "ColumnStatistics::update: unsupported type");
         }
+        // Note: NaN early-returns above, so this only increments for non-NaN values
         ++num_values_;
     }
+
+    // The NaN guard above (`if (std::isnan(value)) return;`) runs before
+    // `++num_values_`, so NaN values never double-count. The `update_float()`
+    // method has its own redundant NaN check which also returns early, but since
+    // we already returned at the top, it is never reached for NaN inputs.
 
     /// Record a null value (increments null count only, no min/max update).
     void update_null() {
@@ -274,8 +280,17 @@ private:
         T cur_max = from_le_bytes<T>(max_value_);
         T o_min   = from_le_bytes<T>(other_min_bytes);
         T o_max   = from_le_bytes<T>(other_max_bytes);
-        if (o_min < cur_min) min_value_ = other_min_bytes;
-        if (o_max > cur_max) max_value_ = other_max_bytes;
+        if constexpr (std::is_floating_point_v<T>) {
+            // Use fmin/fmax to handle NaN correctly: NaN is treated as missing,
+            // so non-NaN always wins. std::fmin(NaN, x) == x.
+            T new_min = std::fmin(cur_min, o_min);
+            T new_max = std::fmax(cur_max, o_max);
+            if (new_min != cur_min) min_value_ = other_min_bytes;
+            if (new_max != cur_max) max_value_ = other_max_bytes;
+        } else {
+            if (o_min < cur_min) min_value_ = other_min_bytes;
+            if (o_max > cur_max) max_value_ = other_max_bytes;
+        }
     }
 
     // -- Internal update helpers -----------------------------------------------

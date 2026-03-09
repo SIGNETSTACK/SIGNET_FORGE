@@ -36,11 +36,15 @@
 // Decoding reverses the process: de-interleave back to native byte order.
 // ---------------------------------------------------------------------------
 
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <vector>
 
 namespace signet::forge {
+
+static_assert(std::endian::native == std::endian::little,
+              "Byte Stream Split encoding requires little-endian platform");
 
 /// @brief BYTE_STREAM_SPLIT encoding functions for float and double types.
 namespace byte_stream_split {

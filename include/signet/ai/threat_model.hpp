@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <numeric>
 #include <sstream>
 #include <string>
@@ -140,12 +141,12 @@ struct ThreatEntry {
     /// Overall mitigation status — worst (lowest) across all mitigations.
     [[nodiscard]] MitigationStatus overall_status() const {
         if (mitigations.empty()) return MitigationStatus::NOT_MITIGATED;
-        auto best = MitigationStatus::NOT_MITIGATED;
+        auto worst = MitigationStatus::TRANSFERRED; // highest enum value
         for (const auto& m : mitigations) {
-            if (static_cast<int32_t>(m.status) > static_cast<int32_t>(best))
-                best = m.status;
+            if (static_cast<int32_t>(m.status) < static_cast<int32_t>(worst))
+                worst = m.status;
         }
-        return best;
+        return worst;
     }
 };
 
@@ -188,17 +189,20 @@ class ThreatModelAnalyzer {
 public:
     /// Analyze a threat model for completeness and risk posture.
     [[nodiscard]] static ThreatModelAnalysis analyze(const ThreatModel& model) {
+        (void)commercial::require_feature("ThreatModelAnalyzer");
         ThreatModelAnalysis result;
         result.total_threats = static_cast<int32_t>(model.threats.size());
 
         // Track STRIDE coverage
         bool covered[6] = {};
         double dread_sum = 0.0;
+        int32_t valid_count = 0;
 
         for (const auto& t : model.threats) {
             // Validate DREAD
             if (!t.dread.valid()) continue;
 
+            ++valid_count;
             int cat = static_cast<int32_t>(t.category);
             if (cat >= 0 && cat < 6) covered[cat] = true;
 
@@ -218,8 +222,8 @@ public:
             dread_sum += t.dread.composite();
         }
 
-        if (result.total_threats > 0)
-            result.mean_dread_score = dread_sum / result.total_threats;
+        if (valid_count > 0)
+            result.mean_dread_score = dread_sum / valid_count;
 
         // Check STRIDE completeness
         result.stride_complete = true;
@@ -401,7 +405,16 @@ private:
             case '\n': out += "\\n";  break;
             case '\r': out += "\\r";  break;
             case '\t': out += "\\t";  break;
-            default:   out += c;      break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x",
+                                  static_cast<unsigned char>(c));
+                    out += buf;
+                } else {
+                    out += c;
+                }
+                break;
             }
         }
         return out;

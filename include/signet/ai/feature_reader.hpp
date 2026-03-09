@@ -262,6 +262,7 @@ private:
     /// Location of a single row within the file/row-group index.
     struct RowLocation {
         int64_t timestamp_ns = 0;
+        int32_t version      = 1;   ///< version for composite sort key
         size_t  file_idx     = 0;   ///< index into opts_.parquet_files / readers_
         size_t  row_group    = 0;
         size_t  row_offset   = 0;   ///< row index within the row group
@@ -316,6 +317,8 @@ private:
                 auto ts_result = rdr.read_column<int64_t>(rg, 1);
                 if (!ts_result) continue;
 
+                auto ver_result = rdr.read_column<int32_t>(rg, 2);
+
                 const auto& eids = *eid_result;
                 const auto& tss  = *ts_result;
                 const size_t nrows = (std::min)(eids.size(), tss.size());
@@ -323,6 +326,8 @@ private:
                 for (size_t row = 0; row < nrows; ++row) {
                     RowLocation loc;
                     loc.timestamp_ns = tss[row];
+                    loc.version      = (ver_result && row < ver_result->size())
+                                           ? (*ver_result)[row] : 1;
                     loc.file_idx     = fi;
                     loc.row_group    = rg;
                     loc.row_offset   = row;
@@ -337,11 +342,13 @@ private:
                 std::make_unique<ParquetReader>(std::move(*rdr_result)));
         }
 
-        // Sort each entity's entries by timestamp_ns for binary search.
+        // Sort each entity's entries by (timestamp_ns, version) composite key.
         for (auto& [eid, locs] : index_) {
             std::sort(locs.begin(), locs.end(),
                 [](const RowLocation& a, const RowLocation& b) {
-                    return a.timestamp_ns < b.timestamp_ns;
+                    if (a.timestamp_ns != b.timestamp_ns)
+                        return a.timestamp_ns < b.timestamp_ns;
+                    return a.version < b.version;
                 });
         }
 

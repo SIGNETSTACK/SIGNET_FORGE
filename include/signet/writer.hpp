@@ -513,6 +513,8 @@ public:
                     auto comp_result = compress(col_codec, page_data, page_data_size);
                     if (!comp_result) return comp_result.error();
                     compressed_buf = std::move(*comp_result);
+                    if (compressed_buf.size() > static_cast<size_t>(INT32_MAX))
+                        return Error{ErrorCode::INVALID_ARGUMENT, "Compressed page exceeds INT32_MAX"};
                     compressed_size = static_cast<int32_t>(compressed_buf.size());
                     page_data = compressed_buf.data();
                     page_data_size = compressed_buf.size();

@@ -128,6 +128,10 @@ struct IncidentPlaybook {
 /// Registry of incident response playbooks indexed by incident type.
 class PlaybookRegistry {
 public:
+    PlaybookRegistry() {
+        (void)commercial::require_feature("PlaybookRegistry");
+    }
+
     /// Register a playbook for a specific incident type.
     void register_playbook(const IncidentPlaybook& pb) {
         playbooks_[pb.incident_type] = pb;
@@ -340,7 +344,9 @@ public:
     /// Initialize tracker for a specific incident and playbook.
     IncidentResponseTracker(const std::string& incident_id,
                             const IncidentPlaybook& playbook)
-        : incident_id_(incident_id), playbook_(playbook) {}
+        : incident_id_(incident_id), playbook_(playbook) {
+        (void)commercial::require_feature("IncidentResponseTracker");
+    }
 
     /// Record completion of a playbook step.
     [[nodiscard]] expected<void> complete_step(
@@ -364,6 +370,11 @@ public:
             return Error{ErrorCode::INVALID_ARGUMENT,
                 "Step '" + step_id + "' not found in playbook " +
                 playbook_.playbook_id};
+        }
+
+        if (completed_at_ns < started_at_ns) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                "completed_at must be >= started_at"};
         }
 
         StepRecord rec;

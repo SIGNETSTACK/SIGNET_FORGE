@@ -40,6 +40,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -80,6 +82,7 @@ inline int dict_bit_width(size_t dict_size) {
 /// @param buf  Output byte buffer.
 /// @param val  The string value to encode.
 inline void plain_encode_value(std::vector<uint8_t>& buf, const std::string& val) {
+    if (val.size() > UINT32_MAX) throw std::length_error("String exceeds Parquet BYTE_ARRAY 4 GB limit");
     uint32_t len = static_cast<uint32_t>(val.size());
     buf.push_back(static_cast<uint8_t>((len      ) & 0xFF));
     buf.push_back(static_cast<uint8_t>((len >>  8) & 0xFF));
@@ -425,7 +428,7 @@ public:
         : type_(type)
     {
         // Decode dictionary entries from PLAIN-encoded data
-        dict_values_.reserve(num_dict_entries);
+        dict_values_.reserve((std::min)(static_cast<size_t>(num_dict_entries), dict_size));
         size_t pos = 0;
         for (size_t i = 0; i < num_dict_entries; ++i) {
             T* tag = nullptr;

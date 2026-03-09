@@ -123,6 +123,8 @@ struct TensorShape {
         if (dims.empty()) return 1;
         int64_t product = 1;
         for (auto d : dims) {
+            if (d <= 0) return -1; // error sentinel: non-positive dimension
+            if (product > INT64_MAX / d) return -1; // overflow sentinel
             product *= d;
         }
         return product;
@@ -414,8 +416,13 @@ public:
     OwnedTensor(TensorShape shape, TensorDataType dtype)
         : shape_(std::move(shape))
         , dtype_(dtype) {
-        const size_t sz = static_cast<size_t>(shape_.num_elements())
-                          * tensor_element_size(dtype_);
+        const auto num_elements = shape_.num_elements();
+        const auto element_size = tensor_element_size(dtype_);
+        if (num_elements <= 0 || static_cast<size_t>(num_elements) > SIZE_MAX / element_size) {
+            // Overflow or invalid shape — leave buffer empty (invalid tensor)
+            return;
+        }
+        const size_t sz = static_cast<size_t>(num_elements) * element_size;
         buffer_.resize(sz, 0);
     }
 
@@ -428,8 +435,12 @@ public:
     OwnedTensor(const void* data, TensorShape shape, TensorDataType dtype)
         : shape_(std::move(shape))
         , dtype_(dtype) {
-        const size_t sz = static_cast<size_t>(shape_.num_elements())
-                          * tensor_element_size(dtype_);
+        const auto num_elements = shape_.num_elements();
+        const auto element_size = tensor_element_size(dtype_);
+        if (num_elements <= 0 || static_cast<size_t>(num_elements) > SIZE_MAX / element_size) {
+            return; // Overflow or invalid shape — leave buffer empty
+        }
+        const size_t sz = static_cast<size_t>(num_elements) * element_size;
         buffer_.resize(sz);
         if (data && sz > 0) {
             std::memcpy(buffer_.data(), data, sz);

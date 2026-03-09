@@ -246,7 +246,17 @@ public:
         for (const auto& desc : schema_) {
             payload_bytes += sizeof(uint32_t) + desc.name.size();
         }
-        payload_bytes += sizeof(double) * ncols * nrows;
+        // CWE-190: overflow check for sizeof(double) * ncols * nrows
+        {
+            const size_t ncols_sz = static_cast<size_t>(ncols);
+            const size_t nrows_sz = static_cast<size_t>(nrows);
+            if (ncols_sz > 0 && nrows_sz > SIZE_MAX / ncols_sz)
+                return StreamRecord{}; // overflow
+            const size_t cells = ncols_sz * nrows_sz;
+            if (cells > SIZE_MAX / sizeof(double))
+                return StreamRecord{}; // overflow
+            payload_bytes += sizeof(double) * cells;
+        }
 
         std::string payload;
         payload.resize(payload_bytes);

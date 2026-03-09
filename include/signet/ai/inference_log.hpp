@@ -152,6 +152,11 @@ struct InferenceRecord {
         append_le64(buf, static_cast<uint64_t>(training_dataset_size));
         append_string(buf, training_data_characteristics);
 
+        // H-19: EU AI Act Art.12/13 additional training metadata
+        append_le64(buf, static_cast<uint64_t>(model_training_end_ns));
+        append_le64(buf, static_cast<uint64_t>(model_training_data_cutoff_ns));
+        append_string(buf, model_retraining_schedule);
+
         return buf;
     }
 
@@ -180,6 +185,8 @@ struct InferenceRecord {
             return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated inference_type"};
         }
         rec.inference_type = static_cast<InferenceType>(it_val);
+        if (it_val < 0 || (it_val > 6 && it_val != 255))
+            rec.inference_type = InferenceType::CLASSIFICATION;
 
         uint32_t emb_count = 0;
         if (!read_le32_u(data, size, offset, emb_count)) {
@@ -237,6 +244,19 @@ struct InferenceRecord {
             }
             if (!read_string(data, size, offset, rec.training_data_characteristics)) {
                 return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated training_data_characteristics"};
+            }
+        }
+
+        // H-19: EU AI Act Art.12/13 additional training metadata (optional for backward compat)
+        if (offset < size) {
+            if (!read_le64(data, size, offset, rec.model_training_end_ns)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated model_training_end_ns"};
+            }
+            if (!read_le64(data, size, offset, rec.model_training_data_cutoff_ns)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated model_training_data_cutoff_ns"};
+            }
+            if (!read_string(data, size, offset, rec.model_retraining_schedule)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated model_retraining_schedule"};
             }
         }
 
@@ -750,6 +770,8 @@ public:
             rec.model_id        = col_model_id_[i];
             rec.model_version   = col_model_version_[i];
             rec.inference_type  = static_cast<InferenceType>(col_inference_type_[i]);
+            if (col_inference_type_[i] < 0 || (col_inference_type_[i] > 6 && col_inference_type_[i] != 255))
+                rec.inference_type = InferenceType::CLASSIFICATION;
             rec.input_embedding = detail::json_to_embedding(col_input_embedding_[i]);
             rec.input_hash      = col_input_hash_[i];
             rec.output_hash     = col_output_hash_[i];
@@ -832,6 +854,8 @@ public:
             rec.model_id        = col_model_id_[i];
             rec.model_version   = col_model_version_[i];
             rec.inference_type  = static_cast<InferenceType>(col_inference_type_[i]);
+            if (col_inference_type_[i] < 0 || (col_inference_type_[i] > 6 && col_inference_type_[i] != 255))
+                rec.inference_type = InferenceType::CLASSIFICATION;
             rec.input_embedding = detail::json_to_embedding(col_input_embedding_[i]);
             rec.input_hash      = col_input_hash_[i];
             rec.output_hash     = col_output_hash_[i];

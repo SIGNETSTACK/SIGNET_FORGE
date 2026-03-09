@@ -223,6 +223,8 @@ struct DecisionRecord {
             return Error{ErrorCode::CORRUPT_PAGE, "DecisionRecord: truncated decision_type"};
         }
         rec.decision_type = static_cast<DecisionType>(dt_val);
+        if (dt_val < 0 || dt_val > 7)
+            rec.decision_type = DecisionType::SIGNAL;
 
         uint32_t feat_count = 0;
         if (!read_le32_u(data, size, offset, feat_count)) {
@@ -250,6 +252,8 @@ struct DecisionRecord {
             return Error{ErrorCode::CORRUPT_PAGE, "DecisionRecord: truncated risk_result"};
         }
         rec.risk_result = static_cast<RiskGateResult>(rr_val);
+        if (rr_val < 0 || rr_val > 3)
+            rec.risk_result = RiskGateResult::PASSED;
 
         if (!read_string(data, size, offset, rec.order_id)) {
             return Error{ErrorCode::CORRUPT_PAGE, "DecisionRecord: truncated order_id"};
@@ -273,14 +277,23 @@ struct DecisionRecord {
         // MiFID II RTS 24 Annex I fields (Gap R-4) — optional for backward compat
         if (offset < size) {
             int32_t bs_val = 0;
-            if (read_le32(data, size, offset, bs_val))
+            if (read_le32(data, size, offset, bs_val)) {
                 rec.buy_sell = static_cast<BuySellIndicator>(bs_val);
+                if (bs_val < 0 || bs_val > 2)
+                    rec.buy_sell = BuySellIndicator::BUY;
+            }
             int32_t ot_val = 0;
-            if (read_le32(data, size, offset, ot_val))
+            if (read_le32(data, size, offset, ot_val)) {
                 rec.order_type = static_cast<OrderType>(ot_val);
+                if (ot_val < 0 || (ot_val > 4 && ot_val != 99))
+                    rec.order_type = OrderType::MARKET;
+            }
             int32_t tif_val = 0;
-            if (read_le32(data, size, offset, tif_val))
+            if (read_le32(data, size, offset, tif_val)) {
                 rec.time_in_force = static_cast<TimeInForce>(tif_val);
+                if (tif_val < 0 || (tif_val > 4 && tif_val != 99))
+                    rec.time_in_force = TimeInForce::DAY;
+            }
             read_string(data, size, offset, rec.isin);
             read_string(data, size, offset, rec.currency);
             uint32_t ssf = 0;
@@ -843,10 +856,14 @@ public:
             rec.strategy_id   = col_strategy_id_[i];
             rec.model_version = col_model_version_[i];
             rec.decision_type = static_cast<DecisionType>(col_decision_type_[i]);
+            if (col_decision_type_[i] < 0 || col_decision_type_[i] > 7)
+                rec.decision_type = DecisionType::SIGNAL;
             rec.input_features = detail::json_to_features(col_input_features_[i]);
             rec.model_output  = static_cast<float>(col_model_output_[i]);
             rec.confidence    = static_cast<float>(col_confidence_[i]);
             rec.risk_result   = static_cast<RiskGateResult>(col_risk_result_[i]);
+            if (col_risk_result_[i] < 0 || col_risk_result_[i] > 3)
+                rec.risk_result = RiskGateResult::PASSED;
             rec.order_id      = col_order_id_[i];
             rec.symbol        = col_symbol_[i];
             rec.price         = col_price_[i];
@@ -924,10 +941,14 @@ public:
             rec.strategy_id   = col_strategy_id_[i];
             rec.model_version = col_model_version_[i];
             rec.decision_type = static_cast<DecisionType>(col_decision_type_[i]);
+            if (col_decision_type_[i] < 0 || col_decision_type_[i] > 7)
+                rec.decision_type = DecisionType::SIGNAL;
             rec.input_features = detail::json_to_features(col_input_features_[i]);
             rec.model_output  = static_cast<float>(col_model_output_[i]);
             rec.confidence    = static_cast<float>(col_confidence_[i]);
             rec.risk_result   = static_cast<RiskGateResult>(col_risk_result_[i]);
+            if (col_risk_result_[i] < 0 || col_risk_result_[i] > 3)
+                rec.risk_result = RiskGateResult::PASSED;
             rec.order_id      = col_order_id_[i];
             rec.symbol        = col_symbol_[i];
             rec.price         = col_price_[i];

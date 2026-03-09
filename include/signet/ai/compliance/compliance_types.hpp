@@ -169,6 +169,13 @@ struct ComplianceReport {
 
     /// ISO 8601 representation of opts.end_ns (or "open" if unbounded).
     std::string period_end_iso;
+
+    /// H-20: True if one or more log file batches could not be read.
+    /// When true, the report may contain incomplete data.
+    bool incomplete_data = false;
+
+    /// H-20: Accumulated read errors from log files whose records could not be read.
+    std::vector<std::string> read_errors;
 };
 
 // ===========================================================================
@@ -273,6 +280,7 @@ namespace regulatory {
 
 /// Validate a MIC (Market Identifier Code) per ISO 10383.
 /// Format: exactly 4 uppercase alphabetic characters.
+/// @note Validates ISO 10383 format only (4 uppercase alpha); does not verify against MIC registry.
 /// @param mic  The MIC string to validate.
 /// @return true if the MIC has valid format.
 [[nodiscard]] inline bool validate_mic(const std::string& mic) {

@@ -115,7 +115,9 @@ class DataClassificationOntology {
 public:
     /// Construct an ontology with the given identifier.
     explicit DataClassificationOntology(const std::string& ontology_id = "default")
-        : ontology_id_(ontology_id) {}
+        : ontology_id_(ontology_id) {
+        (void)commercial::require_feature("DataClassificationOntology");
+    }
 
     /// Add a classification rule for a field.
     void add_rule(const DataClassificationRule& rule) {
@@ -127,6 +129,9 @@ public:
     [[nodiscard]] DataClassificationRule lookup(const std::string& field_name) const {
         auto it = rules_.find(field_name);
         if (it != rules_.end()) return it->second;
+        // Unknown fields default to PUBLIC/NEUTRAL (least restrictive) —
+        // callers that need fail-closed semantics should register all fields
+        // explicitly or use validate_handling() with require_encryption=true.
         DataClassificationRule dflt;
         dflt.field_name = field_name;
         dflt.classification = DataClassification::PUBLIC;

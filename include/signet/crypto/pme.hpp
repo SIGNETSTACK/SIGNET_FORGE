@@ -107,14 +107,25 @@ inline std::string build_aad_spec(const std::string& prefix,
     aad.append(prefix);
     aad.push_back(static_cast<char>(module_type));
 
+    // Parse extra string: "column_name:col_ordinal:rg_ordinal:page_ordinal" (4 parts)
+    // Backward compat: "column_name:rg_ordinal:page_ordinal" (3 parts, col_ord=0)
     uint16_t rg_ord = 0, col_ord = 0, pg_ord = 0;
     if (!extra.empty()) {
         auto colon1 = extra.find(':');
         if (colon1 != std::string::npos) {
             auto colon2 = extra.find(':', colon1 + 1);
             if (colon2 != std::string::npos) {
-                try { rg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon1 + 1, colon2 - colon1 - 1))); } catch (...) {}
-                try { pg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon2 + 1))); } catch (...) {}
+                auto colon3 = extra.find(':', colon2 + 1);
+                if (colon3 != std::string::npos) {
+                    // 4-part format: name:col_ord:rg_ord:pg_ord
+                    try { col_ord = static_cast<uint16_t>(std::stoi(extra.substr(colon1 + 1, colon2 - colon1 - 1))); } catch (...) {}
+                    try { rg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon2 + 1, colon3 - colon2 - 1))); } catch (...) {}
+                    try { pg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon3 + 1))); } catch (...) {}
+                } else {
+                    // 3-part format (backward compat): name:rg_ord:pg_ord, col_ord=0
+                    try { rg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon1 + 1, colon2 - colon1 - 1))); } catch (...) {}
+                    try { pg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon2 + 1))); } catch (...) {}
+                }
             }
         }
     }

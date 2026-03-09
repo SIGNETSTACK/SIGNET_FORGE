@@ -39,6 +39,7 @@
 // ---------------------------------------------------------------------------
 
 #include "signet/crypto/aes_core.hpp"
+#include "signet/error.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -104,16 +105,25 @@ public:
     /// @param size   Number of bytes to process.
     /// @param iv     16-byte initialization vector / initial counter value.
     /// @return Processed output bytes (same length as input).
-    [[nodiscard]] std::vector<uint8_t> process(
+    [[nodiscard]] expected<std::vector<uint8_t>> process(
         const uint8_t* data, size_t size,
         const uint8_t iv[IV_SIZE]) const {
 
         std::vector<uint8_t> output(size);
         if (size == 0) return output;
 
-        // Counter overflow guard: 32-bit counter supports at most 2^32-1 blocks (64 GiB)
-        static constexpr size_t MAX_CTR_BYTES = static_cast<size_t>(UINT32_MAX) * 16;
-        if (size > MAX_CTR_BYTES) return {}; // empty = error: exceeds 2^32 block limit
+        // Counter overflow guard: extract initial 32-bit counter from IV's
+        // last 4 bytes (big-endian) and compute actual remaining blocks.
+        uint32_t initial_counter =
+            (static_cast<uint32_t>(iv[12]) << 24) |
+            (static_cast<uint32_t>(iv[13]) << 16) |
+            (static_cast<uint32_t>(iv[14]) <<  8) |
+            (static_cast<uint32_t>(iv[15]));
+        uint64_t max_blocks = 0xFFFFFFFFULL - static_cast<uint64_t>(initial_counter) + 1;
+        uint64_t max_bytes  = max_blocks * 16;
+        if (static_cast<uint64_t>(size) > max_bytes)
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "AES-CTR: data size exceeds 32-bit counter space for this IV"};
 
         // Initialize counter block from IV
         uint8_t counter[16];
@@ -149,7 +159,7 @@ public:
     /// @param size  Number of bytes to encrypt.
     /// @param iv    16-byte initialization vector.
     /// @return Ciphertext bytes (same length as input).
-    [[nodiscard]] std::vector<uint8_t> encrypt(
+    [[nodiscard]] expected<std::vector<uint8_t>> encrypt(
         const uint8_t* data, size_t size,
         const uint8_t iv[IV_SIZE]) const {
         return process(data, size, iv);
@@ -160,7 +170,7 @@ public:
     /// @param size  Number of bytes to decrypt.
     /// @param iv    16-byte initialization vector (must match encryption IV).
     /// @return Plaintext bytes (same length as input).
-    [[nodiscard]] std::vector<uint8_t> decrypt(
+    [[nodiscard]] expected<std::vector<uint8_t>> decrypt(
         const uint8_t* data, size_t size,
         const uint8_t iv[IV_SIZE]) const {
         return process(data, size, iv);

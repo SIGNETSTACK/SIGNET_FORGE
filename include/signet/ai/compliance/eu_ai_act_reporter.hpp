@@ -56,6 +56,13 @@
 #include <string>
 #include <vector>
 
+// Platform CSPRNG headers for random_hex_suffix_ (CR-4)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#  include <stdlib.h>      // arc4random_buf
+#elif defined(__linux__)
+#  include <sys/random.h>  // getrandom
+#endif
+
 namespace signet::forge {
 
 /// EU AI Act compliance report generator (Regulation (EU) 2024/1689).
@@ -88,6 +95,10 @@ public:
 
         auto license = commercial::require_feature("EUAIActReporter::article12");
         if (!license) return license.error();
+
+        if (opts.format != ReportFormat::JSON)
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "Article 12 reports currently support JSON format only"};
 
         if (inference_log_files.empty())
             return Error{ErrorCode::IO_ERROR,
@@ -716,7 +727,8 @@ private:
                                  ? "open"
                                  : ns_to_iso8601(opts.end_ns);
         r.report_id = opts.report_id.empty()
-                          ? ("EUAIA-" + std::to_string(r.generated_at_ns))
+                          ? ("EUAIA-" + std::to_string(r.generated_at_ns)
+                             + "-" + random_hex_suffix_())
                           : opts.report_id;
         return r;
     }
@@ -759,6 +771,34 @@ private:
 
     static constexpr size_t MAX_FIELD_LENGTH = 4096;
 
+    /// Generate an 8-character hex suffix using platform CSPRNG (CR-4).
+    static std::string random_hex_suffix_() {
+        uint8_t buf[4];
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+        arc4random_buf(buf, sizeof(buf));
+#elif defined(_WIN32)
+        for (auto& b : buf) {
+            unsigned int val;
+            rand_s(&val);
+            b = static_cast<uint8_t>(val);
+        }
+#else
+        size_t written = 0;
+        while (written < sizeof(buf)) {
+            ssize_t ret = getrandom(buf + written, sizeof(buf) - written, 0);
+            if (ret > 0) written += static_cast<size_t>(ret);
+            else break;
+        }
+#endif
+        static constexpr char hex[] = "0123456789abcdef";
+        std::string result(8, '\0');
+        for (size_t i = 0; i < 4; ++i) {
+            result[2 * i]     = hex[buf[i] >> 4];
+            result[2 * i + 1] = hex[buf[i] & 0x0F];
+        }
+        return result;
+    }
+
     static std::string truncate_field(const std::string& s) {
         if (s.size() <= MAX_FIELD_LENGTH) return s;
         return s.substr(0, MAX_FIELD_LENGTH) + "...[TRUNCATED]";
@@ -771,6 +811,7 @@ private:
         for (unsigned char c : safe) {
             if (c == '"')       out += "\\\"";
             else if (c == '\\') out += "\\\\";
+            else if (c == '/')  out += "\\/";
             else if (c == '\n') out += "\\n";
             else if (c == '\r') out += "\\r";
             else if (c == '\t') out += "\\t";
@@ -783,6 +824,7 @@ private:
     }
 
     static std::string dbl(double v) {
+        if (std::isnan(v) || std::isinf(v)) return "null";
         char buf[32];
         std::snprintf(buf, sizeof(buf), "%.6g", v);
         return buf;

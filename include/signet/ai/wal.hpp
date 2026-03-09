@@ -274,7 +274,13 @@ public:
             std::setvbuf(f, nullptr, _IOFBF, opts.buffer_size);
 
         // Determine current file size to decide whether to write the file header.
-        if (std::fseek(f, 0, SEEK_END) != 0) {
+        // H-10: Use platform-specific 64-bit seek to avoid long overflow
+        // on Windows LLP64 where long is 32-bit.
+#ifdef _WIN32
+        if (_fseeki64(f, 0, SEEK_END) != 0) {
+#else
+        if (fseeko(f, 0, SEEK_END) != 0) {
+#endif
             std::fclose(f);
             return Error{ErrorCode::IO_ERROR, "WalWriter: fseek failed"};
         }
@@ -313,7 +319,12 @@ public:
             FILE* rf = std::fopen(path.c_str(), "rb");
             if (rf) {
                 // Skip file header.
-                std::fseek(rf, WAL_FILE_HDR_SIZE, SEEK_SET);
+                // H-10: Use platform-specific 64-bit seek
+#ifdef _WIN32
+                _fseeki64(rf, WAL_FILE_HDR_SIZE, SEEK_SET);
+#else
+                fseeko(rf, WAL_FILE_HDR_SIZE, SEEK_SET);
+#endif
                 // Scan forward collecting seq numbers.
                 int64_t last_seq = -1;
                 while (true) {
@@ -326,8 +337,19 @@ public:
                     // CWE-400: reject corrupt/oversized records during resume scan
                     // (H18+L18: prevents unbounded fseek from crafted data_sz).
                     if (data_sz > WAL_MAX_RECORD_SIZE) break;
-                    // Skip data + crc(4).
-                    if (std::fseek(rf, static_cast<long>(data_sz) + 4, SEEK_CUR) != 0) break;
+                    // Read data + CRC and verify integrity
+                    std::vector<uint8_t> record_data(data_sz);
+                    if (data_sz > 0 && std::fread(record_data.data(), 1, data_sz, rf) != data_sz) break;
+                    uint8_t crc_buf[4];
+                    if (std::fread(crc_buf, 1, 4, rf) != 4) break;
+                    uint32_t stored_crc = detail::read_le32(crc_buf);
+                    // CRC covers header(24) + data
+                    std::vector<uint8_t> combined(24 + data_sz);
+                    std::memcpy(combined.data(), hdr, 24);
+                    if (data_sz > 0)
+                        std::memcpy(combined.data() + 24, record_data.data(), data_sz);
+                    uint32_t computed_crc = detail::crc32(combined.data(), combined.size());
+                    if (computed_crc != stored_crc) break; // reject records with bad CRC
                     last_seq = seq;
                 }
                 std::fclose(rf);
@@ -362,7 +384,8 @@ public:
             ++rejected_empty_count_;
             return Error{ErrorCode::IO_ERROR, "WalWriter: empty record rejected"};
         }
-        // Note: records > WAL_MAX_RECORD_SIZE are rejected by WalReader (hardening pass #2)
+        if (size > WAL_MAX_RECORD_SIZE)
+            return Error{ErrorCode::INVALID_ARGUMENT, "WAL record exceeds maximum size"};
         if (size > static_cast<size_t>(UINT32_MAX))
             return Error{ErrorCode::IO_ERROR, "WalWriter: record too large"};
 

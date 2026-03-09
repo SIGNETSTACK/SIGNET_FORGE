@@ -525,7 +525,7 @@ private:
 
     /// Ensure at least `n` bytes remain. Sets error flag if not.
     [[nodiscard]] bool ensure(size_t n) {
-        if (error_ || pos_ + n > size_) {
+        if (error_ || n > size_ || pos_ > size_ - n) {
             error_ = true;
             return false;
         }

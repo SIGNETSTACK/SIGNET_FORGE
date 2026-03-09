@@ -148,11 +148,15 @@ struct HumanOverrideRecord {
         if (!read_le32(data, size, offset, src_val))
             return Error{ErrorCode::CORRUPT_PAGE, "HumanOverrideRecord: truncated source"};
         rec.source = static_cast<OverrideSource>(src_val);
+        if (src_val < 0 || src_val > 2)
+            rec.source = OverrideSource::ALGORITHMIC;
 
         int32_t act_val = 0;
         if (!read_le32(data, size, offset, act_val))
             return Error{ErrorCode::CORRUPT_PAGE, "HumanOverrideRecord: truncated action"};
         rec.action = static_cast<OverrideAction>(act_val);
+        if (act_val < 0 || act_val > 4)
+            rec.action = OverrideAction::APPROVE;
 
         if (!read_string(data, size, offset, rec.system_id))
             return Error{ErrorCode::CORRUPT_PAGE, "HumanOverrideRecord: truncated system_id"};
@@ -324,9 +328,14 @@ public:
     }
 
     /// Record an override event at the given timestamp.
-    /// Returns the current override count within the window.
+    /// Returns the current override count within the window, or -1 on error.
     int64_t record_override(int64_t timestamp_ns) {
         std::lock_guard<std::mutex> lock(mu_);
+
+        // Reject out-of-order timestamps to maintain deque invariant
+        if (!timestamps_.empty() && timestamp_ns < timestamps_.back()) {
+            return -1; // error: out-of-order timestamp
+        }
 
         timestamps_.push_back(timestamp_ns);
         evict_old(timestamp_ns);
@@ -440,6 +449,7 @@ public:
 
     /// Log a human override event. Returns the hash chain entry.
     [[nodiscard]] inline expected<HashChainEntry> log(const HumanOverrideRecord& record) {
+        std::lock_guard<std::mutex> lock(write_mutex_);
         auto usage = commercial::record_usage_rows("HumanOverrideLogWriter::log", 1);
         if (!usage) return usage.error();
 
@@ -455,7 +465,7 @@ public:
         pending_data_.push_back(std::move(data));
 
         if (pending_records_.size() >= max_records_) {
-            auto result = flush();
+            auto result = flush_unlocked();
             if (!result) return result.error();
         }
 
@@ -465,6 +475,21 @@ public:
 
     /// Flush current records to a Parquet file.
     [[nodiscard]] inline expected<void> flush() {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        return flush_unlocked();
+    }
+
+    /// Close the writer (flushes remaining records).
+    [[nodiscard]] inline expected<void> close() {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        if (!pending_records_.empty()) {
+            return flush_unlocked();
+        }
+        return expected<void>{};
+    }
+
+private:
+    [[nodiscard]] inline expected<void> flush_unlocked() {
         if (pending_records_.empty()) {
             return expected<void>{};
         }
@@ -534,14 +559,7 @@ public:
         return expected<void>{};
     }
 
-    /// Close the writer (flushes remaining records).
-    [[nodiscard]] inline expected<void> close() {
-        if (!pending_records_.empty()) {
-            return flush();
-        }
-        return expected<void>{};
-    }
-
+public:
     /// Get the chain metadata for the current batch.
     [[nodiscard]] inline AuditMetadata current_metadata() const {
         AuditMetadata meta;
@@ -583,6 +601,7 @@ private:
     std::string                         current_file_path_;
     int64_t                             total_records_{0};
     int64_t                             file_count_{0};
+    mutable std::mutex                  write_mutex_;
 
     static inline std::string double_to_string(double v) {
         char buf[32];
@@ -641,7 +660,11 @@ public:
             rec.operator_id           = col_operator_id_[i];
             rec.operator_role         = col_operator_role_[i];
             rec.source                = static_cast<OverrideSource>(col_source_[i]);
+            if (col_source_[i] < 0 || col_source_[i] > 2)
+                rec.source = OverrideSource::ALGORITHMIC;
             rec.action                = static_cast<OverrideAction>(col_action_[i]);
+            if (col_action_[i] < 0 || col_action_[i] > 4)
+                rec.action = OverrideAction::APPROVE;
             rec.system_id             = col_system_id_[i];
             rec.original_decision_id  = col_original_decision_id_[i];
             rec.original_output       = col_original_output_[i];
@@ -719,7 +742,11 @@ public:
             rec.operator_id           = col_operator_id_[i];
             rec.operator_role         = col_operator_role_[i];
             rec.source                = static_cast<OverrideSource>(col_source_[i]);
+            if (col_source_[i] < 0 || col_source_[i] > 2)
+                rec.source = OverrideSource::ALGORITHMIC;
             rec.action                = static_cast<OverrideAction>(col_action_[i]);
+            if (col_action_[i] < 0 || col_action_[i] > 4)
+                rec.action = OverrideAction::APPROVE;
             rec.system_id             = col_system_id_[i];
             rec.original_decision_id  = col_original_decision_id_[i];
             rec.original_output       = col_original_output_[i];
@@ -764,6 +791,10 @@ private:
     std::vector<int64_t>      col_chain_seq_;
     std::vector<std::string>  col_chain_hash_;
     std::vector<std::string>  col_prev_hash_;
+    std::vector<int64_t>      col_row_id_;
+    std::vector<int32_t>      col_row_version_;
+    std::vector<std::string>  col_row_origin_file_;
+    std::vector<std::string>  col_row_prev_hash_;
 
     [[nodiscard]] inline expected<void> load_columns() {
         int64_t num_rgs = reader_->num_row_groups();
@@ -854,6 +885,36 @@ private:
             if (!r14) return r14.error();
             col_prev_hash_.insert(col_prev_hash_.end(),
                 std::make_move_iterator(r14->begin()), std::make_move_iterator(r14->end()));
+
+            // Col 15: row_id (INT64) — optional row lineage columns
+            if (reader_->schema().num_columns() > 15) {
+                auto r15 = reader_->read_column<int64_t>(rg_idx, 15);
+                if (!r15) return r15.error();
+                col_row_id_.insert(col_row_id_.end(), r15->begin(), r15->end());
+            }
+
+            // Col 16: row_version (INT32)
+            if (reader_->schema().num_columns() > 16) {
+                auto r16 = reader_->read_column<int32_t>(rg_idx, 16);
+                if (!r16) return r16.error();
+                col_row_version_.insert(col_row_version_.end(), r16->begin(), r16->end());
+            }
+
+            // Col 17: row_origin_file (STRING)
+            if (reader_->schema().num_columns() > 17) {
+                auto r17 = reader_->read_column<std::string>(rg_idx, 17);
+                if (!r17) return r17.error();
+                col_row_origin_file_.insert(col_row_origin_file_.end(),
+                    std::make_move_iterator(r17->begin()), std::make_move_iterator(r17->end()));
+            }
+
+            // Col 18: row_prev_hash (STRING)
+            if (reader_->schema().num_columns() > 18) {
+                auto r18 = reader_->read_column<std::string>(rg_idx, 18);
+                if (!r18) return r18.error();
+                col_row_prev_hash_.insert(col_row_prev_hash_.end(),
+                    std::make_move_iterator(r18->begin()), std::make_move_iterator(r18->end()));
+            }
         }
         return expected<void>{};
     }

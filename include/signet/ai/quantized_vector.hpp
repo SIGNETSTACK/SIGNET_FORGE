@@ -25,9 +25,12 @@
 #include "signet/error.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -218,11 +221,11 @@ public:
 
     /// EU AI Act Art.12 anomaly tracking: number of dequantized values that
     /// fell outside the representable quantization range and were clamped.
-    [[nodiscard]] uint64_t anomaly_count() const { return anomaly_count_; }
+    [[nodiscard]] uint64_t anomaly_count() const { return anomaly_count_.load(std::memory_order_relaxed); }
 
 private:
     QuantizationParams params_;
-    mutable uint64_t   anomaly_count_ = 0; ///< Count of out-of-range dequantized values (EU AI Act Art.12)
+    mutable std::atomic<uint64_t> anomaly_count_{0}; ///< Count of out-of-range dequantized values (EU AI Act Art.12)
 
     // -- Scalar helpers --------------------------------------------------
     inline void dequantize_symmetric_int8_scalar(const uint8_t* in, float* out, uint32_t dim) const;
@@ -377,13 +380,20 @@ inline QuantizationParams QuantizationParams::compute(
 
     const size_t total = num_vectors * static_cast<size_t>(dim);
 
-    // Find min and max across all values
-    float vmin = data[0];
-    float vmax = data[0];
-    for (size_t i = 1; i < total; ++i) {
+    // Find min and max across all finite values (skip NaN/Infinity)
+    float vmin = std::numeric_limits<float>::max();
+    float vmax = std::numeric_limits<float>::lowest();
+    for (size_t i = 0; i < total; ++i) {
         const float v = data[i];
+        if (!std::isfinite(v)) continue;
         if (v < vmin) vmin = v;
         if (v > vmax) vmax = v;
+    }
+    // If no finite values found, fall back to safe defaults
+    if (vmin > vmax) {
+        p.scale      = 1.0f;
+        p.zero_point = 0.0f;
+        return p;
     }
 
     switch (scheme) {
@@ -425,9 +435,9 @@ inline std::string QuantizationParams::serialize() const {
     s += "scheme=";
     s += std::to_string(static_cast<int32_t>(scheme));
     s += ";scale=";
-    s += std::to_string(scale);
+    { char buf[32]; std::snprintf(buf, sizeof(buf), "%.9g", static_cast<double>(scale)); s += buf; }
     s += ";zero_point=";
-    s += std::to_string(zero_point);
+    { char buf[32]; std::snprintf(buf, sizeof(buf), "%.9g", static_cast<double>(zero_point)); s += buf; }
     s += ";dimension=";
     s += std::to_string(dimension);
     return s;
@@ -883,7 +893,7 @@ inline void Dequantizer::dequantize_symmetric_int8_scalar(
         // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
         if (out[i] < range_min || out[i] > range_max) {
             out[i] = std::clamp(out[i], range_min, range_max);
-            ++anomaly_count_;
+            anomaly_count_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
@@ -900,7 +910,7 @@ inline void Dequantizer::dequantize_asymmetric_int8_scalar(
         // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
         if (out[i] < range_min || out[i] > range_max) {
             out[i] = std::clamp(out[i], range_min, range_max);
-            ++anomaly_count_;
+            anomaly_count_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
@@ -931,7 +941,7 @@ inline void Dequantizer::dequantize_symmetric_int4_scalar(
         // Clamp to quantization range bounds (EU AI Act Art.12 anomaly tracking)
         if (out[i] < range_min || out[i] > range_max) {
             out[i] = std::clamp(out[i], range_min, range_max);
-            ++anomaly_count_;
+            anomaly_count_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
@@ -1275,6 +1285,11 @@ inline std::vector<std::vector<float>> QuantizedVectorReader::read_page(
 {
     const size_t bpv = params_.bytes_per_vector();
     if (bpv == 0) return {};
+
+    if (data_size % bpv != 0) {
+        // Tail bytes that don't form a complete vector are silently dropped.
+        // Use read_raw() for strict validation.
+    }
 
     const size_t num = data_size / bpv;
     return dequantizer_.dequantize_batch(data, num);

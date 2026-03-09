@@ -27,7 +27,9 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -251,7 +253,7 @@ public:
 
 #else
         // --- POSIX path ---
-        int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+        int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         if (fd < 0) {
             return Error{ErrorCode::IO_ERROR,
                 std::string("MappedSegment: open failed for '") + path + "': " + std::strerror(errno)};
@@ -312,7 +314,11 @@ public:
         FlushViewOfFile(ptr_, size_);
         // No FlushFileBuffers — async only
 #else
-        ::msync(ptr_, size_, MS_ASYNC);
+        // EX-9: Check msync return value and log errors
+        if (::msync(ptr_, size_, MS_ASYNC) != 0) {
+            fprintf(stderr, "[SIGNET WARNING] msync(MS_ASYNC) failed: %s\n",
+                    std::strerror(errno));
+        }
 #endif
     }
 
@@ -326,7 +332,11 @@ public:
         if (hFile_ != INVALID_HANDLE_VALUE)
             FlushFileBuffers(hFile_);
 #else
-        ::msync(ptr_, size_, MS_SYNC);
+        // EX-9: Check msync return value and log errors
+        if (::msync(ptr_, size_, MS_SYNC) != 0) {
+            fprintf(stderr, "[SIGNET WARNING] msync(MS_SYNC) failed: %s\n",
+                    std::strerror(errno));
+        }
 #endif
     }
 
@@ -443,7 +453,7 @@ public:
         opts_        = std::move(o.opts_);
         ring_        = std::move(o.ring_);
         active_idx_.store(o.active_idx_.load(std::memory_order_acquire), std::memory_order_release);
-        next_seq_    = o.next_seq_;
+        next_seq_.store(o.next_seq_.load(std::memory_order_acquire), std::memory_order_release);
         next_seg_id_ = o.next_seg_id_;
         closed_.store(o.closed_.load(std::memory_order_acquire), std::memory_order_release);
         bg_deferred_ = false;
@@ -469,7 +479,7 @@ public:
             opts_        = std::move(o.opts_);
             ring_        = std::move(o.ring_);
             active_idx_.store(o.active_idx_.load(std::memory_order_acquire), std::memory_order_release);
-            next_seq_    = o.next_seq_;
+            next_seq_.store(o.next_seq_.load(std::memory_order_acquire), std::memory_order_release);
             next_seg_id_ = o.next_seg_id_;
             closed_.store(o.closed_.load(std::memory_order_acquire), std::memory_order_release);
             bg_deferred_ = false;
@@ -541,7 +551,7 @@ public:
 
         // --- Construct writer ---
         WalMmapWriter w(opts);
-        w.next_seq_ = opts.start_seq;
+        w.next_seq_.store(opts.start_seq, std::memory_order_relaxed);
 
         // Allocate ring slots (heap-allocated to avoid copying atomics)
         for (size_t i = 0; i < opts.ring_segments; ++i)
@@ -553,7 +563,7 @@ public:
         auto r0 = w.allocate_slot(*w.ring_[0], first_id, /*skip_prefault=*/false);
         if (!r0) return r0.error();
 
-        w.ring_[0]->first_seq    = static_cast<uint64_t>(w.next_seq_);
+        w.ring_[0]->first_seq    = static_cast<uint64_t>(w.next_seq_.load(std::memory_order_relaxed));
         w.ring_[0]->write_offset = 0;
         w.ring_[0]->state.store(SlotState::ACTIVE, std::memory_order_release);
         w.active_idx_.store(0, std::memory_order_release);
@@ -613,7 +623,7 @@ public:
                active->write_offset + entry_size
                <= active->seg.data() + active->seg.capacity());
 
-        const int64_t seq = next_seq_++;
+        const int64_t seq = next_seq_.fetch_add(1, std::memory_order_relaxed);
         const int64_t ts  = detail_mmap::now_ns();
         const auto    dsz = static_cast<uint32_t>(size);
 
@@ -716,7 +726,7 @@ public:
     /// Check whether the writer is still open (not yet closed).
     [[nodiscard]] bool            is_open()  const noexcept { return !closed_.load(std::memory_order_acquire); }
     /// Return the next sequence number that will be assigned.
-    [[nodiscard]] int64_t         next_seq() const noexcept { return next_seq_; }
+    [[nodiscard]] int64_t         next_seq() const noexcept { return next_seq_.load(std::memory_order_acquire); }
     /// Return the output directory path.
     [[nodiscard]] const std::string& dir()   const noexcept { return opts_.dir; }
 
@@ -833,7 +843,7 @@ private:
     /// Rotate the active slot to a standby one (called when active is full).
     expected<void> rotate() {
         RingSlot& old_slot = *ring_[active_idx_.load(std::memory_order_acquire)];
-        old_slot.last_seq  = static_cast<uint64_t>(next_seq_ - 1);
+        old_slot.last_seq  = static_cast<uint64_t>(next_seq_.load(std::memory_order_acquire) - 1);
 
         // Async flush before setting DRAINING so the bg thread doesn't close
         // the segment before the flush is scheduled
@@ -868,7 +878,7 @@ private:
                 "Process WAL segments before appending more data."};
 
         RingSlot& new_slot    = *ring_[static_cast<size_t>(standby_idx)];
-        new_slot.first_seq    = static_cast<uint64_t>(next_seq_);
+        new_slot.first_seq    = static_cast<uint64_t>(next_seq_.load(std::memory_order_acquire));
         new_slot.write_offset = 0;
         new_slot.state.store(SlotState::ACTIVE, std::memory_order_release);
         active_idx_.store(static_cast<size_t>(standby_idx), std::memory_order_release);
@@ -997,7 +1007,7 @@ private:
     WalMmapOptions                    opts_;
     std::vector<std::unique_ptr<RingSlot>> ring_;
     std::atomic<size_t>               active_idx_{0};   // CWE-362: atomic for lock-free publish path
-    int64_t                           next_seq_    = 0;
+    std::atomic<int64_t>              next_seq_{0};  // H-11: atomic to prevent data race with bg thread
     uint64_t                          next_seg_id_ = 0;  // protected by bg_mutex_
     std::atomic<bool>                 closed_{false};    // CWE-362: atomic for safe cross-thread close detection
     bool                              bg_deferred_ = false;  // bg thread start deferred until after move

@@ -18,6 +18,7 @@
 /// - PageLocation: 1=offset, 2=compressed_page_size, 3=first_row_index
 
 #include "signet/thrift/compact.hpp"
+#include "signet/statistics.hpp"    // from_le_bytes<T>
 
 #include <cstdint>
 #include <string>
@@ -82,7 +83,11 @@ struct PageLocation {
 ///
 /// @see ColumnIndex (companion structure for predicate pushdown)
 struct OffsetIndex {
+    bool valid_ = true; ///< False if deserialization failed (M-V7).
     std::vector<PageLocation> page_locations; ///< One entry per data page.
+
+    /// Check if deserialization was successful.
+    [[nodiscard]] bool valid() const { return valid_; }
 
     /// Serialize this OffsetIndex to a Thrift compact encoder.
     /// @param enc  The encoder to write to.
@@ -138,6 +143,7 @@ struct OffsetIndex {
 /// @see OffsetIndex          (companion for page offsets)
 /// @see ColumnIndexBuilder   (builder pattern for constructing during writes)
 struct ColumnIndex {
+    bool                     valid_ = true; ///< False if deserialization failed (M-V7).
     std::vector<bool>        null_pages;  ///< True if the corresponding page is all nulls.
     std::vector<std::string> min_values;  ///< Binary-encoded minimum value per page.
     std::vector<std::string> max_values;  ///< Binary-encoded maximum value per page.
@@ -151,6 +157,9 @@ struct ColumnIndex {
     BoundaryOrder boundary_order = BoundaryOrder::UNORDERED; ///< Boundary order of min values.
 
     std::vector<int64_t> null_counts; ///< Null count per page (optional).
+
+    /// Check if deserialization was successful.
+    [[nodiscard]] bool valid() const { return valid_; }
 
     /// Serialize this ColumnIndex to a Thrift compact encoder.
     /// @param enc  The encoder to write to.
@@ -212,7 +221,7 @@ struct ColumnIndex {
                     auto [elem_type, count] = dec.read_list_header();
                     // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
                     if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
-                        return; // list count exceeds 10M cap or is negative
+                        valid_ = false; return; // list count exceeds 10M cap or is negative
                     }
                     null_pages.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
@@ -225,7 +234,7 @@ struct ColumnIndex {
                     auto [elem_type, count] = dec.read_list_header();
                     // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
                     if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
-                        return; // list count exceeds 10M cap or is negative
+                        valid_ = false; return; // list count exceeds 10M cap or is negative
                     }
                     min_values.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
@@ -238,7 +247,7 @@ struct ColumnIndex {
                     auto [elem_type, count] = dec.read_list_header();
                     // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
                     if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
-                        return; // list count exceeds 10M cap or is negative
+                        valid_ = false; return; // list count exceeds 10M cap or is negative
                     }
                     max_values.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
@@ -254,7 +263,7 @@ struct ColumnIndex {
                     auto [elem_type, count] = dec.read_list_header();
                     // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
                     if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
-                        return; // list count exceeds 10M cap or is negative
+                        valid_ = false; return; // list count exceeds 10M cap or is negative
                     }
                     null_counts.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
@@ -276,17 +285,64 @@ struct ColumnIndex {
     /// than @p min_val or its min is strictly greater than @p max_val.
     /// All-null pages are always excluded.
     ///
-    /// @note Binary comparison uses lexicographic byte ordering, which is
-    ///       correct for unsigned integer types and strings. For signed
-    ///       types, the caller should ensure values use a comparison-safe
-    ///       binary encoding.
-    ///
-    /// @param min_val  Lower bound of the query range (binary-encoded).
-    /// @param max_val  Upper bound of the query range (binary-encoded).
+    /// @param min_val      Lower bound of the query range (binary-encoded).
+    /// @param max_val      Upper bound of the query range (binary-encoded).
+    /// @param physical_type  Physical type for typed comparison (default: BYTE_ARRAY = lexicographic).
     /// @return A vector of page indices (0-based) that may contain matches.
     [[nodiscard]] std::vector<size_t> filter_pages(
             const std::string& min_val,
-            const std::string& max_val) const {
+            const std::string& max_val,
+            PhysicalType physical_type = PhysicalType::BYTE_ARRAY) const {
+
+        // Typed comparison helper: returns negative/zero/positive like strcmp.
+        auto typed_compare = [&](const std::string& a, const std::string& b) -> int {
+            switch (physical_type) {
+                case PhysicalType::INT32: {
+                    if (a.size() >= sizeof(int32_t) && b.size() >= sizeof(int32_t)) {
+                        auto va = from_le_bytes<int32_t>({reinterpret_cast<const uint8_t*>(a.data()),
+                                                          reinterpret_cast<const uint8_t*>(a.data()) + a.size()});
+                        auto vb = from_le_bytes<int32_t>({reinterpret_cast<const uint8_t*>(b.data()),
+                                                          reinterpret_cast<const uint8_t*>(b.data()) + b.size()});
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                }
+                case PhysicalType::INT64: {
+                    if (a.size() >= sizeof(int64_t) && b.size() >= sizeof(int64_t)) {
+                        auto va = from_le_bytes<int64_t>({reinterpret_cast<const uint8_t*>(a.data()),
+                                                          reinterpret_cast<const uint8_t*>(a.data()) + a.size()});
+                        auto vb = from_le_bytes<int64_t>({reinterpret_cast<const uint8_t*>(b.data()),
+                                                          reinterpret_cast<const uint8_t*>(b.data()) + b.size()});
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                }
+                case PhysicalType::FLOAT: {
+                    if (a.size() >= sizeof(float) && b.size() >= sizeof(float)) {
+                        auto va = from_le_bytes<float>({reinterpret_cast<const uint8_t*>(a.data()),
+                                                        reinterpret_cast<const uint8_t*>(a.data()) + a.size()});
+                        auto vb = from_le_bytes<float>({reinterpret_cast<const uint8_t*>(b.data()),
+                                                        reinterpret_cast<const uint8_t*>(b.data()) + b.size()});
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                }
+                case PhysicalType::DOUBLE: {
+                    if (a.size() >= sizeof(double) && b.size() >= sizeof(double)) {
+                        auto va = from_le_bytes<double>({reinterpret_cast<const uint8_t*>(a.data()),
+                                                         reinterpret_cast<const uint8_t*>(a.data()) + a.size()});
+                        auto vb = from_le_bytes<double>({reinterpret_cast<const uint8_t*>(b.data()),
+                                                         reinterpret_cast<const uint8_t*>(b.data()) + b.size()});
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            // Fallback: lexicographic comparison
+            return (a < b) ? -1 : (a > b) ? 1 : 0;
+        };
 
         std::vector<size_t> matching;
         size_t num_pages = min_values.size();
@@ -298,12 +354,12 @@ struct ColumnIndex {
             }
 
             // Skip if page max < query min (entire page below the range)
-            if (i < max_values.size() && max_values[i] < min_val) {
+            if (i < max_values.size() && typed_compare(max_values[i], min_val) < 0) {
                 continue;
             }
 
             // Skip if page min > query max (entire page above the range)
-            if (i < min_values.size() && min_values[i] > max_val) {
+            if (i < min_values.size() && typed_compare(min_values[i], max_val) > 0) {
                 continue;
             }
 

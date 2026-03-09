@@ -94,6 +94,7 @@ inline uint64_t decode_varint(const uint8_t* data, size_t& pos, size_t size) {
         shift += 7;
         if (shift >= 64) { pos = start_pos; return 0; } // CWE-190: Integer Overflow — restore position on overflow
     }
+    pos = start_pos;
     return result;
 }
 
@@ -130,7 +131,7 @@ inline void bit_pack_8(std::vector<uint8_t>& out, const uint64_t* values, int bi
             int byte_idx = cur_bit / 8;
             int bit_idx  = cur_bit % 8;
             int bits_to_write = (std::min)(bits_remaining, 8 - bit_idx);
-            uint8_t mask = static_cast<uint8_t>((val & ((1u << bits_to_write) - 1)) << bit_idx);
+            uint8_t mask = static_cast<uint8_t>((val & ((uint64_t{1} << bits_to_write) - 1)) << bit_idx);
             dst[byte_idx] |= mask;
             val >>= bits_to_write;
             cur_bit += bits_to_write;
@@ -170,7 +171,7 @@ inline void bit_unpack_8(const uint8_t* src, uint64_t* values, int bit_width) {
             int bit_idx  = cur_bit % 8;
             int bits_avail = 8 - bit_idx;
             int bits_to_read = (std::min)(bits_remaining, bits_avail);
-            uint64_t chunk = (src[byte_idx] >> bit_idx) & ((1u << bits_to_read) - 1);
+            uint64_t chunk = (src[byte_idx] >> bit_idx) & ((uint64_t{1} << bits_to_read) - 1);
             val |= chunk << val_bit;
             cur_bit += bits_to_read;
             val_bit += bits_to_read;
@@ -513,6 +514,8 @@ public:
             // RLE run
             uint64_t run_length = header >> 1;
             if (run_length == 0) return false;
+            static constexpr uint64_t MAX_RLE_RUN = 256 * 1024 * 1024; // 256M
+            if (run_length > MAX_RLE_RUN) return false;
 
             // Read the value in byte_width_ LE bytes
             uint64_t val = 0;

@@ -31,6 +31,7 @@
 #include "signet/error.hpp"
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -110,10 +111,26 @@ class RegulatoryChangeMonitor {
 public:
     /// Construct a monitor with an organization identifier.
     explicit RegulatoryChangeMonitor(const std::string& org_id = "")
-        : org_id_(org_id) {}
+        : org_id_(org_id) {
+        (void)commercial::require_feature("RegulatoryChangeMonitor");
+    }
+
+    RegulatoryChangeMonitor(RegulatoryChangeMonitor&& other) noexcept
+        : org_id_(std::move(other.org_id_))
+        , changes_(std::move(other.changes_)) {}
+    RegulatoryChangeMonitor& operator=(RegulatoryChangeMonitor&& other) noexcept {
+        if (this != &other) {
+            org_id_ = std::move(other.org_id_);
+            changes_ = std::move(other.changes_);
+        }
+        return *this;
+    }
+    RegulatoryChangeMonitor(const RegulatoryChangeMonitor&) = delete;
+    RegulatoryChangeMonitor& operator=(const RegulatoryChangeMonitor&) = delete;
 
     /// Register a new regulatory change for tracking.
     void track_change(const RegulatoryChange& change) {
+        std::lock_guard<std::mutex> lock(mutex_);
         changes_[change.change_id] = change;
     }
 
@@ -122,6 +139,7 @@ public:
         const std::string& change_id,
         ChangeComplianceStatus new_status)
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         auto it = changes_.find(change_id);
         if (it == changes_.end()) {
             return Error{ErrorCode::INVALID_ARGUMENT,
@@ -138,6 +156,7 @@ public:
         const std::string& assessor,
         const std::string& assessment_date)
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         auto it = changes_.find(change_id);
         if (it == changes_.end()) {
             return Error{ErrorCode::INVALID_ARGUMENT,
@@ -153,6 +172,7 @@ public:
 
     /// Look up a specific change by ID.
     [[nodiscard]] expected<RegulatoryChange> lookup(const std::string& change_id) const {
+        std::lock_guard<std::mutex> lock(mutex_);
         auto it = changes_.find(change_id);
         if (it == changes_.end()) {
             return Error{ErrorCode::INVALID_ARGUMENT,
@@ -163,6 +183,7 @@ public:
 
     /// Get all tracked changes.
     [[nodiscard]] std::vector<RegulatoryChange> all_changes() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         std::vector<RegulatoryChange> out;
         out.reserve(changes_.size());
         for (const auto& [_, c] : changes_) out.push_back(c);
@@ -173,6 +194,7 @@ public:
     [[nodiscard]] std::vector<RegulatoryChange> changes_for_regulation(
         const std::string& regulation) const
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         std::vector<RegulatoryChange> out;
         for (const auto& [_, c] : changes_) {
             if (c.regulation == regulation) out.push_back(c);
@@ -182,6 +204,7 @@ public:
 
     /// Get all changes that still require action (not VERIFIED or NOT_APPLICABLE).
     [[nodiscard]] std::vector<RegulatoryChange> pending_changes() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         std::vector<RegulatoryChange> out;
         for (const auto& [_, c] : changes_) {
             if (c.status != ChangeComplianceStatus::VERIFIED &&
@@ -196,6 +219,7 @@ public:
     [[nodiscard]] std::vector<RegulatoryChange> changes_above_impact(
         RegulatoryImpact threshold) const
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         std::vector<RegulatoryChange> out;
         for (const auto& [_, c] : changes_) {
             if (c.impact >= threshold) out.push_back(c);
@@ -204,10 +228,14 @@ public:
     }
 
     /// Number of tracked changes.
-    [[nodiscard]] size_t size() const { return changes_.size(); }
+    [[nodiscard]] size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return changes_.size();
+    }
 
     /// Count of changes still pending action.
     [[nodiscard]] size_t pending_count() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         size_t n = 0;
         for (const auto& [_, c] : changes_) {
             if (c.status != ChangeComplianceStatus::VERIFIED &&
@@ -284,6 +312,7 @@ public:
 private:
     std::string org_id_;
     std::unordered_map<std::string, RegulatoryChange> changes_;
+    mutable std::mutex mutex_;
 };
 
 } // namespace signet::forge

@@ -43,11 +43,14 @@
 #include "signet/crypto/pme.hpp"
 #endif
 
+#include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <memory>
 #include <optional>
@@ -64,6 +67,30 @@
 #endif
 
 namespace signet::forge {
+
+namespace detail_reader {
+
+/// EX-1: CRC-32 (polynomial 0xEDB88320) for page checksum verification.
+inline uint32_t crc32(const void* data, size_t length) noexcept {
+    static constexpr auto make_table = []() {
+        std::array<uint32_t, 256> t{};
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            t[i] = c;
+        }
+        return t;
+    };
+    static constexpr auto table = make_table();
+    uint32_t crc = 0xFFFFFFFFu;
+    auto* p = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < length; ++i)
+        crc = table[(crc ^ p[i]) & 0xFFu] ^ (crc >> 8);
+    return crc ^ 0xFFFFFFFFu;
+}
+
+} // namespace detail_reader
 
 /// CWE-400: Uncontrolled Resource Consumption
 /// Maximum allowed uncompressed page size in bytes (256 MB).
@@ -136,6 +163,12 @@ public:
             return Error{ErrorCode::IO_ERROR,
                          "cannot determine file size: " + path.string() +
                          " (" + ec.message() + ")"};
+        }
+
+        static constexpr int64_t MAX_FILE_SIZE = INT64_C(4) * 1024 * 1024 * 1024; // 4 GB
+        if (static_cast<int64_t>(file_size) > MAX_FILE_SIZE) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "File exceeds 4 GB limit; use MmapParquetReader for large files"};
         }
 
         if (file_size < 12) {
@@ -439,19 +472,19 @@ public:
     /// macros are defined. Safe to call multiple times; only the first call
     /// performs registration.
     static void ensure_default_codecs_registered() {
-        static bool registered = false;
-        if (registered) return;
-        register_snappy_codec();
+        static std::once_flag codec_flag;
+        std::call_once(codec_flag, [] {
+            register_snappy_codec();
 #ifdef SIGNET_HAS_ZSTD
-        register_zstd_codec();
+            register_zstd_codec();
 #endif
 #ifdef SIGNET_HAS_LZ4
-        register_lz4_codec();
+            register_lz4_codec();
 #endif
 #ifdef SIGNET_HAS_GZIP
-        register_gzip_codec();
+            register_gzip_codec();
 #endif
-        registered = true;
+        });
     }
 
     // ===================================================================
@@ -731,6 +764,9 @@ public:
     /// @see read_row_group(), read_columns()
     expected<std::vector<std::vector<std::string>>> read_all() {
         size_t num_cols = schema_.num_columns();
+        if (metadata_.num_rows < 0) metadata_.num_rows = 0;
+        if (static_cast<uint64_t>(metadata_.num_rows) > 1024ULL * 1024 * 1024)
+            return Error{ErrorCode::INVALID_ARGUMENT, "num_rows exceeds 1 billion limit"};
         std::vector<std::vector<std::string>> rows;
         rows.reserve(static_cast<size_t>(metadata_.num_rows));
 
@@ -1114,6 +1150,17 @@ private:
                          "page data extends past end of file"};
         }
 
+        // EX-1: Verify page CRC-32 if present in the page header.
+        if (page_header.crc.has_value()) {
+            uint32_t expected_crc = static_cast<uint32_t>(*page_header.crc);
+            uint32_t computed_crc = detail_reader::crc32(page_data, page_data_size);
+            if (computed_crc != expected_crc) {
+                fprintf(stderr, "[SIGNET WARNING] Page CRC-32 mismatch at offset %lld: "
+                        "expected 0x%08X, computed 0x%08X — data may be corrupt\n",
+                        static_cast<long long>(offset), expected_crc, computed_crc);
+            }
+        }
+
         // --- Decrypt page data if PME is configured for this column ---
 #if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
         if (decryptor_) {
@@ -1252,6 +1299,18 @@ private:
         }
 
         size_t pdata_size = compressed_size;
+
+        // EX-1: Verify page CRC-32 if present in the page header.
+        // Parquet spec field 4 is an optional CRC-32 over the compressed page data.
+        if (ph.crc.has_value()) {
+            uint32_t expected_crc = static_cast<uint32_t>(*ph.crc);
+            uint32_t computed_crc = detail_reader::crc32(pdata, pdata_size);
+            if (computed_crc != expected_crc) {
+                fprintf(stderr, "[SIGNET WARNING] Page CRC-32 mismatch at offset %lld: "
+                        "expected 0x%08X, computed 0x%08X — data may be corrupt\n",
+                        static_cast<long long>(offset), expected_crc, computed_crc);
+            }
+        }
 
         // --- Decrypt page data if PME is configured ---
 #if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL

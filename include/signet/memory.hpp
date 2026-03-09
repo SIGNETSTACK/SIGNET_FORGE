@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <vector>
 
 namespace signet::forge {
@@ -181,12 +182,21 @@ private:
     }
 
     /// Allocate a new block and append it to the block list.
+    /// Returns nullptr-equivalent (empty block) on allocation failure.
     void allocate_block(size_t size) {
-        Block block;
-        block.data = std::make_unique<uint8_t[]>(size);
-        block.size = size;
-        block.used = 0;
-        blocks_.push_back(std::move(block));
+        try {
+            Block block;
+            block.data = std::make_unique<uint8_t[]>(size);
+            block.size = size;
+            block.used = 0;
+            blocks_.push_back(std::move(block));
+        } catch (const std::bad_alloc&) {
+            // Push an empty block so callers see a block with size 0
+            Block empty;
+            empty.size = 0;
+            empty.used = 0;
+            blocks_.push_back(std::move(empty));
+        }
     }
 
     /// Round up to the nearest multiple of alignment.

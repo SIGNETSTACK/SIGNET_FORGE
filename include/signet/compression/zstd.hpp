@@ -87,6 +87,10 @@ public:
         const uint8_t* data, size_t size,
         size_t uncompressed_size) const override {
 
+        static constexpr size_t MAX_DECOMPRESS_SIZE = 256 * 1024 * 1024; // 256 MB
+        if (uncompressed_size > MAX_DECOMPRESS_SIZE)
+            return Error{ErrorCode::INVALID_ARGUMENT, "Decompression size exceeds 256 MB limit"};
+
         std::vector<uint8_t> out(uncompressed_size);
 
         size_t decompressed_size = ZSTD_decompress(

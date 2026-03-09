@@ -162,7 +162,10 @@ struct GHashTable {
 inline Block128 ct_table_lookup(const Block128 table[16], uint8_t index) {
     Block128 result{0, 0};
     for (uint8_t i = 0; i < 16; ++i) {
-        uint64_t mask = static_cast<uint64_t>(0) - static_cast<uint64_t>(i == index);
+        // Branchless equality: arithmetic instead of == to avoid conditional branch (CWE-208)
+        uint64_t eq = static_cast<uint64_t>(i) ^ static_cast<uint64_t>(index);
+        uint64_t mask = ((eq | (~eq + 1)) >> 63) ^ 1;
+        mask = static_cast<uint64_t>(0) - mask;
         result.hi |= table[i].hi & mask;
         result.lo |= table[i].lo & mask;
     }
@@ -188,7 +191,10 @@ inline uint64_t ct_reduce4(uint8_t index) {
     };
     uint64_t result = 0;
     for (uint8_t i = 0; i < 16; ++i) {
-        uint64_t mask = static_cast<uint64_t>(0) - static_cast<uint64_t>(i == index);
+        // Branchless equality: arithmetic instead of == to avoid conditional branch (CWE-208)
+        uint64_t eq = static_cast<uint64_t>(i) ^ static_cast<uint64_t>(index);
+        uint64_t mask = ((eq | (~eq + 1)) >> 63) ^ 1;
+        mask = static_cast<uint64_t>(0) - mask;
         result |= R4[i] & mask;
     }
     return result;

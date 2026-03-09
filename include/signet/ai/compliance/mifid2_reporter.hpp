@@ -104,6 +104,8 @@ public:
         std::vector<DecisionRecord> records;
         bool     chain_ok = true;
         std::string chain_id;
+        bool     incomplete_data = false;
+        std::vector<std::string> read_errors;
 
         for (const auto& path : log_files) {
             auto rdr_result = DecisionLogReader::open(path);
@@ -129,7 +131,13 @@ public:
 
             // Read records
             auto all_result = rdr.read_all();
-            if (!all_result) continue;
+            if (!all_result) {
+                // H-20: Track read failures instead of silently skipping
+                incomplete_data = true;
+                read_errors.push_back("Failed to read records from '" + path +
+                                      "': " + all_result.error().message);
+                continue;
+            }
 
             for (auto& rec : *all_result) {
                 if (rec.timestamp_ns >= opts.start_ns &&
@@ -155,6 +163,8 @@ public:
         report.chain_verified  = chain_ok;
         report.chain_id        = chain_id;
         report.total_records   = static_cast<int64_t>(records.size());
+        report.incomplete_data = incomplete_data;
+        report.read_errors     = std::move(read_errors);
         report.generated_at_ns = now_ns_();
         report.generated_at_iso = ns_to_iso8601(report.generated_at_ns);
         report.period_start_iso = ns_to_iso8601(opts.start_ns);
@@ -532,6 +542,7 @@ private:
         for (unsigned char c : safe) {
             if (c == '"')       out += "\\\"";
             else if (c == '\\') out += "\\\\";
+            else if (c == '/')  out += "\\/";
             else if (c == '\n') out += "\\n";
             else if (c == '\r') out += "\\r";
             else if (c == '\t') out += "\\t";
@@ -553,10 +564,21 @@ private:
             else          out += c;
         }
         out += "\"";
+        // CWE-1236: CSV formula injection sanitization.
+        // If the value inside quotes starts with a formula trigger character,
+        // prepend a single quote to neutralize it in Excel/LibreOffice.
+        if (out.size() > 1) {
+            char first = out[1]; // first char inside the opening quote
+            if (first == '=' || first == '+' || first == '-' || first == '@' ||
+                first == '\t' || first == '\r') {
+                out.insert(1, 1, '\'');
+            }
+        }
         return out;
     }
 
     static std::string double_str(double v, int significant_digits = 10) {
+        if (std::isnan(v) || std::isinf(v)) return "null";
         char buf[64];
         std::snprintf(buf, sizeof(buf), "%.*g", significant_digits, v);
         return buf;

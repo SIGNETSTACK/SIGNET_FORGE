@@ -235,7 +235,7 @@ private:
     // Decompression bomb guard: ratio > 1024:1 is suspicious
     // CWE-409: Improper Handling of Highly Compressed Data (Decompression Bomb)
     static constexpr size_t MAX_DECOMPRESSION_RATIO = 1024;
-    if (size > 0 && uncompressed_size / size > MAX_DECOMPRESSION_RATIO) {
+    if (size > 0 && uncompressed_size / size >= MAX_DECOMPRESSION_RATIO) {
         return Error{ErrorCode::CORRUPT_PAGE,
                      "Decompression ratio exceeds limit"};
     }

@@ -613,6 +613,12 @@ inline Fe fe_sub(Fe a, const Fe& b) {
 
 inline Fe fe_mul(const Fe& f, const Fe& g) {
     // 10x10 schoolbook with cross-product combining. Each product is int64_t.
+    // KNOWN ISSUE (H-2, MSVC 10-limb path): The truncation from int64_t to
+    // int32_t below loses high bits before carry propagation. This is
+    // functionally correct only when each h[i] fits in int32_t after the
+    // double fe_carry_10 pass, which holds for field elements in reduced
+    // form. A future MSVC-validated fix should accumulate in int64_t and
+    // carry in 64-bit precision (matching the ref10 implementation).
     int64_t h[10] = {};
     // 19*g[i] for i>=5 collapses the wrap-around
     int64_t g19[5];
@@ -633,6 +639,12 @@ inline Fe fe_mul(const Fe& f, const Fe& g) {
 inline Fe fe_sq(const Fe& a) { return fe_mul(a, a); }
 
 inline void fe_to_bytes(uint8_t* out, Fe h) {
+    // KNOWN ISSUE (H-3, MSVC 10-limb path): The conditional subtraction
+    // and packing below use data-dependent branching on limb values,
+    // which is not constant-time on MSVC (no __int128 path). This is
+    // acceptable for X25519 public key operations but must be addressed
+    // before using this path for secret-dependent scalar operations on
+    // MSVC. Tracked for fix when MSVC support is fully validated.
     fe_carry_10(h); fe_carry_10(h);
     // Conditionally subtract p
     int32_t q = (19 * h[0] + (1<<25)) >> 26;
@@ -796,7 +808,14 @@ inline expected<std::array<uint8_t, 32>> x25519(
     auto license = commercial::require_feature("PQ x25519");
     if (!license) return license.error();
 
-    auto result = x25519_raw(scalar, u_coord);
+    // L-C8: Clamp scalar per RFC 7748 §5 before use, in case caller
+    // passes an unclamped key. This is idempotent if already clamped.
+    std::array<uint8_t, 32> clamped = scalar;
+    clamped[0]  &= 248;
+    clamped[31] &= 127;
+    clamped[31] |= 64;
+
+    auto result = x25519_raw(clamped, u_coord);
     // Constant-time zero check: OR all 32 bytes, then compare (RFC 7748 §6.1, CWE-208)
     uint8_t acc = 0;
     for (size_t i = 0; i < 32; ++i) acc |= result[i];
@@ -1031,6 +1050,15 @@ public:
         // The ciphertext contains the seed in cleartext (XORed with pk-derived
         // mask for minimal obfuscation). This is NOT cryptographically secure.
 
+        // CR-2: Unless SIGNET_ALLOW_STUB_PQ is explicitly defined, refuse to
+        // perform actual encryption with the insecure stub implementation.
+#ifndef SIGNET_ALLOW_STUB_PQ
+        return Error{ErrorCode::ENCRYPTION_ERROR,
+                     "KyberKem: stub PQ implementation provides zero security. "
+                     "Build with -DSIGNET_ENABLE_PQ=ON (liboqs) for real Kyber-768, "
+                     "or define SIGNET_ALLOW_STUB_PQ to allow the insecure stub."};
+#endif
+
         EncapsulationResult result;
 
         // Generate random seed
@@ -1136,6 +1164,15 @@ public:
         // 1. Extract pk_hash from secret_key (last 32 bytes)
         // 2. Recover seed = ciphertext[0..31] XOR pk_hash
         // 3. shared_secret = SHA-256(seed || pk_hash)
+
+        // CR-2: Unless SIGNET_ALLOW_STUB_PQ is explicitly defined, refuse to
+        // perform actual decryption with the insecure stub implementation.
+#ifndef SIGNET_ALLOW_STUB_PQ
+        return Error{ErrorCode::ENCRYPTION_ERROR,
+                     "KyberKem: stub PQ implementation provides zero security. "
+                     "Build with -DSIGNET_ENABLE_PQ=ON (liboqs) for real Kyber-768, "
+                     "or define SIGNET_ALLOW_STUB_PQ to allow the insecure stub."};
+#endif
 
         // Extract pk_hash from the tail of secret_key
         std::array<uint8_t, 32> pk_hash;

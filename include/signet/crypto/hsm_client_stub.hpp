@@ -233,15 +233,14 @@ public:
                 "HSM stub: KEK not found: " + master_key_id};
         }
 
-        // Pad DEK to multiple of 8 if needed (NIST SP 800-38F §6.3)
-        std::vector<uint8_t> padded = dek;
-        if (padded.size() < 16) {
-            padded.resize(16, 0);  // Minimum 2 blocks for AES Key Wrap
-        } else if (padded.size() % 8 != 0) {
-            padded.resize(((padded.size() + 7) / 8) * 8, 0);
+        // Reject DEKs that are not valid for AES Key Wrap (H-5).
+        // Silent padding would cause unwrap to return extra bytes.
+        if (dek.size() < 16 || (dek.size() % 8) != 0) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                "HSM stub: DEK must be >= 16 bytes and a multiple of 8"};
         }
 
-        return detail::aes_key_wrap::wrap(it->second, padded);
+        return detail::aes_key_wrap::wrap(it->second, dek);
     }
 
     [[nodiscard]] expected<std::vector<uint8_t>> unwrap_key(

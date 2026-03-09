@@ -82,8 +82,13 @@ public:
         lineage.row_origin_file = origin_file_;
         lineage.row_prev_hash = prev_hash_hex_;
 
-        // Compute hash of this row's data for the next row's prev_hash
-        auto hash = crypto::detail::sha256::sha256(row_data, row_size);
+        // Compute cumulative hash: SHA-256(prev_hash_hex + row_data)
+        // This creates a true chain where each row depends on all prior rows.
+        std::vector<uint8_t> chain_input;
+        chain_input.reserve(prev_hash_hex_.size() + row_size);
+        chain_input.insert(chain_input.end(), prev_hash_hex_.begin(), prev_hash_hex_.end());
+        chain_input.insert(chain_input.end(), row_data, row_data + row_size);
+        auto hash = crypto::detail::sha256::sha256(chain_input.data(), chain_input.size());
         prev_hash_hex_ = hash_to_hex_impl(hash);
 
         return lineage;

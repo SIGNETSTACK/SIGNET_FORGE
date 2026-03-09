@@ -134,8 +134,13 @@ inline uint16_t f32_to_f16(float val) noexcept {
         // Subnormal in float16: shift mantissa right, adding the implicit 1
         uint32_t full_mantissa = mantissa | 0x800000u; // add implicit leading 1
         int32_t shift = -1 - unbiased_exp - 14 + 24;   // = -unbiased_exp - 14 + 23
-        // Guard: shift >= 32 is UB for uint32_t (CWE-682)
-        if (shift < 0 || shift >= 32) {
+        // Handle shift == 32 specially: preserve smallest subnormal (CWE-682)
+        if (shift == 32) {
+            uint16_t h_mantissa = static_cast<uint16_t>((full_mantissa >> 31) & 1u);
+            return h_sign | h_mantissa;
+        }
+        // Guard: shift > 32 or negative is UB for uint32_t
+        if (shift < 0 || shift > 32) {
             return h_sign; // too small for float16 subnormal — rounds to zero
         }
         // Round to nearest even
@@ -257,6 +262,8 @@ public:
     /// Add a batch of vectors (num_vectors vectors, each `dimension` elements, row-major).
     inline void add_batch(const float* data, size_t num_vectors) {
         const size_t dim = spec_.dimension;
+        // Overflow check: num_vectors * dim must not overflow size_t
+        if (num_vectors > 0 && dim > 0 && num_vectors > SIZE_MAX / dim) return;
         for (size_t i = 0; i < num_vectors; ++i) {
             add(data + i * dim);
         }

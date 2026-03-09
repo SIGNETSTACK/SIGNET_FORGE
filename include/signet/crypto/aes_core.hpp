@@ -283,6 +283,15 @@ public:
         // TODO(C-5): When SIGNET_ENABLE_AESNI=ON and has_hardware_aes(),
         // skip T-table prefetch and use _mm_aesenc_si128 intrinsics instead.
         // This eliminates the cache-timing side channel entirely.
+        //
+        // ACCEPTED RISK (H-1): The S-box table lookup is fundamentally
+        // timing-vulnerable on CPUs without AES-NI/ARMv8-CE. The prefetch
+        // above reduces but does not eliminate the attack surface — an
+        // attacker sharing an L1 cache line can still observe access patterns
+        // via FLUSH+RELOAD or PRIME+PROBE. This is accepted until a hardware
+        // AES path (AES-NI _mm_aesenc_si128 / ARMv8-CE vaeseq_u8) is
+        // implemented in TODO(C-5). All deployments on shared hardware should
+        // prefer CPUs with hardware AES support.
         for (size_t i = 0; i < 256; i += 64 / sizeof(uint8_t)) {
             volatile uint8_t sink = detail::aes::SBOX[i];
             (void)sink;
@@ -319,6 +328,8 @@ public:
     void decrypt_block(uint8_t block[BLOCK_SIZE]) const {
         // Prefetch entire inverse S-box into cache to mitigate timing side-channels.
         // Ref: D.J. Bernstein "Cache-timing attacks on AES" (2005), CWE-208.
+        // ACCEPTED RISK (H-1): See encrypt_block() comment — same cache-timing
+        // residual risk applies to the inverse S-box lookup path.
         for (size_t i = 0; i < 256; i += 64 / sizeof(uint8_t)) {
             volatile uint8_t sink = detail::aes::INV_SBOX[i];
             (void)sink;

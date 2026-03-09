@@ -227,6 +227,9 @@ private:
 /// @see MmapReader     (low-level mmap handle)
 /// @see ParquetReader  (non-mmap reader alternative)
 /// @see ColumnReader   (per-page value decoder)
+/// Maximum number of values per page for mmap reader (CWE-770: OOM guard).
+static constexpr int64_t MMAP_MAX_VALUES_PER_PAGE = 100'000'000;
+
 class MmapParquetReader {
 public:
     /// Open a Parquet file with memory-mapped I/O.
@@ -859,8 +862,6 @@ private:
             num_values = col_meta.num_values;
         }
 
-        // Cap num_values to prevent OOM from crafted files (CWE-770)
-        static constexpr int64_t MMAP_MAX_VALUES_PER_PAGE = 100'000'000;
         if (num_values < 0 || num_values > MMAP_MAX_VALUES_PER_PAGE) {
             return Error{ErrorCode::CORRUPT_PAGE,
                          "mmap: num_values out of range (" +
@@ -941,6 +942,8 @@ private:
         } else {
             num_values = col_meta.num_values;
         }
+        if (num_values < 0 || num_values > 100'000'000)
+            return Error{ErrorCode::CORRUPT_DATA, "Invalid num_values in page header"};
 
         DictionaryDecoder<T> decoder(dict_pr.data, dict_pr.size,
                                      num_dict_entries, col_meta.type);
@@ -969,6 +972,8 @@ private:
         } else {
             num_values = col_meta.num_values;
         }
+        if (num_values < 0 || num_values > 100'000'000)
+            return Error{ErrorCode::CORRUPT_DATA, "Invalid num_values in page header"};
 
         size_t count = static_cast<size_t>(num_values);
 
@@ -1002,6 +1007,8 @@ private:
         } else {
             num_values = col_meta.num_values;
         }
+        if (num_values < 0 || num_values > 100'000'000)
+            return Error{ErrorCode::CORRUPT_DATA, "Invalid num_values in page header"};
 
         size_t count = static_cast<size_t>(num_values);
 
@@ -1034,6 +1041,8 @@ private:
         } else {
             num_values = col_meta.num_values;
         }
+        if (num_values < 0 || num_values > 100'000'000)
+            return Error{ErrorCode::CORRUPT_DATA, "Invalid num_values in page header"};
 
         size_t count = static_cast<size_t>(num_values);
 

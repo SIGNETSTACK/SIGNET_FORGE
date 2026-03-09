@@ -24,14 +24,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     size_t payload_len     = size - 60;
 
     // --- AES-CTR (column page encryption) ---
-    // Returns std::vector<uint8_t> directly (not expected)
+    // Returns expected<std::vector<uint8_t>>
     {
         signet::forge::crypto::AesCtr ctr(key);
         auto enc = ctr.encrypt(payload, payload_len, ctr_iv);
-        if (enc.size() != payload_len) __builtin_trap();
-        auto dec = ctr.decrypt(enc.data(), enc.size(), ctr_iv);
-        if (dec.size() != payload_len) __builtin_trap();
-        if (payload_len > 0 && std::memcmp(dec.data(), payload, payload_len) != 0)
+        if (!enc.has_value()) __builtin_trap();
+        if (enc->size() != payload_len) __builtin_trap();
+        auto dec = ctr.decrypt(enc->data(), enc->size(), ctr_iv);
+        if (!dec.has_value()) __builtin_trap();
+        if (dec->size() != payload_len) __builtin_trap();
+        if (payload_len > 0 && std::memcmp(dec->data(), payload, payload_len) != 0)
             __builtin_trap();
     }
 

@@ -238,7 +238,9 @@ TEST_CASE("AES-CTR encrypt/decrypt roundtrip", "[crypto][ctr]") {
             }
 
             // Encrypt
-            auto ciphertext = ctr.encrypt(plaintext.data(), plaintext.size(), iv);
+            auto ct_result = ctr.encrypt(plaintext.data(), plaintext.size(), iv);
+            REQUIRE(ct_result.has_value());
+            auto& ciphertext = *ct_result;
             REQUIRE(ciphertext.size() == plaintext.size());
 
             // Ciphertext should differ from plaintext (unless all zeros by coincidence)
@@ -247,7 +249,9 @@ TEST_CASE("AES-CTR encrypt/decrypt roundtrip", "[crypto][ctr]") {
             }
 
             // Decrypt
-            auto decrypted = ctr.decrypt(ciphertext.data(), ciphertext.size(), iv);
+            auto dec_result = ctr.decrypt(ciphertext.data(), ciphertext.size(), iv);
+            REQUIRE(dec_result.has_value());
+            auto& decrypted = *dec_result;
             REQUIRE(decrypted.size() == plaintext.size());
             REQUIRE(decrypted == plaintext);
         }
@@ -268,9 +272,11 @@ TEST_CASE("AES-CTR is symmetric", "[crypto][ctr]") {
 
     // encrypt(data) should produce the same result as decrypt(data)
     auto enc_result = ctr.encrypt(data.data(), data.size(), iv);
+    REQUIRE(enc_result.has_value());
     auto dec_result = ctr.decrypt(data.data(), data.size(), iv);
+    REQUIRE(dec_result.has_value());
 
-    REQUIRE(enc_result == dec_result);
+    REQUIRE(*enc_result == *dec_result);
 }
 
 // ===================================================================
@@ -1883,9 +1889,10 @@ TEST_CASE("NIST SP 800-38A F.5.5 CTR-AES256 encrypt test vector", "[crypto][ctr]
     REQUIRE(expected_ct.size() == 64);
 
     crypto::AesCtr ctr(key.data());
-    auto ciphertext = ctr.encrypt(plaintext.data(), plaintext.size(), iv.data());
-    REQUIRE(ciphertext.size() == plaintext.size());
-    REQUIRE(ciphertext == expected_ct);
+    auto ct_result = ctr.encrypt(plaintext.data(), plaintext.size(), iv.data());
+    REQUIRE(ct_result.has_value());
+    REQUIRE(ct_result->size() == plaintext.size());
+    REQUIRE(*ct_result == expected_ct);
 }
 
 TEST_CASE("NIST SP 800-38A F.5.5 CTR-AES256 decrypt test vector", "[crypto][ctr][nist]") {
@@ -1906,9 +1913,10 @@ TEST_CASE("NIST SP 800-38A F.5.5 CTR-AES256 decrypt test vector", "[crypto][ctr]
         "f69f2445df4f9b17ad2b417be66c3710");
 
     crypto::AesCtr ctr(key.data());
-    auto plaintext = ctr.decrypt(ciphertext.data(), ciphertext.size(), iv.data());
-    REQUIRE(plaintext.size() == ciphertext.size());
-    REQUIRE(plaintext == expected_pt);
+    auto pt_result = ctr.decrypt(ciphertext.data(), ciphertext.size(), iv.data());
+    REQUIRE(pt_result.has_value());
+    REQUIRE(pt_result->size() == ciphertext.size());
+    REQUIRE(*pt_result == expected_pt);
 }
 
 TEST_CASE("NIST SP 800-38A F.5.5 CTR-AES256 single block", "[crypto][ctr][nist]") {
@@ -1921,8 +1929,9 @@ TEST_CASE("NIST SP 800-38A F.5.5 CTR-AES256 single block", "[crypto][ctr][nist]"
     auto expected_ct_block1 = hex_to_bytes("601ec313775789a5b7a7f504bbf3d228");
 
     crypto::AesCtr ctr(key.data());
-    auto ct = ctr.encrypt(pt_block1.data(), pt_block1.size(), iv.data());
-    REQUIRE(ct == expected_ct_block1);
+    auto ct_result = ctr.encrypt(pt_block1.data(), pt_block1.size(), iv.data());
+    REQUIRE(ct_result.has_value());
+    REQUIRE(*ct_result == expected_ct_block1);
 }
 
 // ===================================================================
@@ -2008,11 +2017,13 @@ TEST_CASE("AES-CTR KAT: NIST SP 800-38A F.5.5 full vector", "[crypto][kat][nist]
 
     crypto::AesCtr ctr(key.data());
     auto ct = ctr.encrypt(pt.data(), pt.size(), iv.data());
-    REQUIRE(ct == expected_ct);
+    REQUIRE(ct.has_value());
+    REQUIRE(*ct == expected_ct);
 
     // Verify symmetry: decrypt(encrypt(pt)) == pt
-    auto roundtrip = ctr.decrypt(ct.data(), ct.size(), iv.data());
-    REQUIRE(roundtrip == pt);
+    auto roundtrip = ctr.decrypt(ct->data(), ct->size(), iv.data());
+    REQUIRE(roundtrip.has_value());
+    REQUIRE(*roundtrip == pt);
 }
 
 TEST_CASE("crypto_self_test() passes all KATs", "[crypto][kat][selftest]") {

@@ -508,10 +508,10 @@ public:
     /// all zeros. This is used to continue a chain from a previous file.
     ///
     /// @param initial_prev_hash  The prev_hash for the next appended entry (default: all zeros).
-    inline void reset(std::array<uint8_t, 32> initial_prev_hash = {}) {
+    inline void reset(std::array<uint8_t, 32> initial_prev_hash = {}, int64_t initial_seq = 0) {
         entries_.clear();
         last_hash_ = initial_prev_hash;
-        next_seq_  = 0;
+        next_seq_  = initial_seq;
     }
 
 private:
