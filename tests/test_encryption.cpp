@@ -602,6 +602,10 @@ TEST_CASE("Plaintext footer with encrypted columns", "[crypto][pipeline]") {
 // 14. Kyber KEM encapsulate/decapsulate
 // ===================================================================
 TEST_CASE("Kyber KEM encapsulate/decapsulate", "[crypto][pq]") {
+    // CR-2: Stub encapsulate requires SIGNET_ALLOW_STUB_PQ; skip when not available
+    if (!crypto::is_real_pq_crypto()) {
+        SKIP("PQ stub encapsulate disabled without SIGNET_ALLOW_STUB_PQ");
+    }
     // Generate keypair
     auto kp_result = crypto::KyberKem::generate_keypair();
     REQUIRE(kp_result.has_value());
@@ -777,6 +781,10 @@ TEST_CASE("X25519 RFC 7748 known-answer vectors", "[crypto][pq][x25519]") {
 // 19. HybridKem round-trip shared secret
 // ===================================================================
 TEST_CASE("HybridKem round-trip shared secret", "[crypto][pq][hybrid]") {
+    // CR-2: HybridKem encapsulate uses Kyber stub which is gated
+    if (!crypto::is_real_pq_crypto()) {
+        SKIP("PQ stub encapsulate disabled without SIGNET_ALLOW_STUB_PQ");
+    }
     // Generate recipient keypair (Kyber-768 + real X25519)
     auto kp_result = crypto::HybridKem::generate_keypair();
     REQUIRE(kp_result.has_value());
@@ -810,6 +818,10 @@ TEST_CASE("HybridKem round-trip shared secret", "[crypto][pq][hybrid]") {
 // 20. HybridKem degenerate X25519 input rejected
 // ===================================================================
 TEST_CASE("HybridKem degenerate X25519 input rejected", "[crypto][pq][hybrid]") {
+    // CR-2: HybridKem encapsulate uses Kyber stub which is gated
+    if (!crypto::is_real_pq_crypto()) {
+        SKIP("PQ stub encapsulate disabled without SIGNET_ALLOW_STUB_PQ");
+    }
     // Generate a valid recipient keypair
     auto kp_result = crypto::HybridKem::generate_keypair();
     REQUIRE(kp_result.has_value());

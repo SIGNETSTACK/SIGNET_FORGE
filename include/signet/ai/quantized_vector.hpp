@@ -381,8 +381,9 @@ inline QuantizationParams QuantizationParams::compute(
     const size_t total = num_vectors * static_cast<size_t>(dim);
 
     // Find min and max across all finite values (skip NaN/Infinity)
-    float vmin = std::numeric_limits<float>::max();
-    float vmax = std::numeric_limits<float>::lowest();
+    // Parenthesized to prevent MSVC min/max macro expansion
+    float vmin = (std::numeric_limits<float>::max)();
+    float vmax = (std::numeric_limits<float>::lowest)();
     for (size_t i = 0; i < total; ++i) {
         const float v = data[i];
         if (!std::isfinite(v)) continue;
