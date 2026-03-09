@@ -537,11 +537,17 @@ public:
             if (bit_width_ > 0) {
                 size_t max_groups = avail_bytes / static_cast<size_t>(bit_width_) + 1;
                 if (group_count > max_groups) group_count = max_groups;
+            } else {
+                // bit_width_ == 0: all values are 0, cap to available data
+                if (group_count > avail_bytes + 1) group_count = avail_bytes + 1;
             }
             if (group_count == 0) return false;
 
             size_t total_values = group_count * 8;
             size_t total_bytes = group_count * static_cast<size_t>(bit_width_);
+            // Value-count cap: prevent OOM when bit_width_==0 (CWE-770)
+            static constexpr size_t MAX_BP_VALUES = 32 * 1024 * 1024; // 32M values
+            if (total_values > MAX_BP_VALUES) return false;
             // Byte-based cap: prevent huge allocations from corrupt varints (CWE-770)
             static constexpr size_t MAX_BP_BYTES = 256 * 1024 * 1024; // 256 MB
             if (total_bytes > MAX_BP_BYTES) return false;
