@@ -54,6 +54,11 @@
 #include <string>
 #include <vector>
 
+// Windows <mmsystem.h> defines TIME_MS as a macro — undefine after all includes.
+#ifdef TIME_MS
+#undef TIME_MS
+#endif
+
 namespace signet::forge {
 
 /// CWE-400: Uncontrolled Resource Consumption

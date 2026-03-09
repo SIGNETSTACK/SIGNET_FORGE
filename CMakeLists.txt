@@ -314,6 +314,7 @@ if(SIGNET_BUILD_TESTS)
             tests/test_encryption.cpp
             tests/test_audit_chain.cpp
             tests/test_compliance_reports.cpp
+            tests/test_gap_pass12.cpp
         )
     endif()
     add_executable(signet_tests ${SIGNET_TEST_SOURCES})

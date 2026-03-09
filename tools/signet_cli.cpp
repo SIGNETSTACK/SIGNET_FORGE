@@ -27,6 +27,11 @@
 #include <iostream>
 #include <string>
 
+// Windows <mmsystem.h> defines TIME_MS as a macro — undefine to avoid collision.
+#ifdef TIME_MS
+#undef TIME_MS
+#endif
+
 using namespace signet::forge;
 
 // ---------------------------------------------------------------------------

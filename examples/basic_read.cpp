@@ -20,6 +20,11 @@
 #include <algorithm>
 #include <iostream>
 
+// Windows <mmsystem.h> defines TIME_MS as a macro — undefine to avoid collision.
+#ifdef TIME_MS
+#undef TIME_MS
+#endif
+
 using namespace signet::forge;
 
 // Helper: convert PhysicalType enum to a human-readable name.

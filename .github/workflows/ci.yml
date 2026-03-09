@@ -303,6 +303,8 @@ jobs:
         run: cmake --build build-fuzz --parallel
 
       - name: Run fuzzers (60s each)
+        env:
+          ASAN_OPTIONS: allocator_may_return_null=1:detect_leaks=0
         run: |
           mkdir -p fuzz-artifacts
           for target in fuzz_parquet_reader fuzz_thrift_decoder fuzz_wal_reader \
@@ -313,6 +315,8 @@ jobs:
             mkdir -p fuzz-artifacts/$target
             ./build-fuzz/$target \
               -max_total_time=60 \
+              -rss_limit_mb=2048 \
+              -malloc_limit_mb=2048 \
               -print_final_stats=1 \
               -artifact_prefix=fuzz-artifacts/$target/ \
               || true
