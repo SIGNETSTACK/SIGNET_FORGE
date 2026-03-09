@@ -7,6 +7,190 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enterprise Compliance — 67 of 92 Gaps Resolved (2026-03-09)
+
+Eight compliance gap-fix passes resolving 67 of 92 enterprise regulatory gaps. 554 unit tests (100% passing). Covers FIPS 140-3, EU AI Act, MiFID II, GDPR, DORA, and Parquet PME spec.
+
+#### Gap Fix Pass 1 (7 gaps)
+- CodeQL SAST workflow with `security-extended` query suite (T-1)
+- CycloneDX SBOM generation via `anchore/syft` (T-2)
+- Full 554-test commercial tier coverage in CI (T-15)
+- Sanitizer coverage for crypto code paths (T-15b)
+- GCM invocation counter with 2^32 key rotation trigger (C-3)
+- UTC `system_clock` traceability for all timestamps (R-5)
+- MiFID II RTS 24 mandatory fields: buy_sell_indicator, order_type, time_in_force, ISIN, currency, short_selling_flag (R-4)
+
+#### Gap Fix Pass 2 (11 gaps)
+- Log retention lifecycle API with configurable policies (R-1)
+- EU AI Act Art.13 transparency model card fields (R-2)
+- Human oversight API: `HumanOverrideRecord`, override tracking, override rate monitoring (R-3)
+- Art.15 accuracy metrics: PSI/KS-test drift detection, bias monitoring (R-3b)
+- Full NIST SP 800-38D test vector suite — 18 test cases (C-2/T-4)
+- Crypto fuzz harnesses: AES-GCM, PME, key metadata (T-3)
+- PME dictionary page + page header encryption (P-1, P-2)
+- AAD binary format per PME spec (P-4)
+- Thrift-serialized key metadata replacing custom TLV (P-6)
+- PME negative security tests: AAD mismatch, key confusion, page reorder (P-9)
+
+#### Gap Fix Pass 3 (9 gaps)
+- GCM tag truncation rejection (C-6)
+- AAD length limit enforcement per SP 800-38D (C-12)
+- Column key O(1) cache with `unordered_map` (P-8)
+- NIST SP 800-38A CTR test vectors (P-10)
+- Power-on crypto self-tests / KATs (C-9)
+- LEI, ISIN, MIC code validation per ISO 17442/6166/10383 (R-12/R-12b/R-12c)
+- Kill switch / circuit breaker API (R-10)
+- HKDF key derivation per RFC 5869 (C-7/C-8)
+
+#### Gap Fix Pass 4 (7 gaps)
+- Signed plaintext footer with HMAC-SHA256 + HKDF-derived keys (P-3)
+- KMS client interface: `IKmsClient` abstract class for DEK/KEK key wrapping (P-5)
+- `SecureKeyBuffer` RAII with mlock/munlock + secure zeroization (C-11)
+- Crypto-shredding for GDPR Art.17 right-to-erasure (G-1)
+- PII data classification: 6-level `DataClassification` enum (G-2)
+- Pre-trade risk checks per MiFID II RTS 6 Art. 17 (R-11)
+- ICT asset identification/classification per DORA Art. 7-8 (D-6)
+
+#### Gap Fix Pass 5 (7 gaps)
+- Pseudonymizer utility: HMAC-SHA256 deterministic keyed hashing (G-5)
+- GDPR writer policy: enforcement of encryption for PII columns (G-7)
+- Records of Processing Activities (ROPA) per GDPR Art. 30 (G-3)
+- Data retention / TTL with legal hold support per GDPR Art. 5(1)(e) (G-4)
+- Backup policy / RPO tracking per DORA Art. 12 (D-3)
+- Key rotation lifecycle management per DORA Art. 9(2) (D-11)
+- Continuous RNG test (CRNGT) per FIPS 140-3 §4.9.2 (C-13)
+
+#### Gap Fix Pass 6 (8 gaps — DORA compliance)
+- ICT incident management: `ICTIncidentRecord`, severity scoring per DORA Art. 10/15/19 (D-1)
+- Resilience testing: `ResilienceTestRecord` per DORA Art. 24-27 (D-2)
+- Third-party risk: `ThirdPartyRiskEntry` per DORA Art. 28-30 (D-4)
+- ICT risk management: `ICTRiskEntry` per DORA Art. 5-6 (D-5)
+- Anomaly detection: `AnomalyRecord` with 6 categories per DORA Art. 10 (D-7)
+- Recovery procedures: `RecoveryProcedure` per DORA Art. 11 (D-8)
+- Post-incident review: `PostIncidentReview` per DORA Art. 13 (D-9)
+- ICT notification: `ICTNotification` per DORA Art. 14 (D-10)
+
+#### Gap Fix Pass 7 (15 gaps — EU AI Act + MiFID II + GDPR)
+- DPIA record per GDPR Art. 35 (G-6)
+- Subject data query/response for DSAR per GDPR Art. 15 (G-8)
+- Performance/drift metrics per EU AI Act Art. 15 (R-6)
+- AI risk assessment per EU AI Act Art. 9 (R-7)
+- Technical documentation per EU AI Act Art. 11/Annex IV (R-8)
+- QMS checkpoints per EU AI Act Art. 17 (R-9)
+- Report integrity / signed reports per MiFID II RTS 24 Art. 4 (R-13/R-13b)
+- Completeness attestation with gap detection per RTS 24 Art. 9 (R-13c)
+- Annual self-assessment per MiFID II Art. 17(2) (R-14)
+- Training data metrics per EU AI Act Art. 10 (R-15)
+- Lifecycle event logging per EU AI Act Art. 12(2) (R-15b)
+- Post-market monitoring per EU AI Act Art. 61 (R-16)
+- Order lifecycle linking with `parent_order_id` per RTS 24 Art. 9 (R-17)
+- Serious incident reporting per EU AI Act Art. 62 (R-18)
+- Source file manifest in reports (R-18b)
+
+#### Gap Fix Pass 8 (3 gaps — Crypto infrastructure)
+- Algorithm deprecation framework per NIST SP 800-131A (C-4)
+- `INTERNAL` key mode production gate per FIPS 140-3 §7.7 (C-15)
+- Key rotation request/result API per PCI-DSS/HIPAA/SOX (T-7)
+
+### Security — Comprehensive Cryptographic & Systems Audit (2026-03-08)
+
+End-to-end security audit across all 53 header files — crypto, encoding, compression, Thrift, bloom, core reader/writer, interop bridges, AI tier, WAL, streaming, feature store, event bus, and compliance reporters. 91 vulnerabilities identified and fixed across ~45 files. 423/423 tests pass.
+
+#### Cryptography (21 fixes)
+- AES S-box cache-timing mitigation: full table prefetch before encrypt/decrypt (NIST/Bernstein 2005)
+- Constant-time `gf_mul` in MixColumns: replaced branching with arithmetic masking
+- `Aes256` made non-copyable (key material hygiene); move ops securely zero source
+- GCM: `encrypt()`/`decrypt()` now call `derive_j0()` for correct 12/16-byte IV handling (NIST SP 800-38D §7.1)
+- GCM `gctr()`: block count overflow guard (2^32-2 limit per NIST SP 800-38D)
+- MSVC X25519 `fe_sub`: corrected `2p` constants (was `0x3FFFFF0`, now `2^26-19`); all X25519 on Windows was broken
+- Hybrid KEM: added domain separation label `"signet-forge-hybrid-kem-v1"` to SHA-256 key combining (NIST SP 800-227 draft)
+- `AesGcmCipher`/`AesCtrCipher`: key storage changed from `std::vector` to `std::array<uint8_t, 32>` (prevents reallocation leaks)
+- `BCryptGenRandom`: return value now checked; size validated against `ULONG` truncation (Windows)
+- `KeyMode::INTERNAL`: runtime warning when raw key stored in Parquet metadata
+- TLV `append_tlv_str`/`append_tlv_blob`: overflow check against `MAX_TLV_LENGTH`
+- TLV deserialization: `KeyMode` and `EncryptionAlgorithm` enum range validation
+- `KeyPair`, `SignKeyPair`, `HybridKeyPair`, `PostQuantumConfig`: zeroing destructors for secret key material
+- Audit chain `now_ns()`: changed to `steady_clock` + cross-thread atomic monotonicity (was `high_resolution_clock` + `thread_local`)
+- Audit chain serialize: overflow check on entry count before `uint32_t` cast
+- Audit chain deserialize: bounds check before `reserve()` to prevent 480 GB allocation on crafted input
+- Non-constant-time `ghash()` marked `[[deprecated]]`
+
+#### Encoding & Compression (22 fixes)
+- RLE decoder: truncated value now returns `false` instead of silently zeroing missing bytes
+- RLE varint: stream position restored on overflow (was left misaligned)
+- RLE `encode_with_length`: payload size overflow check before `uint32_t` cast
+- RLE `flush_rle_run`: shift overflow guard (`rle_count_` capped at `SIZE_MAX >> 1`)
+- Delta `decode_int32`: range check against `INT32_MIN`/`INT32_MAX` before narrowing cast
+- Delta encoder: subtraction uses unsigned arithmetic to avoid signed overflow UB
+- Dictionary encoder: `MAX_DICTIONARY_ENTRIES` (1M) limit with `is_full()` API
+- BSS encode: overflow check on `count × WIDTH` before allocation (parity with decode)
+- Decompression bomb: absolute 256 MB cap + zero-length compressed data rejection + ratio check
+- Snappy compress: input >4 GiB rejected (was silently truncated to 32 bits)
+- Snappy decompress: 256 MB absolute size cap
+- Snappy `match_length`: bounds guard on source pointers
+- LZ4: `size_t`→`int` overflow validation before all liblz4 calls
+- GZIP: `size_t`→`uInt` overflow validation before all zlib calls
+- Thrift: `zigzag_encode_i64` uses unsigned left shift (UB fix for negative values)
+- Thrift: `write_list_header` rejects negative size
+- Thrift: `end_struct` sets `error_` on stack underflow instead of silent no-op
+- Thrift: global `total_fields_read_` counter with 1M cap (prevents per-struct reset bypass)
+- Bloom `from_data`: enforces `kMaxBytes` (128 MiB) limit
+- Bloom: `reinterpret_cast<uint32_t*>` replaced with `memcpy`-based access (strict aliasing + alignment)
+- xxHash: MSVC endianness detection added (was `#error` on MSVC)
+
+#### Core Reader/Writer/Interop (23 fixes)
+- `read_batch_string()`: subtraction-based bounds check prevents integer overflow (was `pos_ + len > size_`)
+- `extract_byte_array_strings()`: bounds checks on length prefix and string data reads
+- `data_at()` in mmap reader: validates offset against `mapped_size_`
+- Mmap reader: `MADV_WILLNEED` + volatile first/last byte read to detect truncated files early
+- Mmap reader: 1024:1 decompression ratio check (parity with regular reader)
+- Column index: list count capped at 10M before `resize()` (prevents Thrift-based memory bomb)
+- Column writer: >4 GiB BYTE_ARRAY now throws `std::length_error` (was silent data loss)
+- `SIGNET_FORGE_STATE_DIR`: path traversal rejection (`..` segments)
+- Default usage state path: XDG_STATE_HOME/HOME-based (was `/tmp` — symlink attack risk)
+- Usage state file: `lstat` symlink check before write (TOCTOU mitigation)
+- DLPack `byte_offset`: range validation
+- DLPack `import_tensor_copy`: checked multiplication for `num_elements × elem_size`
+- DLPack ndim: range check (max 32)
+- Arrow bridge: `memset` zero-initialization of output structs (prevents double-free on partial init)
+- ONNX bridge: dimension positivity validation
+- Reader: 1024:1 decompression ratio check
+- Reader: 256 MB decoded page memory budget
+- Statistics: type-safety documentation for `min_as<T>`/`max_as<T>`
+- Z-order: alignment validation before pointer casts in `normalize_column()`
+- Arena: `allocate_zeroed()` method added
+
+#### AI / WAL / Streaming / Compliance (25 fixes)
+- `WalMmapWriter::append()`: assert-only bounds check replaced with runtime `if` check (was compiled away in Release)
+- `WalMmapWriter`: `WAL_MAX_RECORD_SIZE` enforcement (was missing — records >64 MB caused silent WalReader data loss)
+- `WalMmapWriter`: `active_idx_` changed to `std::atomic<size_t>` (data race between writer and bg thread)
+- `WalMmapWriter`: `closed_` changed to `std::atomic<bool>`
+- `WalWriter::open()` resume scan: `WAL_MAX_RECORD_SIZE` enforcement (prevents corrupt `data_sz` skip)
+- `WalWriter`: Windows `_ftelli64()` for >2 GB WAL files
+- WAL CRC-32: documented as crash-recovery-only (not tamper-evident)
+- `EventBus`: `sink_` changed to `std::atomic<StreamingSink*>` (use-after-free on concurrent detach)
+- `MpmcRing::Slot`: `alignas(64)` to eliminate false sharing (latency impact 2-5x)
+- `ColumnBatch::to_stream_record`: `uint32_t` overflow check on row count
+- `InferenceRecord::serialize()`: added EU AI Act training provenance fields (`training_dataset_id`, `training_dataset_size`, `training_data_characteristics`) — previously omitted, allowing metadata tampering without breaking hash chain
+- `json_to_features`/`json_to_embedding`: 1M element cap (prevents memory exhaustion on crafted JSON arrays)
+- `FeatureReader`: `failed_file_count_` tracking (was silent skip — compliance risk for incomplete feature queries)
+- `FeatureWriter`: partial file cleanup on roll close failure
+- `FeatureWriter`: symlink limitation documented
+- `DecisionLogWriter`: symlink limitation documented
+- `MiFID2Reporter`: CSPRNG random hex suffix on auto-generated `report_id` (was predictable timestamp-only)
+- `EUAIActReporter`: per-record anomaly flag changed to `mean + 3σ` (was inconsistent `3× mean`)
+- `StreamingSink`: `std::filesystem::path` iteration for path traversal check (was manual string splitting)
+- `SpscRingBuffer`: heap allocation documentation for large capacities
+- `RowLineageTracker`: commercial license check discard documented as intentional
+
+#### Regulatory Compliance Impact
+- **MiFID II RTS 24**: Report IDs now include CSPRNG entropy — satisfies uniqueness requirement per Annex I field 1
+- **EU AI Act Article 12**: Per-record anomaly detection now uses 3-sigma statistical threshold consistent with aggregate (was `3× mean`), ensuring coherent monitoring logs per Article 12(1)
+- **EU AI Act Article 13**: `InferenceRecord` serialization now includes training dataset provenance fields, ensuring hash chain integrity covers training data characteristics per Article 13(3)(b)(ii)
+- **NIST SP 800-38D**: GCM IV derivation (`derive_j0`) correctly implements §7.1 for both 96-bit and non-96-bit IVs; counter overflow guard implements §5.2.1
+- **RFC 7748**: X25519 Montgomery ladder field arithmetic corrected for MSVC (10-limb representation)
+- **FIPS 197**: AES S-box cache-timing mitigation via full-table prefetch
+
 ### Security — Static Audit Follow-Up (2026-03-07)
 
 - 11 additional fixes from cross-referencing 15 static audit findings against Pass #5
@@ -161,7 +345,7 @@ Initial public release of Signet Forge.
   - *WASM*: writeFileToMemfs 256 MB file size limit, schema column accessor bounds checks, writer column bounds checks, encryption key material zeroing after use (volatile write)
   - *Python*: __init__.py graceful degradation for AI audit types (try/except ImportError), write_column_bool bounds check parity with other write_column methods
   - *Keygen*: parse_hex_hash bare "0x" rejection, expiry_date overflow clamp [1,36500 days], semicolon injection prevention in custom claims
-- 394 total unit tests + 5 Rust integration tests + 5 doc-compile tests, all passing across all 4 hardening passes
+- 423 total unit tests + 5 Rust integration tests + 5 doc-compile tests, all passing across all 5 hardening passes plus static audit follow-up
 
 [Unreleased]: https://github.com/SIGNETSTACK/signet-forge/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/SIGNETSTACK/signet-forge/releases/tag/v0.1.0

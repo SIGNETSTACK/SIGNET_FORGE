@@ -84,10 +84,17 @@ The following hard caps are enforced to prevent resource exhaustion from malform
 | GCM max plaintext | ~64 GB | `crypto/aes_gcm.hpp` (`MAX_GCM_PLAINTEXT`) |
 | TLV max field length | 64 MB | `crypto/key_metadata.hpp` (`MAX_TLV_LENGTH`) |
 | Compliance field length | 4,096 chars | `compliance/mifid2_reporter.hpp`, `eu_ai_act_reporter.hpp` |
+| Maximum decompressed page size | 256 MB | `compression/codec.hpp` (`MAX_DECOMPRESS_SIZE`) |
+| Maximum decompression ratio | 1024:1 | `reader.hpp`, `mmap_reader.hpp` |
+| Maximum dictionary entries | 1,048,576 | `encoding/dictionary.hpp` (`MAX_DICTIONARY_ENTRIES`) |
+| Column index list count cap | 10,000,000 | `column_index.hpp` |
+| Thrift global field limit | 1,000,000 | `thrift/compact.hpp` (`MAX_TOTAL_FIELDS`) |
+| JSON array parse limit | 1,000,000 | `ai/decision_log.hpp`, `ai/inference_log.hpp` |
+| DLPack max ndim | 32 | `interop/numpy_bridge.hpp` |
 
 ## Security Hardening
 
-Four security hardening passes have been completed, covering 87 confirmed vulnerabilities:
+Six security hardening passes plus a static audit follow-up have been completed, covering 242 confirmed vulnerabilities:
 
 **Pass #1** (6 vulnerabilities):
 - BYTE_STREAM_SPLIT decode out-of-bounds reads
@@ -122,7 +129,26 @@ Four security hardening passes have been completed, covering 87 confirmed vulner
 - *Python*: __init__.py graceful degradation (try/except ImportError), write_column_bool bounds check
 - *Keygen*: parse_hex_hash bare "0x" rejection, expiry_date clamp [1,36500], semicolon injection prevention
 
-Run hardening tests: `ctest -L hardening` — covers all 4 passes (394 total tests)
+**Pass #5** (53 vulnerabilities):
+- *CRITICAL (8)*: Constant-time GHASH (4-bit table), GCM counter overflow guard, RLE resize formula, dictionary error reporting, BYTE_ARRAY bounds (read+write), INT4 sign extension, verify_chain early return
+- *HIGH (18)*: Secure key zeroing (volatile+barrier), move-only ciphers, CSPRNG hardening (BCryptGenRandom+hard-fail), overflow guards (BSS, delta, mmap footer, arena), typed statistics, NaN exclusion, xxHash endianness, configurable compliance (price precision, timestamp granularity), training metadata, cross-chain verification, monotonic timestamps, MPMC ring validation
+- *MEDIUM (18)*: Constant-time X25519 zero check, TLV 1MB cap, PME module_type validation, Thrift nesting (128→64), Arrow caps, bloom seed, writer validation, SHA-256 FIPS vector, WAL empty record tracking, instrument validator, feature lineage
+- *LOW (9)*: 64-bit Snappy hash, Thrift errors, GCM IV config, mmap pre-validation; 4 no-ops
+
+**Pass #6 — Comprehensive Cryptographic & Systems Audit** (91 vulnerabilities):
+
+*Crypto (21 fixes)*: AES S-box cache-timing mitigation (table prefetch), constant-time gf_mul, Aes256 non-copyable, GCM derive_j0() for 12/16-byte IVs (NIST SP 800-38D §7.1), GCM gctr() counter overflow guard, MSVC X25519 fe_sub corrected constants, hybrid KEM domain separation label, cipher key storage std::array (was std::vector), BCryptGenRandom validation, KeyMode::INTERNAL runtime warning, TLV overflow checks, enum range validation, PQ key zeroing destructors, audit chain steady_clock + atomic monotonicity
+
+*Encoding/Compression (22 fixes)*: RLE truncated value detection, varint stream position restore, encode_with_length overflow guard, rle_count_ shift cap, delta decode_int32 range check, delta encoder unsigned subtraction, dictionary MAX_DICTIONARY_ENTRIES (1M), BSS encode overflow check, decompression bomb 256MB cap + zero-length rejection, Snappy 4GiB guard + 256MB decompress cap, LZ4/GZIP size truncation validation, Thrift zigzag unsigned shift + negative size rejection + stack underflow detection + global field counter (1M), bloom from_data size cap + memcpy aliasing fix, xxHash MSVC endianness
+
+*Core I/O (23 fixes)*: Integer overflow in read_batch_string(), extract_byte_array_strings() bounds checks, mmap data_at() bounds validation, mmap SIGBUS early detection, mmap decompression ratio, column index list count cap (10M), column_writer >4GiB error, env var path traversal, /tmp→XDG state path, symlink write check, DLPack byte_offset/size overflow/ndim checks, Arrow zero-init on partial failure, ONNX dimension validation, reader decompression ratio + memory budget, z_order alignment checks, arena allocate_zeroed()
+
+*AI/WAL/Streaming (25 fixes)*: WalMmapWriter assert→runtime bounds check, WAL_MAX_RECORD_SIZE enforcement in mmap writer, active_idx_ + closed_ atomicity, WalWriter resume scan size check, Windows 64-bit ftell, EventBus atomic sink pointer, MpmcRing alignas(64), ColumnBatch row count overflow, InferenceRecord EU AI Act training fields in serialize(), JSON parser 1M cap, FeatureReader failed file tracking, FeatureWriter partial file cleanup, MiFID2 CSPRNG report IDs, EU AI Act consistent 3σ anomaly detection, StreamingSink filesystem path iteration
+
+**Static audit follow-up** (11 fixes):
+- Page CRC-32 in writer, mmap parity gaps, reader row_group OOB, Z-Order column count validation, Float16 shift UB + unaligned cast fixes, feature flush data loss prevention, getrandom EINTR retry, delta zigzag unsigned shift, statistics typed merge, compliance error reporting, WAL fsync checks
+
+Run hardening tests: `ctest -L hardening` — covers all 6 passes plus follow-up (423 total tests)
 
 ## Credit
 

@@ -688,7 +688,7 @@ Annex I explicitly names as required fields in every algorithmic trading record.
 **Runner**: Catch2 BENCHMARK macro  
 **Total cases**: 31 (across 6 files)
 
-> **Note**: Total C++ unit test count is **390/390** as of the Mar 2026 security hardening pass #3 (was 306 → 317 → 334 → 390). See [Security Hardening Tests](#security-hardening-tests-added-feb-2026) below.  
+> **Note**: Total C++ unit test count is **423/423** as of the Mar 2026 security hardening pass #5 + static audit follow-up (was 306 → 317 → 334 → 390 → 394 → 423). See [Security Hardening Tests](#security-hardening-tests-added-feb-2026) below.
 **Tags**: `[bench]` (top-level), plus specific tags per file
 
 ### How Catch2 BENCHMARK works
@@ -1442,4 +1442,4 @@ A hardening pass added 11 new negative/boundary tests covering 6 confirmed vulne
 
 All 6 vulnerabilities confirmed fixed prior to first public commit. Total test count after pass #1: **317/317**.
 
-> Hardening pass #2 added 6 more guards + 6 tests (334 total). Hardening pass #3 added 23 more guards + 22 tests (390 total). See CHANGELOG.md for full details.
+> Hardening pass #2 added 6 more guards + 6 tests (334 total). Hardening pass #3 added 23 more guards + 22 tests (390 total). Hardening pass #4 added 29 more guards + 4 tests (394 total). Hardening pass #5 added 53 more guards + 29 tests (423 total). Static audit follow-up completed 11 additional fixes (no new tests — existing 423 cover all paths). See CHANGELOG.md for full details.

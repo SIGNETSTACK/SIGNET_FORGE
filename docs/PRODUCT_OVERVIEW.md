@@ -80,9 +80,10 @@ propagate automatically through every language layer.
 
 ## Security
 
-**87 vulnerabilities fixed** across 4 dedicated hardening passes covering every layer of the
-stack: core C++ engine, cryptography, Thrift parser, all 5 encodings, all 4 interop bridges,
-AI tier, compliance reporters, and every language binding (C FFI, Rust, Python, WASM).
+**151 vulnerabilities fixed** across 5 dedicated hardening passes plus a static audit follow-up,
+covering every layer of the stack: core C++ engine, cryptography, Thrift parser, all 5 encodings,
+all 4 interop bridges, AI tier, compliance reporters, and every language binding (C FFI, Rust,
+Python, WASM).
 
 | Category | Fixes | Examples |
 |----------|-------|---------|
@@ -94,7 +95,7 @@ AI tier, compliance reporters, and every language binding (C FFI, Rust, Python, 
 | Path traversal | 3 | FeatureWriter, DecisionLogWriter, StreamingSink |
 | Input validation | 8 | Magic bytes, empty records, negative counts |
 
-**Test coverage**: 394 C++ tests + 35 Python tests + 10 Rust tests + 6 fuzz harnesses +
+**Test coverage**: 423 C++ tests + 35 Python tests + 10 Rust tests + 6 fuzz harnesses +
 59 enterprise benchmarks. Sanitizer CI: ASan, TSan, UBSan. Coverage reporting via Codecov.
 
 ---

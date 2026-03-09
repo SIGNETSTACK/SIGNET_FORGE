@@ -371,7 +371,7 @@ cmake --preset ci          # RelWithDebInfo + all targets → build-ci/
 ## Test Coverage
 
 ```
-394 unit tests   (100% pass)   cmake --preset dev-tests && ctest
+423 unit tests   (100% pass)   cmake --preset server-pq && ctest
  37 benchmark cases             cmake --preset benchmarks
  59 enterprise benchmarks       Benchmarking_Protocols/ (real tick data, 9 phases)
  35 Python tests (100% pass)    PYTHONPATH=python pytest python/tests/
@@ -383,17 +383,18 @@ vector types, tensor bridge, audit chain integrity, WAL crash recovery + mmap ri
 feature store time-travel, MPMC event bus, MiFID II and EU AI Act report generation,
 z-order curve encoding, page index predicate pushdown.
 
-**Security hardening tests** (`ctest -L hardening`): four hardening passes covering 87
-confirmed vulnerabilities — encoding boundary values (RLE/BSS/Delta/Dictionary), Thrift parser
-DoS (nesting depth, field count, string bomb, negative list count, MAP size), crypto hardening
-(platform CSPRNG IV generation, GCM/CTR counter overflow, TLV size overflow, key material zeroing),
-interop guards (Arrow offset overflow, RAII memory management), AI tier hardening (assert→throw,
-string truncation, symlink path traversal, verify_chain early return), compliance field length
-limits, WAL empty record rejection, 64-bit time_t enforcement, integer overflow guards across
-arena allocator/column reader/delta encoder, decompression ratio bomb limit (1024:1), NaN
-exclusion from statistics, C FFI exception safety (try/catch on all extern "C" functions),
-Rust FFI panic safety (Result returns instead of panic across FFI), WASM bounds checking and
-key material zeroing, and Python graceful degradation for optional modules.
+**Security hardening tests** (`ctest -L hardening`): five hardening passes plus static audit
+follow-up covering 151 confirmed vulnerabilities — constant-time GHASH, GCM/CTR counter overflow,
+CSPRNG hardening (platform dispatch + hard-fail), secure key zeroing (volatile+barrier), move-only
+ciphers, typed statistics merge, page CRC-32, encoding boundary values (RLE/BSS/Delta/Dictionary),
+Thrift parser DoS (nesting depth, field count, string bomb, negative list count, MAP size),
+interop guards (Arrow offset/length caps, RAII memory management), AI tier hardening (Float16
+shift UB, unaligned cast fixes, feature flush ordering, Z-Order bounds, INT4 sign extension,
+verify_chain early return), compliance (cross-chain verification, error reporting, price precision,
+timestamp granularity, training metadata), WAL fsync checks + empty record rejection, mmap parity
+(negative page size, num_values cap, decompression pre-validation), reader row_group bounds,
+C FFI exception safety, Rust FFI panic safety, WASM bounds checking and key zeroing, Python
+graceful degradation, and getrandom EINTR retry.
 
 ---
 
