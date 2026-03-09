@@ -137,7 +137,7 @@ inline std::array<uint8_t, 32> hmac_sha256(
 
         auto t_i = detail::hkdf::hmac_sha256(prk.data(), HASH_LEN, msg.data(), msg.size());
 
-        size_t copy_len = std::min(HASH_LEN, output_size - offset);
+        size_t copy_len = (std::min)(HASH_LEN, output_size - offset);
         std::memcpy(output + offset, t_i.data(), copy_len);
         offset += copy_len;
 

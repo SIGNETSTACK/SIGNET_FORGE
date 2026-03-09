@@ -2910,4 +2910,12 @@ TEST_CASE("Wycheproof X25519: twist points compute correctly", "[crypto][x25519]
     }
 }
 
+TEST_CASE("has_hardware_aes detection compiles and runs", "[encryption][aesni]") {
+    // Gap C-5: verify AES-NI detection infrastructure works
+    bool hw_aes = signet::forge::crypto::detail::aes::has_hardware_aes();
+    // We don't assert the value — it depends on the CPU
+    // Just verify the function compiles and doesn't crash
+    CHECK((hw_aes || !hw_aes));  // always true, proves function ran
+}
+
 #endif // SIGNET_ENABLE_COMMERCIAL

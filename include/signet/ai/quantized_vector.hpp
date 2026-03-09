@@ -389,7 +389,7 @@ inline QuantizationParams QuantizationParams::compute(
     switch (scheme) {
     case QuantizationScheme::SYMMETRIC_INT8: {
         // scale = max(|min|, |max|) / 127
-        const float abs_max = std::max(std::fabs(vmin), std::fabs(vmax));
+        const float abs_max = (std::max)(std::fabs(vmin), std::fabs(vmax));
         p.scale      = (abs_max > 0.0f) ? (abs_max / 127.0f) : 1.0f;
         p.zero_point = 0.0f;
         break;
@@ -403,7 +403,7 @@ inline QuantizationParams QuantizationParams::compute(
     }
     case QuantizationScheme::SYMMETRIC_INT4: {
         // scale = max(|min|, |max|) / 7
-        const float abs_max = std::max(std::fabs(vmin), std::fabs(vmax));
+        const float abs_max = (std::max)(std::fabs(vmin), std::fabs(vmax));
         p.scale      = (abs_max > 0.0f) ? (abs_max / 7.0f) : 1.0f;
         p.zero_point = 0.0f;
         break;

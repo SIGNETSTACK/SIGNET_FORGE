@@ -307,6 +307,7 @@ if(SIGNET_BUILD_TESTS)
         tests/test_z_order.cpp
         tests/test_page_index.cpp
         tests/test_property_based.cpp
+        tests/test_api_compatibility.cpp
     )
     if(SIGNET_ENABLE_COMMERCIAL)
         list(APPEND SIGNET_TEST_SOURCES
@@ -517,6 +518,8 @@ if(SIGNET_BUILD_FUZZ)
         fuzz_aes_gcm
         fuzz_pme
         fuzz_key_metadata
+        fuzz_hkdf
+        fuzz_x25519
     )
     foreach(_target ${SIGNET_FUZZ_TARGETS})
         add_executable(${_target} fuzz/${_target}.cpp)

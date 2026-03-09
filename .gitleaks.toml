@@ -1,0 +1,12 @@
+# Gitleaks configuration for Signet Forge
+# Allowlist false positives from test vectors and error code parsing
+
+[allowlist]
+description = "Signet Forge allowlist — NIST test vectors and error code field names"
+paths = [
+    '''tests/test_encryption\.cpp''',
+    '''include/signet/crypto/aes_core\.hpp''',
+    '''include/signet/crypto/aes_gcm\.hpp''',
+    '''include/signet/error\.hpp''',
+    '''docs/FIPS_SECURITY_POLICY\.md''',
+]

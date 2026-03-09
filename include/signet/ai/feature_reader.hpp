@@ -318,7 +318,7 @@ private:
 
                 const auto& eids = *eid_result;
                 const auto& tss  = *ts_result;
-                const size_t nrows = std::min(eids.size(), tss.size());
+                const size_t nrows = (std::min)(eids.size(), tss.size());
 
                 for (size_t row = 0; row < nrows; ++row) {
                     RowLocation loc;

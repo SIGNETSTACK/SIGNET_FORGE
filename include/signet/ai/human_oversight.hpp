@@ -197,7 +197,7 @@ private:
     }
 
     static inline void append_string(std::vector<uint8_t>& buf, const std::string& s) {
-        const size_t clamped = std::min(s.size(), static_cast<size_t>(UINT32_MAX));
+        const size_t clamped = (std::min)(s.size(), static_cast<size_t>(UINT32_MAX));
         append_le32(buf, static_cast<uint32_t>(clamped));
         buf.insert(buf.end(), s.begin(), s.begin() + static_cast<ptrdiff_t>(clamped));
     }

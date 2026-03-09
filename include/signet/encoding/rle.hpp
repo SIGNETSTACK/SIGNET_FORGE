@@ -129,7 +129,7 @@ inline void bit_pack_8(std::vector<uint8_t>& out, const uint64_t* values, int bi
         while (bits_remaining > 0) {
             int byte_idx = cur_bit / 8;
             int bit_idx  = cur_bit % 8;
-            int bits_to_write = std::min(bits_remaining, 8 - bit_idx);
+            int bits_to_write = (std::min)(bits_remaining, 8 - bit_idx);
             uint8_t mask = static_cast<uint8_t>((val & ((1u << bits_to_write) - 1)) << bit_idx);
             dst[byte_idx] |= mask;
             val >>= bits_to_write;
@@ -169,7 +169,7 @@ inline void bit_unpack_8(const uint8_t* src, uint64_t* values, int bit_width) {
             int byte_idx = cur_bit / 8;
             int bit_idx  = cur_bit % 8;
             int bits_avail = 8 - bit_idx;
-            int bits_to_read = std::min(bits_remaining, bits_avail);
+            int bits_to_read = (std::min)(bits_remaining, bits_avail);
             uint64_t chunk = (src[byte_idx] >> bit_idx) & ((1u << bits_to_read) - 1);
             val |= chunk << val_bit;
             cur_bit += bits_to_read;
@@ -653,7 +653,7 @@ public:
                              | (static_cast<uint32_t>(data[2]) << 16)
                              | (static_cast<uint32_t>(data[3]) << 24);
 
-        size_t available = std::min(static_cast<size_t>(payload_len), size - 4);
+        size_t available = (std::min)(static_cast<size_t>(payload_len), size - 4);
         return decode(data + 4, available, bit_width, num_values);
     }
 

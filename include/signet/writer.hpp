@@ -1760,7 +1760,7 @@ private:
 
         // Initialize with row_group_size as the expected NDV estimate
         size_t ndv_estimate = static_cast<size_t>(
-            std::max(int64_t{1}, options_.row_group_size));
+            (std::max)(int64_t{1}, options_.row_group_size));
         bloom_filters_[col_index] = std::make_unique<SplitBlockBloomFilter>(
             ndv_estimate, options_.bloom_filter_fpr);
         return true;

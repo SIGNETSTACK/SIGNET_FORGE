@@ -67,6 +67,12 @@ namespace signet::forge::crypto {
 // PME module type constants
 // ===========================================================================
 
+/// Required AES-256 key size for all PME operations (NIST SP 800-131A).
+constexpr size_t PME_REQUIRED_KEY_SIZE = 32;
+
+/// AES-128 key size — detected for interop diagnostics only (Gap P-7).
+constexpr size_t PME_AES128_KEY_SIZE   = 16;
+
 /// @cond INTERNAL
 namespace detail::pme {
 
@@ -138,6 +144,24 @@ inline std::string build_aad(const EncryptionConfig& config,
     return build_aad_legacy(prefix, module_type, extra);
 }
 
+/// Build a descriptive error message for invalid PME key sizes (Gap P-7).
+///
+/// When a PME-encrypted Parquet file uses AES-128 (16-byte keys), return a
+/// specific interop message instead of a generic error. This prevents silent
+/// corruption and guides users toward the required AES-256 key size.
+inline std::string pme_key_size_error(size_t actual_size,
+                                       const std::string& context) {
+    if (actual_size == PME_AES128_KEY_SIZE) {
+        return "PME: AES-128 (16-byte) keys detected for " + context
+             + ". Signet Forge requires AES-256 (32-byte) keys per "
+               "NIST SP 800-131A. See Gap P-7 for AES-128 interop roadmap.";
+    }
+    return "PME: invalid key size (" + std::to_string(actual_size)
+         + " bytes) for " + context
+         + ". Expected " + std::to_string(PME_REQUIRED_KEY_SIZE)
+         + " bytes (AES-256).";
+}
+
 } // namespace detail::pme
 /// @endcond
 
@@ -197,7 +221,8 @@ public:
             config_.algorithm, config_.footer_key);
         if (config_.footer_key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: footer key must be 32 bytes"};
+                         detail::pme::pme_key_size_error(
+                             config_.footer_key.size(), "footer")};
         }
 
         // Build AAD
@@ -248,8 +273,8 @@ public:
         auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         // Build extra AAD context: column_name:rg_ordinal:page_ordinal
@@ -297,8 +322,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string aad = build_aad(config_.aad_prefix,
@@ -345,8 +370,8 @@ public:
         auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string extra = column_name + ":"
@@ -401,8 +426,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string extra = column_name + ":"
@@ -439,8 +464,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string aad = build_aad(config_.aad_prefix,
@@ -477,9 +502,10 @@ public:
         auto license = commercial::require_feature("PME sign_footer");
         if (!license) return license.error();
 
-        if (config_.footer_key.empty() || config_.footer_key.size() != 32) {
+        if (config_.footer_key.empty() || config_.footer_key.size() != PME_REQUIRED_KEY_SIZE) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: footer key must be 32 bytes for signing"};
+                         detail::pme::pme_key_size_error(
+                             config_.footer_key.size(), "footer signing")};
         }
 
         // Derive signing key via HKDF
@@ -765,7 +791,8 @@ public:
             config_.algorithm, config_.footer_key);
         if (config_.footer_key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: footer key must be 32 bytes"};
+                         detail::pme::pme_key_size_error(
+                             config_.footer_key.size(), "footer")};
         }
 
         // Build AAD (must match what was used during encryption)
@@ -806,8 +833,8 @@ public:
         auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         // Build extra AAD context (must match encryption)
@@ -851,8 +878,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string aad = build_aad(config_.aad_prefix,
@@ -889,8 +916,8 @@ public:
         auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string extra = column_name + ":"
@@ -936,8 +963,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string extra = column_name + ":"
@@ -976,8 +1003,8 @@ public:
         auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
         if (key.size() != cipher->key_size()) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: column key must be 32 bytes for column '"
-                         + column_name + "'"};
+                         detail::pme::pme_key_size_error(
+                             key.size(), "column '" + column_name + "'")};
         }
 
         std::string aad = build_aad(config_.aad_prefix,
@@ -1074,9 +1101,10 @@ public:
                          "PME: signed footer too short (need at least 32 bytes for HMAC)"};
         }
 
-        if (config_.footer_key.empty() || config_.footer_key.size() != 32) {
+        if (config_.footer_key.empty() || config_.footer_key.size() != PME_REQUIRED_KEY_SIZE) {
             return Error{ErrorCode::ENCRYPTION_ERROR,
-                         "PME: footer key must be 32 bytes for signature verification"};
+                         detail::pme::pme_key_size_error(
+                             config_.footer_key.size(), "footer signature verification")};
         }
 
         size_t footer_size = size - 32;

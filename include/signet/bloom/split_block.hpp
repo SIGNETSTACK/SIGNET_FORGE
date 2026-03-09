@@ -104,8 +104,8 @@ public:
         // Round up to multiple of 32, clamp to [kMinBytes, kMaxBytes]
         auto num_bytes = static_cast<size_t>(std::ceil(raw_bytes));
         num_bytes = round_up_to_block(num_bytes);
-        num_bytes = std::max(num_bytes, kMinBytes);
-        num_bytes = std::min(num_bytes, kMaxBytes);
+        num_bytes = (std::max)(num_bytes, kMinBytes);
+        num_bytes = (std::min)(num_bytes, kMaxBytes);
 
         data_.resize(num_bytes, 0);
     }
@@ -122,7 +122,7 @@ public:
                 "SplitBlockBloomFilter::with_size: "
                 "num_bytes must be a positive multiple of 32");
         }
-        num_bytes = std::min(num_bytes, kMaxBytes);
+        num_bytes = (std::min)(num_bytes, kMaxBytes);
         SplitBlockBloomFilter f;
         f.data_.resize(num_bytes, 0);
         return f;

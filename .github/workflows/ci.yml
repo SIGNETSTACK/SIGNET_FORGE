@@ -164,6 +164,10 @@ jobs:
       - name: Test
         run: ctest --test-dir build-win -C Debug --output-on-failure
 
+      - name: Static Analysis (MSVC /analyze)
+        continue-on-error: true
+        run: cmake --build build-win --config Debug --target ALL_BUILD -- /p:EnableCodeAnalysis=true
+
   # ---------------------------------------------------------------------------
   # Server codecs: ZSTD + LZ4 + Gzip enabled (Ubuntu)
   # ---------------------------------------------------------------------------
@@ -298,7 +302,9 @@ jobs:
         run: |
           mkdir -p fuzz-artifacts
           for target in fuzz_parquet_reader fuzz_thrift_decoder fuzz_wal_reader \
-                        fuzz_rle_decoder fuzz_delta_decoder fuzz_arrow_import; do
+                        fuzz_rle_decoder fuzz_delta_decoder fuzz_arrow_import \
+                        fuzz_aes_gcm fuzz_pme fuzz_key_metadata \
+                        fuzz_hkdf fuzz_x25519; do
             echo "=== Fuzzing $target for 60s ==="
             mkdir -p fuzz-artifacts/$target
             ./build-fuzz/$target \
@@ -427,7 +433,7 @@ jobs:
           auto-push: true
           alert-threshold: "120%"
           comment-on-alert: true
-          fail-on-alert: false
+          fail-on-alert: true
 
   # ---------------------------------------------------------------------------
   # Gap T-15d: Secrets scanning (gitleaks) — detect accidental key commits
@@ -447,7 +453,7 @@ jobs:
             | sudo tar xz -C /usr/local/bin gitleaks
 
       - name: Run gitleaks
-        run: gitleaks detect --source . --verbose --redact
+        run: gitleaks detect --source . --verbose --redact --config .gitleaks.toml
 
   # ---------------------------------------------------------------------------
   # Gap T-16: Python SAST (bandit) — security scanning for Python bindings
@@ -517,3 +523,44 @@ jobs:
             echo "::error::Too many files missing SPDX license identifiers"
             exit 1
           fi
+
+  # ---------------------------------------------------------------------------
+  # Gap T-12: Mutation testing baseline (push to main only)
+  # ---------------------------------------------------------------------------
+  mutation-baseline:
+    name: Mutation Testing Baseline (Ubuntu)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja + Clang 18
+        run: sudo apt-get install -y ninja-build clang-18
+
+      - name: Install Mull
+        run: |
+          curl -sSfL https://github.com/mull-project/mull/releases/download/0.24.0/Mull-0.24.0-LLVM-18.0-ubuntu-22.04.deb -o mull.deb
+          sudo dpkg -i mull.deb || sudo apt-get install -f -y
+
+      - name: Configure (with Mull plugin)
+        run: |
+          cmake -S . -B build-mull -G Ninja \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DCMAKE_CXX_FLAGS="-fpass-plugin=/usr/lib/mull-ir-frontend-18 -g -grecord-command-line"
+
+      - name: Build
+        run: cmake --build build-mull --parallel
+
+      - name: Run Mull mutation testing (encryption module)
+        run: |
+          mull-runner-18 build-mull/signet_tests \
+            --reporters=Elements \
+            --report-name=mutation-report \
+            --include-path="include/signet/crypto/*" \
+            -- "[encryption]" || true
+          echo "Mutation testing baseline established"

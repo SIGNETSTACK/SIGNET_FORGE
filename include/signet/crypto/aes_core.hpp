@@ -43,6 +43,23 @@
 #include <cstdint>
 #include <cstring>
 
+// AES-NI / ARMv8-CE hardware acceleration detection (Gap C-5)
+// Currently: T-table software implementation with S-box prefetch (CWE-208)
+// Future: Hardware AES instructions eliminate cache-timing side channels entirely
+#if defined(__AES__) || defined(_M_X64) || defined(_M_IX86)
+#  if defined(__GNUC__) || defined(__clang__)
+#    include <cpuid.h>
+#    define SIGNET_HAS_AESNI_DETECT 1
+#  elif defined(_MSC_VER)
+#    include <intrin.h>
+#    define SIGNET_HAS_AESNI_DETECT 1
+#  endif
+#endif
+
+#if defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_AES)
+#  define SIGNET_HAS_ARM_AES 1
+#endif
+
 namespace signet::forge::crypto {
 
 // ===========================================================================
@@ -194,6 +211,30 @@ inline void secure_zero(void* ptr, size_t len) {
 #endif
 }
 
+/// Check if CPU supports AES-NI (x86) or ARMv8-CE AES (ARM).
+/// Returns true if hardware AES acceleration is available.
+/// Currently used for diagnostics only — T-table path is always used (Gap C-5).
+inline bool has_hardware_aes() noexcept {
+#if defined(SIGNET_HAS_AESNI_DETECT)
+    // x86: Check CPUID leaf 1, ECX bit 25 (AES-NI)
+  #if defined(__GNUC__) || defined(__clang__)
+    unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
+    if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+        return (ecx >> 25) & 1;
+    }
+  #elif defined(_MSC_VER)
+    int cpuInfo[4];
+    __cpuid(cpuInfo, 1);
+    return (cpuInfo[2] >> 25) & 1;
+  #endif
+    return false;
+#elif defined(SIGNET_HAS_ARM_AES)
+    return true;  // ARM AES feature detected at compile time
+#else
+    return false;
+#endif
+}
+
 } // namespace detail::aes
 
 // ===========================================================================
@@ -239,6 +280,9 @@ public:
     void encrypt_block(uint8_t block[BLOCK_SIZE]) const {
         // Prefetch entire S-box into cache to mitigate timing side-channels.
         // Ref: D.J. Bernstein "Cache-timing attacks on AES" (2005), CWE-208.
+        // TODO(C-5): When SIGNET_ENABLE_AESNI=ON and has_hardware_aes(),
+        // skip T-table prefetch and use _mm_aesenc_si128 intrinsics instead.
+        // This eliminates the cache-timing side channel entirely.
         for (size_t i = 0; i < 256; i += 64 / sizeof(uint8_t)) {
             volatile uint8_t sink = detail::aes::SBOX[i];
             (void)sink;

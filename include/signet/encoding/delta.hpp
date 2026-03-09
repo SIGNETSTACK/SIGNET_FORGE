@@ -220,7 +220,7 @@ inline void bit_pack_values(std::vector<uint8_t>& out,
         while (bits_remaining > 0) {
             size_t byte_idx = cur_bit / 8;
             int bit_idx = static_cast<int>(cur_bit % 8);
-            int bits_to_write = std::min(bits_remaining, 8 - bit_idx);
+            int bits_to_write = (std::min)(bits_remaining, 8 - bit_idx);
             uint8_t mask = static_cast<uint8_t>(
                 (val & ((uint64_t{1} << bits_to_write) - 1)) << bit_idx);
             dst[byte_idx] |= mask;
@@ -264,7 +264,7 @@ inline void bit_unpack_values(const uint8_t* src,
             size_t byte_idx = cur_bit / 8;
             int bit_idx = static_cast<int>(cur_bit % 8);
             int bits_avail = 8 - bit_idx;
-            int bits_to_read = std::min(bits_remaining, bits_avail);
+            int bits_to_read = (std::min)(bits_remaining, bits_avail);
             uint64_t chunk = (src[byte_idx] >> bit_idx)
                              & ((uint64_t{1} << bits_to_read) - 1);
             val |= chunk << val_bit;
@@ -331,7 +331,7 @@ inline void bit_unpack_values(const uint8_t* src,
     size_t delta_idx = 0;
     while (delta_idx < num_deltas) {
         // Determine how many deltas are in this block
-        size_t block_remaining = std::min(DEFAULT_BLOCK_SIZE, num_deltas - delta_idx);
+        size_t block_remaining = (std::min)(DEFAULT_BLOCK_SIZE, num_deltas - delta_idx);
 
         // Pad the block to DEFAULT_BLOCK_SIZE with zeros for the last block
         std::vector<int64_t> block_deltas(DEFAULT_BLOCK_SIZE, 0);
@@ -522,7 +522,7 @@ inline void bit_unpack_values(const uint8_t* src,
             }
 
             // Convert adjusted values back to actual values
-            size_t to_emit = std::min(values_per_miniblock, values_remaining);
+            size_t to_emit = (std::min)(values_per_miniblock, values_remaining);
             for (size_t j = 0; j < to_emit; ++j) {
                 // Reconstruct delta using unsigned arithmetic to avoid overflow UB
                 int64_t delta = static_cast<int64_t>(

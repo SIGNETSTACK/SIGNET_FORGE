@@ -790,7 +790,7 @@ private:
 
     static std::string feats_preview(const std::vector<float>& f, size_t max_n) {
         std::string o = "[";
-        const size_t n = std::min(f.size(), max_n);
+        const size_t n = (std::min)(f.size(), max_n);
         for (size_t i = 0; i < n; ++i) {
             char buf[16]; std::snprintf(buf, sizeof(buf), "%.4g", f[i]);
             o += buf;
@@ -1016,9 +1016,9 @@ private:
         if (reference.empty() || current.empty() || n_bins <= 0) return 0.0f;
 
         // Find global min/max
-        float gmin = std::min(*std::min_element(reference.begin(), reference.end()),
+        float gmin = (std::min)(*std::min_element(reference.begin(), reference.end()),
                               *std::min_element(current.begin(), current.end()));
-        float gmax = std::max(*std::max_element(reference.begin(), reference.end()),
+        float gmax = (std::max)(*std::max_element(reference.begin(), reference.end()),
                               *std::max_element(current.begin(), current.end()));
 
         if (gmax <= gmin) return 0.0f;

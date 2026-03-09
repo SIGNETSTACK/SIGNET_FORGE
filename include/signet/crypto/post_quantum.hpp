@@ -545,9 +545,9 @@ inline Fe fe_inv(const Fe& z) {
     // z^(2^250-1)
     for (int i = 0; i < 50; ++i) e = fe_sq(e);
     e = fe_mul(e, c);
-    // z^(2^255-21) = z^(p-2)
+    // z^(2^255-32) after squaring, then * z^11 = z^(2^255-21) = z^(p-2)
     for (int i = 0; i < 5; ++i) e = fe_sq(e);
-    return fe_mul(e, t2);
+    return fe_mul(e, t0);
 }
 
 #else // MSVC / other compilers — 10-limb int32_t representation
@@ -686,7 +686,7 @@ inline Fe fe_inv(const Fe& z) {
     Fe e=d; for(int i=0;i<100;i++) e=fe_sq(e); e=fe_mul(e,d);
     for(int i=0;i<50;i++) e=fe_sq(e); e=fe_mul(e,c);
     for(int i=0;i<5;i++) e=fe_sq(e);
-    return fe_mul(e,t2);
+    return fe_mul(e,t0);  // z^(2^255-32) * z^11 = z^(2^255-21) = z^(p-2)
 }
 
 #endif // __GNUC__ || __clang__
