@@ -2551,3 +2551,363 @@ TEST_CASE("KeyRotationRequest stores rotation data", "[crypto][T-7]") {
     REQUIRE(req.old_key != req.new_key);
     REQUIRE(req.reason == "scheduled");
 }
+
+// ===========================================================================
+// Gap T-18: IV uniqueness verification
+// Two consecutive GCM encryptions must produce different IVs (CSPRNG check).
+// Ref: NIST SP 800-38D §8.2 — nonce reuse completely breaks GCM security.
+// ===========================================================================
+
+TEST_CASE("GCM encrypt produces unique IVs across calls", "[crypto][gcm][T-18]") {
+    // Gap T-18: Verify that two consecutive CSPRNG-generated IVs are distinct.
+    // Probability of 96-bit collision is 2^-96, effectively impossible.
+    auto iv1 = crypto::detail::cipher::generate_iv(crypto::AesGcm::IV_SIZE);
+    auto iv2 = crypto::detail::cipher::generate_iv(crypto::AesGcm::IV_SIZE);
+
+    REQUIRE(iv1.size() == 12);
+    REQUIRE(iv2.size() == 12);
+    REQUIRE(iv1 != iv2);
+
+    // Verify both IVs produce valid encryptions with distinct ciphertext
+    auto key = hex_to_bytes("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+    uint8_t pt[] = {0x01, 0x02, 0x03, 0x04};
+
+    crypto::AesGcm gcm(key.data());
+    auto r1 = gcm.encrypt(pt, sizeof(pt), iv1.data(), nullptr, 0);
+    auto r2 = gcm.encrypt(pt, sizeof(pt), iv2.data(), nullptr, 0);
+    REQUIRE(r1.has_value());
+    REQUIRE(r2.has_value());
+    // Same plaintext + different IV → different ciphertext
+    REQUIRE(*r1 != *r2);
+}
+
+// ===========================================================================
+// Gap C-16: NIST SP 800-38D Test Case 15 — AES-256, 64B PT, no AAD
+// Source: McGrew & Viega, "The GCM Mode of Operation", Appendix B
+// Ref: https://csrc.nist.gov/pubs/sp/800/38/d/final (references gcm-spec.pdf)
+//
+// Note: Test Cases 17 (8-byte IV) and 18 (60-byte IV) are excluded because
+// this implementation enforces the NIST-recommended 96-bit (12-byte) IV per
+// SP 800-38D §5.2.1.1. Non-standard IV lengths require GHASH-based J0
+// derivation which is a different code path not exposed in the API.
+// ===========================================================================
+
+TEST_CASE("NIST SP 800-38D Test Case 15: AES-256, 64B PT, no AAD", "[crypto][gcm][nist][C-16]") {
+    auto key = hex_to_bytes("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+    auto iv  = hex_to_bytes("cafebabefacedbaddecaf888");
+    auto pt  = hex_to_bytes(
+        "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72"
+        "1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255");
+    auto expected_ct = hex_to_bytes(
+        "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa"
+        "8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015ad");
+
+    crypto::AesGcm gcm(key.data());
+
+    auto result = gcm.encrypt(pt.data(), pt.size(), iv.data(), nullptr, 0);
+    REQUIRE(result.has_value());
+    REQUIRE(result->size() == pt.size() + 16);
+
+    // CTR ciphertext matches NIST vector
+    REQUIRE(bytes_to_hex(result->data(), pt.size())
+            == bytes_to_hex(expected_ct.data(), expected_ct.size()));
+
+    // Round-trip
+    auto dec = gcm.decrypt(result->data(), result->size(), iv.data(), nullptr, 0);
+    REQUIRE(dec.has_value());
+    REQUIRE(dec->size() == pt.size());
+    REQUIRE(bytes_to_hex(dec->data(), dec->size()) == bytes_to_hex(pt.data(), pt.size()));
+}
+
+// ===========================================================================
+// Gap T-5: Wycheproof AES-256-GCM test vectors
+// Source: https://github.com/google/wycheproof/blob/master/testvectors/aes_gcm_test.json
+// Selected edge cases covering: empty PT, empty AAD, modified tags, special
+// IV/tag boundary values. All use AES-256 (keySize=256) with 96-bit IV.
+// ===========================================================================
+
+TEST_CASE("Wycheproof AES-256-GCM: empty msg + non-empty AAD (tcId 92)", "[crypto][gcm][wycheproof]") {
+    auto key = hex_to_bytes("29d3a44f8723dc640239100c365423a312934ac80239212ac3df3421a2098123");
+    auto iv  = hex_to_bytes("00112233445566778899aabb");
+    auto aad = hex_to_bytes("aabbccddeeff");
+
+    crypto::AesGcm gcm(key.data());
+    auto enc = gcm.encrypt(nullptr, 0, iv.data(), aad.data(), aad.size());
+    REQUIRE(enc.has_value());
+    REQUIRE(enc->size() == 16); // tag only
+
+    // Decrypt with correct AAD succeeds
+    auto dec = gcm.decrypt(enc->data(), enc->size(), iv.data(), aad.data(), aad.size());
+    REQUIRE(dec.has_value());
+    REQUIRE(dec->empty());
+
+    // Decrypt with wrong AAD fails
+    auto wrong_aad = hex_to_bytes("aabbccddeefe");
+    auto dec2 = gcm.decrypt(enc->data(), enc->size(), iv.data(), wrong_aad.data(), wrong_aad.size());
+    REQUIRE(!dec2.has_value());
+}
+
+TEST_CASE("Wycheproof AES-256-GCM: 16B msg, empty AAD (tcId 97)", "[crypto][gcm][wycheproof]") {
+    auto key = hex_to_bytes("59d4eafb4de0cfc7d3db99a8f54b15d7b39f0acc8da69763b019c1699f87674a");
+    auto iv  = hex_to_bytes("2fcb1b38a99e71b84740ad9b");
+    auto pt  = hex_to_bytes("549b365af913f3b081131ccb6b825588");
+    auto expected_ct = hex_to_bytes("f58c16690122d75356907fd96b570fca");
+
+    crypto::AesGcm gcm(key.data());
+    auto enc = gcm.encrypt(pt.data(), pt.size(), iv.data(), nullptr, 0);
+    REQUIRE(enc.has_value());
+    REQUIRE(enc->size() == pt.size() + 16);
+
+    // CTR ciphertext matches Wycheproof vector
+    REQUIRE(bytes_to_hex(enc->data(), pt.size()) == bytes_to_hex(expected_ct.data(), expected_ct.size()));
+
+    // Round-trip
+    auto dec = gcm.decrypt(enc->data(), enc->size(), iv.data(), nullptr, 0);
+    REQUIRE(dec.has_value());
+    REQUIRE(*dec == pt);
+}
+
+TEST_CASE("Wycheproof AES-256-GCM: modified tag rejected (9 variants)", "[crypto][gcm][wycheproof]") {
+    // All variants share: key, iv, msg, ct from Wycheproof tcId 130-156 group
+    auto key = hex_to_bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    auto iv  = hex_to_bytes("505152535455565758595a5b");
+    auto pt  = hex_to_bytes("202122232425262728292a2b2c2d2e2f");
+
+    crypto::AesGcm gcm(key.data());
+    auto enc = gcm.encrypt(pt.data(), pt.size(), iv.data(), nullptr, 0);
+    REQUIRE(enc.has_value());
+    REQUIRE(enc->size() == pt.size() + 16);
+
+    // Verify round-trip with correct tag
+    auto dec_ok = gcm.decrypt(enc->data(), enc->size(), iv.data(), nullptr, 0);
+    REQUIRE(dec_ok.has_value());
+    REQUIRE(*dec_ok == pt);
+
+    // Each modified tag must fail authentication
+    std::vector<std::string> bad_tags = {
+        // tcId 130: bit 0 flipped
+        // tcId 152: all bits flipped
+        // tcId 153: all zeros
+        // tcId 154: all ones
+    };
+
+    // Systematically flip each byte of the tag
+    for (size_t i = 0; i < 16; ++i) {
+        auto tampered = *enc;
+        tampered[pt.size() + i] ^= 0x01; // flip LSB of each tag byte
+        auto dec = gcm.decrypt(tampered.data(), tampered.size(), iv.data(), nullptr, 0);
+        REQUIRE(!dec.has_value());
+    }
+
+    // All-zero tag
+    {
+        auto tampered = *enc;
+        std::memset(tampered.data() + pt.size(), 0x00, 16);
+        auto dec = gcm.decrypt(tampered.data(), tampered.size(), iv.data(), nullptr, 0);
+        REQUIRE(!dec.has_value());
+    }
+
+    // All-ones tag
+    {
+        auto tampered = *enc;
+        std::memset(tampered.data() + pt.size(), 0xFF, 16);
+        auto dec = gcm.decrypt(tampered.data(), tampered.size(), iv.data(), nullptr, 0);
+        REQUIRE(!dec.has_value());
+    }
+}
+
+TEST_CASE("Wycheproof AES-256-GCM: tampered ciphertext rejected", "[crypto][gcm][wycheproof]") {
+    auto key = hex_to_bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    auto iv  = hex_to_bytes("505152535455565758595a5b");
+    auto pt  = hex_to_bytes("202122232425262728292a2b2c2d2e2f");
+
+    crypto::AesGcm gcm(key.data());
+    auto enc = gcm.encrypt(pt.data(), pt.size(), iv.data(), nullptr, 0);
+    REQUIRE(enc.has_value());
+
+    // Flip each byte of ciphertext (not tag)
+    for (size_t i = 0; i < pt.size(); ++i) {
+        auto tampered = *enc;
+        tampered[i] ^= 0x01;
+        auto dec = gcm.decrypt(tampered.data(), tampered.size(), iv.data(), nullptr, 0);
+        REQUIRE(!dec.has_value());
+    }
+}
+
+// ===========================================================================
+// Gap C-18: Wycheproof X25519 edge-case test vectors
+// Source: https://github.com/google/wycheproof/blob/master/testvectors/x25519_test.json
+// Tests: low-order points (all-zero output → rejected), non-canonical
+// u-coordinates, twist points, and standard valid cases.
+// ===========================================================================
+
+#if SIGNET_ENABLE_COMMERCIAL
+
+TEST_CASE("Wycheproof X25519: valid key exchange (tcId 1)", "[crypto][x25519][wycheproof]") {
+    auto sk = hex_to_bytes("c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    auto pk = hex_to_bytes("504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    auto expected = hex_to_bytes("436a2c040cf45fea9b29a0cb81b1f41458f863d0d61b453d0a982720d6d61320");
+
+    std::array<uint8_t, 32> sk_arr, pk_arr;
+    std::copy(sk.begin(), sk.end(), sk_arr.begin());
+    std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+    auto result = crypto::detail::x25519::x25519(sk_arr, pk_arr);
+    REQUIRE(result.has_value());
+    std::vector<uint8_t> result_vec(result->begin(), result->end());
+    REQUIRE(bytes_to_hex(result_vec.data(), 32) == bytes_to_hex(expected.data(), 32));
+}
+
+TEST_CASE("Wycheproof X25519: RFC 7748 reference vector (tcId 100)", "[crypto][x25519][wycheproof]") {
+    auto sk = hex_to_bytes("a046e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449a44");
+    auto pk = hex_to_bytes("e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c");
+    auto expected = hex_to_bytes("c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552");
+
+    std::array<uint8_t, 32> sk_arr, pk_arr;
+    std::copy(sk.begin(), sk.end(), sk_arr.begin());
+    std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+    auto result = crypto::detail::x25519::x25519(sk_arr, pk_arr);
+    REQUIRE(result.has_value());
+    std::vector<uint8_t> result_vec(result->begin(), result->end());
+    REQUIRE(bytes_to_hex(result_vec.data(), 32) == bytes_to_hex(expected.data(), 32));
+}
+
+TEST_CASE("Wycheproof X25519: RFC 8037 §A.6 (tcId 102, raw ladder)", "[crypto][x25519][wycheproof]") {
+    // tcId 102's private key is NOT pre-clamped. Use x25519_raw to test the
+    // Montgomery ladder directly (Wycheproof vectors assume raw scalar input).
+    auto sk = hex_to_bytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
+    auto pk = hex_to_bytes("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
+    auto expected = hex_to_bytes("4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
+
+    std::array<uint8_t, 32> sk_arr, pk_arr;
+    std::copy(sk.begin(), sk.end(), sk_arr.begin());
+    std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+    // Apply RFC 7748 §5 clamping manually (as Wycheproof expects)
+    sk_arr[0]  &= 248;
+    sk_arr[31] &= 127;
+    sk_arr[31] |= 64;
+
+    auto result = crypto::detail::x25519::x25519_raw(sk_arr, pk_arr);
+    std::vector<uint8_t> result_vec(result.begin(), result.end());
+    REQUIRE(bytes_to_hex(result_vec.data(), 32) == bytes_to_hex(expected.data(), 32));
+}
+
+TEST_CASE("Wycheproof X25519: low-order points produce all-zero → rejected", "[crypto][x25519][wycheproof]") {
+    // These public keys have small order and produce all-zero shared secrets.
+    // A secure X25519 implementation MUST reject them (RFC 7748 §6).
+    struct LowOrderCase {
+        const char* pk_hex;
+        const char* desc;
+    };
+    LowOrderCase cases[] = {
+        {"0000000000000000000000000000000000000000000000000000000000000000", "tcId 32: pubkey = 0"},
+        {"0100000000000000000000000000000000000000000000000000000000000000", "tcId 33: pubkey = 1"},
+        {"e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800", "tcId 63: order-8 point"},
+        {"ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", "tcId 65: low-order twist"},
+        {"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", "tcId 83: pubkey = p"},
+    };
+
+    auto sk = hex_to_bytes("88227494038f2bb811d47805bcdf04a2ac585ada7f2f23389bfd4658f9ddd45e");
+    std::array<uint8_t, 32> sk_arr;
+    std::copy(sk.begin(), sk.end(), sk_arr.begin());
+
+    for (const auto& c : cases) {
+        auto pk = hex_to_bytes(c.pk_hex);
+        std::array<uint8_t, 32> pk_arr;
+        std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+        auto result = crypto::detail::x25519::x25519(sk_arr, pk_arr);
+        // Must be rejected (all-zero output)
+        REQUIRE_FALSE(result.has_value());
+    }
+}
+
+TEST_CASE("Wycheproof X25519: non-canonical u-coordinates accepted", "[crypto][x25519][wycheproof]") {
+    // Non-canonical public keys (u >= p) are valid X25519 inputs — they are
+    // reduced mod p before computation. These produce non-zero shared secrets.
+    struct NonCanonicalCase {
+        const char* sk_hex;
+        const char* pk_hex;
+        const char* expected_hex;
+        const char* desc;
+    };
+    NonCanonicalCase cases[] = {
+        {
+            "0016b62af5cabde8c40938ebf2108e05d27fa0533ed85d70015ad4ad39762d54",
+            "efffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "b4d10e832714972f96bd3382e4d082a21a8333a16315b3ffb536061d2482360d",
+            "tcId 87: non-canonical on twist"
+        },
+        {
+            "88dd14e2711ebd0b0026c651264ca965e7e3da5082789fbab7e24425e7b4377e",
+            "f1ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "6919992d6a591e77b3f2bacbd74caf3aea4be4802b18b2bc07eb09ade3ad6662",
+            "tcId 89: non-canonical"
+        },
+        {
+            "98c2b08cbac14e15953154e3b558d42bb1268a365b0ef2f22725129d8ac5cb7f",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "9c034fcd8d3bf69964958c0105161fcb5d1ea5b8f8abb371491e42a7684c2322",
+            "tcId 90: non-canonical 2^255-1"
+        },
+    };
+
+    for (const auto& c : cases) {
+        auto sk = hex_to_bytes(c.sk_hex);
+        auto pk = hex_to_bytes(c.pk_hex);
+        auto expected = hex_to_bytes(c.expected_hex);
+
+        std::array<uint8_t, 32> sk_arr, pk_arr;
+        std::copy(sk.begin(), sk.end(), sk_arr.begin());
+        std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+        auto result = crypto::detail::x25519::x25519(sk_arr, pk_arr);
+        REQUIRE(result.has_value());
+        std::vector<uint8_t> result_vec(result->begin(), result->end());
+        REQUIRE(bytes_to_hex(result_vec.data(), 32) == bytes_to_hex(expected.data(), 32));
+    }
+}
+
+TEST_CASE("Wycheproof X25519: twist points compute correctly", "[crypto][x25519][wycheproof]") {
+    // Points on the quadratic twist are valid X25519 inputs — the Montgomery
+    // ladder works on both curve and twist. These must produce correct results.
+    struct TwistCase {
+        const char* sk_hex;
+        const char* pk_hex;
+        const char* expected_hex;
+        const char* desc;
+    };
+    TwistCase cases[] = {
+        {
+            "d85d8c061a50804ac488ad774ac716c3f5ba714b2712e048491379a500211958",
+            "63aa40c6e38346c5caf23a6df0a5e6c80889a08647e551b3563449befcfc9733",
+            "279df67a7c4611db4708a0e8282b195e5ac0ed6f4b2f292c6fbd0acac30d1332",
+            "tcId 2"
+        },
+        {
+            "d03edde9f3e7b799045f9ac3793d4a9277dadeadc41bec0290f81f744f73775f",
+            "0200000000000000000000000000000000000000000000000000000000000000",
+            "b87a1722cc6c1e2feecb54e97abd5a22acc27616f78f6e315fd2b73d9f221e57",
+            "tcId 7: u=2 (twist)"
+        },
+    };
+
+    for (const auto& c : cases) {
+        auto sk = hex_to_bytes(c.sk_hex);
+        auto pk = hex_to_bytes(c.pk_hex);
+        auto expected = hex_to_bytes(c.expected_hex);
+
+        std::array<uint8_t, 32> sk_arr, pk_arr;
+        std::copy(sk.begin(), sk.end(), sk_arr.begin());
+        std::copy(pk.begin(), pk.end(), pk_arr.begin());
+
+        auto result = crypto::detail::x25519::x25519(sk_arr, pk_arr);
+        REQUIRE(result.has_value());
+        std::vector<uint8_t> result_vec(result->begin(), result->end());
+        REQUIRE(bytes_to_hex(result_vec.data(), 32) == bytes_to_hex(expected.data(), 32));
+    }
+}
+
+#endif // SIGNET_ENABLE_COMMERCIAL

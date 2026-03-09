@@ -284,9 +284,8 @@ if(SIGNET_BUILD_TESTS)
     include(FetchContent)
     FetchContent_Declare(
         Catch2
-        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG        v3.7.1
-        GIT_SHALLOW    TRUE
+        URL            https://github.com/catchorg/Catch2/archive/refs/tags/v3.7.1.tar.gz
+        URL_HASH       SHA256=c991b247a1a0d7bb9c39aa35faf0fe9e19764213f28ffba3109388e62ee0269c
     )
     FetchContent_MakeAvailable(Catch2)
     include(CTest)
@@ -307,6 +306,7 @@ if(SIGNET_BUILD_TESTS)
         tests/test_ticks_pipeline.cpp
         tests/test_z_order.cpp
         tests/test_page_index.cpp
+        tests/test_property_based.cpp
     )
     if(SIGNET_ENABLE_COMMERCIAL)
         list(APPEND SIGNET_TEST_SOURCES
@@ -336,9 +336,8 @@ if(SIGNET_BUILD_BENCHMARKS)
         include(FetchContent)
         FetchContent_Declare(
             Catch2
-            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-            GIT_TAG        v3.7.1
-            GIT_SHALLOW    TRUE
+            URL            https://github.com/catchorg/Catch2/archive/refs/tags/v3.7.1.tar.gz
+            URL_HASH       SHA256=c991b247a1a0d7bb9c39aa35faf0fe9e19764213f28ffba3109388e62ee0269c
         )
         FetchContent_MakeAvailable(Catch2)
         include(CTest)
@@ -373,9 +372,8 @@ if(SIGNET_BUILD_PYTHON)
         include(FetchContent)
         FetchContent_Declare(
             pybind11
-            GIT_REPOSITORY https://github.com/pybind/pybind11.git
-            GIT_TAG        v2.13.6
-            GIT_SHALLOW    TRUE
+            URL            https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.tar.gz
+            URL_HASH       SHA256=e08cb87f4773da97fa7b5f035de8763abc656d87d5773e62f6da0587d1f0ec20
         )
         FetchContent_MakeAvailable(pybind11)
     endif()

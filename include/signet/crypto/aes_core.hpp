@@ -21,6 +21,17 @@
 //   Rounds:      14
 //   Round keys:  15 (initial + 14 rounds) = 240 bytes total
 //
+// Design decision (Gap C-14, NIST SP 800-131A):
+//   Only AES-256 is supported. AES-128 and AES-192 are intentionally excluded.
+//   Rationale:
+//     1. NIST SP 800-131A Rev.2 §4 recommends AES-256 for long-term security.
+//     2. Post-quantum threat models (Grover's algorithm) halve effective key
+//        strength — AES-256 retains 128-bit security, AES-128 drops to 64-bit.
+//     3. Single key size eliminates key-length confusion bugs (CWE-326).
+//     4. Parquet Modular Encryption (PME) interop: both AES-128 and AES-256 are
+//        valid per the PME spec, but AES-256 is the safe default. A future
+//        AES-128 code path (Gap P-7) may be added for interop if needed.
+//
 // FIPS-197 test vector (Appendix C.3 -- AES-256):
 //   Key:       000102030405060708090a0b0c0d0e0f
 //              101112131415161718191a1b1c1d1e1f

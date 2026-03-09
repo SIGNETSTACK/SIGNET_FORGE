@@ -36,11 +36,11 @@ struct TempFile {
 // ===================================================================
 TEST_CASE("normalize_int32 preserves order", "[z_order][normalize]") {
     // INT32_MIN < -1 < 0 < 1 < INT32_MAX
-    auto a = z::normalize_int32(std::numeric_limits<int32_t>::min());
+    auto a = z::normalize_int32((std::numeric_limits<int32_t>::min)());
     auto b = z::normalize_int32(-1);
     auto c = z::normalize_int32(0);
     auto d = z::normalize_int32(1);
-    auto e = z::normalize_int32(std::numeric_limits<int32_t>::max());
+    auto e = z::normalize_int32((std::numeric_limits<int32_t>::max)());
 
     CHECK(a < b);
     CHECK(b < c);
@@ -52,12 +52,12 @@ TEST_CASE("normalize_int32 preserves order", "[z_order][normalize]") {
 // 2. normalize_float preserves order
 // ===================================================================
 TEST_CASE("normalize_float preserves order", "[z_order][normalize]") {
-    auto neg_inf = z::normalize_float(-std::numeric_limits<float>::infinity());
+    auto neg_inf = z::normalize_float(-(std::numeric_limits<float>::infinity)());
     auto neg_one = z::normalize_float(-1.0f);
     auto neg_zero = z::normalize_float(-0.0f);
     auto pos_zero = z::normalize_float(0.0f);
     auto pos_one = z::normalize_float(1.0f);
-    auto pos_inf = z::normalize_float(std::numeric_limits<float>::infinity());
+    auto pos_inf = z::normalize_float((std::numeric_limits<float>::infinity)());
 
     CHECK(neg_inf < neg_one);
     CHECK(neg_one < neg_zero);
@@ -71,11 +71,11 @@ TEST_CASE("normalize_float preserves order", "[z_order][normalize]") {
 // 3. normalize_double preserves order
 // ===================================================================
 TEST_CASE("normalize_double preserves order", "[z_order][normalize]") {
-    auto neg_inf = z::normalize_double(-std::numeric_limits<double>::infinity());
+    auto neg_inf = z::normalize_double(-(std::numeric_limits<double>::infinity)());
     auto neg_one = z::normalize_double(-1.0);
     auto pos_zero = z::normalize_double(0.0);
     auto pos_one = z::normalize_double(1.0);
-    auto pos_inf = z::normalize_double(std::numeric_limits<double>::infinity());
+    auto pos_inf = z::normalize_double((std::numeric_limits<double>::infinity)());
 
     CHECK(neg_inf < neg_one);
     CHECK(neg_one < pos_zero);

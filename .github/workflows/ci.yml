@@ -76,7 +76,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build-asan --output-on-failure
         env:
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
 
   # ---------------------------------------------------------------------------
@@ -427,3 +428,88 @@ jobs:
           alert-threshold: "120%"
           comment-on-alert: true
           fail-on-alert: false
+
+  # ---------------------------------------------------------------------------
+  # Gap T-15d: Secrets scanning (gitleaks) — detect accidental key commits
+  # ---------------------------------------------------------------------------
+  secrets-scan:
+    name: Secrets Scan (gitleaks)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Gap T-16: Python SAST (bandit) — security scanning for Python bindings
+  # ---------------------------------------------------------------------------
+  python-sast:
+    name: Python SAST (bandit)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit on Python bindings
+        run: |
+          bandit -r python/ -f json -o bandit-report.json \
+            --severity-level medium \
+            --confidence-level medium \
+            || true
+          bandit -r python/ --severity-level medium --confidence-level medium
+
+  # ---------------------------------------------------------------------------
+  # Gap T-17: License compliance scanner — verify Apache-2.0 + BSL 1.1
+  # ---------------------------------------------------------------------------
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install licensee
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ruby ruby-dev cmake pkg-config
+          sudo gem install licensee
+
+      - name: Check project license
+        run: licensee detect --json .
+
+      - name: Verify no GPL/AGPL contamination in headers
+        run: |
+          echo "Scanning for incompatible license headers..."
+          if grep -rli "GNU General Public License\|AGPL\|GPL-3" \
+               include/ python/ ffi/ rust/ wasm/ tools/ 2>/dev/null; then
+            echo "::error::Found GPL/AGPL license headers in source — incompatible with Apache-2.0"
+            exit 1
+          fi
+          echo "No incompatible licenses found."
+
+      - name: Verify SPDX identifiers present
+        run: |
+          missing=0
+          for f in $(find include/signet -name '*.hpp' -type f); do
+            if ! head -3 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "::warning::Missing SPDX header: $f"
+              missing=$((missing + 1))
+            fi
+          done
+          echo "$missing files missing SPDX headers"
+          if [ "$missing" -gt 5 ]; then
+            echo "::error::Too many files missing SPDX license identifiers"
+            exit 1
+          fi

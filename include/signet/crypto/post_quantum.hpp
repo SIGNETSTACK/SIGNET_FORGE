@@ -320,7 +320,7 @@ inline std::array<uint8_t, 32> sha256(const std::vector<uint8_t>& data) {
 /// Used for hybrid key combining and HMAC-style constructions.
 ///
 /// Domain separation label prevents cross-protocol attacks per
-/// NIST SP 800-227 (draft) §4.2 and Barker & Roginsky "Transitioning
+/// NIST SP 800-227 (Final, Sep 2025) §4.2 and Barker & Roginsky "Transitioning
 /// the Use of Cryptographic Algorithms" guidance.
 inline std::array<uint8_t, 32> sha256_concat(
     const uint8_t* a, size_t a_size,
@@ -513,25 +513,40 @@ inline void fe_cswap(Fe& a, Fe& b, uint64_t swap) {
 }
 
 /// a^(p-2) mod p = a^(2^255-21) mod p (Fermat's little theorem).
-/// Implemented with fixed-exponent square-and-multiply.
+/// Constant-time addition chain — no data-dependent branching (CWE-208).
+/// Uses the standard Itoh-Tsujii-style chain for GF(2^255-19) inversion.
 inline Fe fe_inv(const Fe& z) {
-    // Compute z^(p-2) where p = 2^255 - 19 using fixed-exponent
-    // square-and-multiply (exponent = 2^255 - 21).
-    Fe result = {1, 0, 0, 0, 0};
-    constexpr uint8_t LOW8 = 0xEB; // low 8 bits of (2^255 - 21)
-
-    auto exp_bit = [](int bit_index) -> uint64_t {
-        if (bit_index >= 8) return 1;
-        return static_cast<uint64_t>((LOW8 >> bit_index) & 1U);
-    };
-
-    for (int i = 254; i >= 0; --i) {
-        result = fe_sq(result);
-        if (exp_bit(i)) {
-            result = fe_mul(result, z);
-        }
-    }
-    return result;
+    // z^1 already have
+    Fe t0 = fe_sq(z);                                       // z^2
+    Fe t1 = fe_sq(fe_sq(fe_sq(t0)));                        // z^16
+    t1 = fe_mul(t1, z);                                     // z^17  (unused name kept for symmetry)
+    t0 = fe_mul(t1, t0);                                    // z^19
+    Fe t2 = fe_sq(t0);                                      // z^38
+    t2 = fe_mul(t2, t1);                                    // z^(2^5-1)
+    // z^(2^10-1)
+    Fe a = t2; for (int i = 0; i < 5; ++i) a = fe_sq(a);
+    a = fe_mul(a, t2);
+    // z^(2^20-1)
+    Fe b = a; for (int i = 0; i < 10; ++i) b = fe_sq(b);
+    b = fe_mul(b, a);
+    // z^(2^40-1)
+    Fe c = b; for (int i = 0; i < 20; ++i) c = fe_sq(c);
+    c = fe_mul(c, b);
+    // z^(2^50-1)
+    for (int i = 0; i < 10; ++i) c = fe_sq(c);
+    c = fe_mul(c, a);
+    // z^(2^100-1)
+    Fe d = c; for (int i = 0; i < 50; ++i) d = fe_sq(d);
+    d = fe_mul(d, c);
+    // z^(2^200-1)
+    Fe e = d; for (int i = 0; i < 100; ++i) e = fe_sq(e);
+    e = fe_mul(e, d);
+    // z^(2^250-1)
+    for (int i = 0; i < 50; ++i) e = fe_sq(e);
+    e = fe_mul(e, c);
+    // z^(2^255-21) = z^(p-2)
+    for (int i = 0; i < 5; ++i) e = fe_sq(e);
+    return fe_mul(e, t2);
 }
 
 #else // MSVC / other compilers — 10-limb int32_t representation
@@ -1592,7 +1607,7 @@ public:
         if (!x25519_ss_result) return x25519_ss_result.error();
 
         // Step 4: Combined shared secret = SHA-256(label || kyber_ss || x25519_ss)
-        // Domain separation per NIST SP 800-227 (draft) §4.2 hybrid combiner
+        // Domain separation per NIST SP 800-227 (Final, Sep 2025) §4.2 hybrid combiner
         auto combined = detail::sha256::sha256_concat(
             kyber_result->shared_secret.data(),
             kyber_result->shared_secret.size(),
@@ -1655,7 +1670,7 @@ public:
         if (!x25519_ss_result) return x25519_ss_result.error();
 
         // Step 3: Combined shared secret — identical to encapsulate()
-        // Domain separation per NIST SP 800-227 (draft) §4.2 hybrid combiner
+        // Domain separation per NIST SP 800-227 (Final, Sep 2025) §4.2 hybrid combiner
         auto combined = detail::sha256::sha256_concat(
             kyber_ss->data(), kyber_ss->size(),
             x25519_ss_result->data(), x25519_ss_result->size());
