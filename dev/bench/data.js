@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773048065431,
+  "lastUpdate": 1773049952451,
   "repoUrl": "https://github.com/SIGNETSTACK/SIGNET_FORGE",
   "entries": {
     "Benchmark": [
@@ -4744,6 +4744,345 @@ window.BENCHMARK_DATA = {
             "name": "publish+pop 1000",
             "value": 25.3521,
             "range": "± 2.07176",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "committer": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "distinct": true,
+          "id": "74c76cb98ddf1a15a4b1019f7a3321c8e2285ce6",
+          "message": "Gap Fix Pass 11: 7 gaps (C-5/P-7/T-6/T-12/T-13/T-15c/T-19) + CI fixes\n\n- C-5: AES-NI/ARMv8-CE hardware detection infrastructure (has_hardware_aes())\n- P-7: AES-128 interop detection in PME with clear error messages\n- T-6: fuzz_hkdf + fuzz_x25519 harnesses, CI runs all 11 fuzz targets\n- T-12: Mull mutation testing baseline CI job\n- T-13: benchmark fail-on-alert enforcement (120% regression gate)\n- T-15c: MSVC /analyze static analysis CI step\n- T-19: API compatibility test suite (19 tests, enum/struct/API stability)\n- Fix fe_inv final multiply: t0 (z^11) not t2 (z^31) for z^(p-2) correctness\n- Fix MSVC min/max macro pollution across 14 headers (comprehensive sweep)\n- Fix gitleaks false positives via .gitleaks.toml allowlist",
+          "timestamp": "2026-03-09T09:49:49Z",
+          "tree_id": "3a33742293b5b4cdc2647c74f29302c4b17e6a7a",
+          "url": "https://github.com/SIGNETSTACK/SIGNET_FORGE/commit/74c76cb98ddf1a15a4b1019f7a3321c8e2285ce6"
+        },
+        "date": 1773049951891,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "write",
+            "value": 758.252,
+            "range": "± 36.1972",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "write",
+            "value": 844.357,
+            "range": "± 154.489",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "write",
+            "value": 3724.4700000000003,
+            "range": "± 40046.6",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "write",
+            "value": 13006.9,
+            "range": "± 84844.3",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "write",
+            "value": 897.337,
+            "range": "± 18.2941",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "read_column<double> price",
+            "value": 141.868,
+            "range": "± 28.5927",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "read_all",
+            "value": 22.7297,
+            "range": "± 102.238",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "read_columns price+qty",
+            "value": 19.3358,
+            "range": "± 114.44",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "read_column<int64_t> ts",
+            "value": 114.225,
+            "range": "± 27.2708",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "open + num_rows",
+            "value": 182.437,
+            "range": "± 33.5356",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "append 32B",
+            "value": 334.48,
+            "range": "± 53.7121",
+            "unit": "ns",
+            "extra": "50 samples\n89 iterations"
+          },
+          {
+            "name": "append 256B",
+            "value": 1.09756,
+            "range": "± 192.615",
+            "unit": "us",
+            "extra": "50 samples\n28 iterations"
+          },
+          {
+            "name": "1000 appends",
+            "value": 326.718,
+            "range": "± 6.85894",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "append + flush(no-fsync)",
+            "value": 1.6192,
+            "range": "± 215.578",
+            "unit": "us",
+            "extra": "50 samples\n18 iterations"
+          },
+          {
+            "name": "manager append 32B",
+            "value": 355.51,
+            "range": "± 71.3423",
+            "unit": "ns",
+            "extra": "50 samples\n79 iterations"
+          },
+          {
+            "name": "read_all 10K records",
+            "value": 2.33391,
+            "range": "± 38.4358",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "mmap append 32B",
+            "value": 280.343,
+            "range": "± 33.2412",
+            "unit": "ns",
+            "extra": "50 samples\n126 iterations"
+          },
+          {
+            "name": "mmap append 256B",
+            "value": 741.19,
+            "range": "± 29.7631",
+            "unit": "ns",
+            "extra": "50 samples\n39 iterations"
+          },
+          {
+            "name": "mmap 1000 appends",
+            "value": 230.627,
+            "range": "± 3.28678",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "mmap append + flush(no-msync)",
+            "value": 0.8190259999999999,
+            "range": "± 0.0473978",
+            "unit": "us",
+            "extra": "50 samples\n36 iterations"
+          },
+          {
+            "name": "fwrite append 32B",
+            "value": 344.693,
+            "range": "± 64.6126",
+            "unit": "ns",
+            "extra": "50 samples\n87 iterations"
+          },
+          {
+            "name": "mmap append 32B",
+            "value": 230.245,
+            "range": "± 8.7675",
+            "unit": "ns",
+            "extra": "50 samples\n125 iterations"
+          },
+          {
+            "name": "WalWriter append 32B",
+            "value": 342.604,
+            "range": "± 59.9958",
+            "unit": "ns",
+            "extra": "50 samples\n87 iterations"
+          },
+          {
+            "name": "WalManager append 32B",
+            "value": 358.157,
+            "range": "± 63.6616",
+            "unit": "ns",
+            "extra": "50 samples\n76 iterations"
+          },
+          {
+            "name": "WalMmapWriter append 32B",
+            "value": 253.77,
+            "range": "± 9.92637",
+            "unit": "ns",
+            "extra": "50 samples\n117 iterations"
+          },
+          {
+            "name": "delta encode",
+            "value": 36.2151,
+            "range": "± 2.38164",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "delta decode",
+            "value": 47.728,
+            "range": "± 5.47344",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "bss encode",
+            "value": 31.1589,
+            "range": "± 6.64293",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "bss decode",
+            "value": 68.2328,
+            "range": "± 12.6319",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rle encode bit_width=1",
+            "value": 52.7276,
+            "range": "± 2.04799",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rle decode bit_width=1",
+            "value": 64.1889,
+            "range": "± 2.02405",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "delta encode",
+            "value": 40.0266,
+            "range": "± 3.45237",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "plain copy baseline",
+            "value": 2.79464,
+            "range": "± 165.048",
+            "unit": "us",
+            "extra": "50 samples\n11 iterations"
+          },
+          {
+            "name": "bss encode",
+            "value": 31.0236,
+            "range": "± 6.7227",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "bss decode",
+            "value": 30.2892,
+            "range": "± 6.74185",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "write_batch 10K",
+            "value": 13.1522,
+            "range": "± 102.865",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "get latest",
+            "value": 124.637,
+            "range": "± 451.759",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "as_of mid-range",
+            "value": 123.756,
+            "range": "± 388.658",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "as_of_batch 100 entities",
+            "value": 12.4597,
+            "range": "± 37.3002",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "history 100 records",
+            "value": 13.3465,
+            "range": "± 55.5251",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "push+pop",
+            "value": 7.18129,
+            "range": "± 0.363255",
+            "unit": "ns",
+            "extra": "50 samples\n4056 iterations"
+          },
+          {
+            "name": "4P4C 4000 items",
+            "value": 383.57,
+            "range": "± 102.808",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "push 1000 rows + column_view",
+            "value": 26.7933,
+            "range": "± 922.699",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "as_tensor",
+            "value": 35.9335,
+            "range": "± 1.92816",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "publish+pop 1000",
+            "value": 24.753,
+            "range": "± 1.8819",
             "unit": "us",
             "extra": "50 samples\n2 iterations"
           }
