@@ -712,7 +712,7 @@ private:
                 system_clock::now().time_since_epoch()).count());
         r.generated_at_iso = ns_to_iso8601(r.generated_at_ns);
         r.period_start_iso = ns_to_iso8601(opts.start_ns);
-        r.period_end_iso   = (opts.end_ns == std::numeric_limits<int64_t>::max())
+        r.period_end_iso   = (opts.end_ns == (std::numeric_limits<int64_t>::max)())
                                  ? "open"
                                  : ns_to_iso8601(opts.end_ns);
         r.report_id = opts.report_id.empty()

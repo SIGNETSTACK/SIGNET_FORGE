@@ -26,7 +26,7 @@ struct TempDir {
     fs::path path;
 
     explicit TempDir(const std::string& name)
-        : path(fs::path("/tmp/signet_test_audit") / name)
+        : path(std::string("/tmp/signet_test_audit/") + name)
     {
         std::error_code ec;
         fs::create_directories(path, ec);
@@ -36,6 +36,9 @@ struct TempDir {
         std::error_code ec;
         fs::remove_all(path, ec);
     }
+
+    TempDir(const TempDir&) = delete;
+    TempDir& operator=(const TempDir&) = delete;
 };
 
 // ---------------------------------------------------------------------------

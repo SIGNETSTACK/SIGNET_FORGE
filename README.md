@@ -21,7 +21,7 @@ AI-native capabilities the regulation-era demands. SignetForge fills five white 
 | Gap | What SignetForge provides |
 |-----|---------------------|
 | **No standalone C++ Parquet** | Header-only core — `#include "signet/forge.hpp"`, link nothing |
-| **No post-quantum encryption** | Kyber-768 KEM + Dilithium-3 signatures — first in any Parquet library |
+| **No post-quantum encryption** | Kyber-768 KEM + Dilithium-3 signatures per [NIST FIPS 203/204](https://csrc.nist.gov/pubs/fips/203/final) — first in any Parquet library |
 | **No AI audit trail** | SHA-256 hash-chained decision logs compliant with MiFID II RTS 24 and EU AI Act Art. 12/19 |
 | **No sub-μs streaming** | Dual-mode WAL: **339 ns** (fwrite, general purpose) and **~38 ns** (mmap ring, HFT colocation) |
 | **No Parquet feature store** | Point-in-time correct feature retrieval at **12 μs** per entity — no Redis needed |
@@ -371,20 +371,26 @@ cmake --preset ci          # RelWithDebInfo + all targets → build-ci/
 ## Test Coverage
 
 ```
-423 unit tests   (100% pass)   cmake --preset server-pq && ctest
+566 unit tests   (100% pass)   cmake --preset server-pq && ctest
  37 benchmark cases             cmake --preset benchmarks
  59 enterprise benchmarks       Benchmarking_Protocols/ (real tick data, 9 phases)
  35 Python tests (100% pass)    PYTHONPATH=python pytest python/tests/
 ```
 
 Tests span: roundtrip identity, all encodings, all compression codecs, PME encryption,
-post-quantum (Kyber-768, Dilithium-3, X25519 RFC 7748), bloom filters, Arrow/DuckDB interop,
-vector types, tensor bridge, audit chain integrity, WAL crash recovery + mmap ring path,
-feature store time-travel, MPMC event bus, MiFID II and EU AI Act report generation,
-z-order curve encoding, page index predicate pushdown.
+post-quantum (Kyber-768, Dilithium-3, X25519 [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748)),
+bloom filters, Arrow/DuckDB interop, vector types, tensor bridge, audit chain integrity,
+WAL crash recovery + mmap ring path, feature store time-travel, MPMC event bus,
+MiFID II and EU AI Act report generation, z-order curve encoding, page index predicate pushdown.
 
-**Security hardening tests** (`ctest -L hardening`): five hardening passes plus static audit
-follow-up covering 151 confirmed vulnerabilities — constant-time GHASH, GCM/CTR counter overflow,
+**Cryptographic test vectors**: [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final)
+(18 GCM vectors including Test Case 15), [NIST SP 800-38A](https://csrc.nist.gov/pubs/sp/800/38a/final)
+(CTR vectors), and [Google Wycheproof](https://github.com/google/wycheproof) edge-case suites
+for both AES-256-GCM (tag tampering, ciphertext modification, empty plaintext) and X25519
+(low-order points, non-canonical coordinates, twist attacks, scalar clamping).
+
+**Security hardening tests** (`ctest -L hardening`): six hardening passes plus static audit
+follow-up covering 242 confirmed vulnerabilities — constant-time GHASH, GCM/CTR counter overflow,
 CSPRNG hardening (platform dispatch + hard-fail), secure key zeroing (volatile+barrier), move-only
 ciphers, typed statistics merge, page CRC-32, encoding boundary values (RLE/BSS/Delta/Dictionary),
 Thrift parser DoS (nesting depth, field count, string bomb, negative list count, MAP size),
@@ -395,6 +401,12 @@ timestamp granularity, training metadata), WAL fsync checks + empty record rejec
 (negative page size, num_values cap, decompression pre-validation), reader row_group bounds,
 C FFI exception safety, Rust FFI panic safety, WASM bounds checking and key zeroing, Python
 graceful degradation, and getrandom EINTR retry.
+
+**Enterprise compliance** (73 of 92 gaps resolved across 9 passes): FIPS 140-3, [EU AI Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689),
+[MiFID II RTS 24](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0580),
+[GDPR](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679),
+[DORA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554),
+and Parquet PME spec.
 
 ---
 

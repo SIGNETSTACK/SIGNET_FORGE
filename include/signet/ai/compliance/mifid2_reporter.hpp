@@ -158,7 +158,7 @@ public:
         report.generated_at_ns = now_ns_();
         report.generated_at_iso = ns_to_iso8601(report.generated_at_ns);
         report.period_start_iso = ns_to_iso8601(opts.start_ns);
-        report.period_end_iso   = (opts.end_ns == std::numeric_limits<int64_t>::max())
+        report.period_end_iso   = (opts.end_ns == (std::numeric_limits<int64_t>::max)())
                                       ? "open"
                                       : ns_to_iso8601(opts.end_ns);
         // MiFID II RTS 24 Annex I Table 2, Field 1: unique report ID.

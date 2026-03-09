@@ -648,7 +648,7 @@ private:
         [[nodiscard]] expected<void> flush() {
             std::lock_guard<std::mutex> consumer_lk(consumer_mutex_);
             std::vector<StreamRecord> batch;
-            drain_ring_locked(batch, std::numeric_limits<size_t>::max());
+            drain_ring_locked(batch, (std::numeric_limits<size_t>::max)());
             if (!batch.empty()) {
                 auto r = write_batch(batch);
                 if (!r) return r;
@@ -690,7 +690,7 @@ private:
                 if (stop_requested_.load(std::memory_order_acquire)) {
                     std::lock_guard<std::mutex> consumer_lk(consumer_mutex_);
                     batch.clear();
-                    drain_ring_locked(batch, std::numeric_limits<size_t>::max());
+                    drain_ring_locked(batch, (std::numeric_limits<size_t>::max)());
                     if (!batch.empty()) (void)write_batch(batch);
                     // Close any open writer so the Parquet footer is written.
                     if (current_writer_) {
@@ -740,8 +740,8 @@ private:
                 }
 
                 const size_t chunk_size =
-                    std::min(batch.size() - written,
-                             opts_.max_file_rows - current_file_rows_);
+                    (std::min)(batch.size() - written,
+                               opts_.max_file_rows - current_file_rows_);
 
                 std::vector<int64_t>     ts_col;
                 std::vector<int32_t>     type_col;
@@ -849,7 +849,7 @@ private:
 struct HybridReaderOptions {
     std::vector<std::string> parquet_files;                                     ///< Parquet files to query
     int64_t                  start_timestamp = 0;                               ///< Minimum timestamp_ns (inclusive)
-    int64_t                  end_timestamp   = std::numeric_limits<int64_t>::max(); ///< Maximum timestamp_ns (inclusive)
+    int64_t                  end_timestamp   = (std::numeric_limits<int64_t>::max)(); ///< Maximum timestamp_ns (inclusive)
     uint32_t                 type_id_filter  = 0;                               ///< Type ID filter (0 = accept all types)
 };
 
@@ -861,9 +861,9 @@ struct HybridReaderOptions {
 /// Per-query filter options passed to HybridReader::read().
 struct HybridQueryOptions {
     int64_t  start_ns  = 0;                                      ///< Minimum timestamp_ns (inclusive)
-    int64_t  end_ns    = std::numeric_limits<int64_t>::max();     ///< Maximum timestamp_ns (inclusive)
+    int64_t  end_ns    = (std::numeric_limits<int64_t>::max)();    ///< Maximum timestamp_ns (inclusive)
     uint32_t type_id   = 0;                                      ///< Type ID filter (0 = all types)
-    size_t   max_rows  = std::numeric_limits<size_t>::max();      ///< Maximum records to return
+    size_t   max_rows  = (std::numeric_limits<size_t>::max)();    ///< Maximum records to return
 };
 
 // ============================================================================
@@ -980,9 +980,9 @@ public:
                 const auto& type_col    = *type_result;
                 const auto& payload_col = *payload_result;
 
-                const size_t nrows = std::min({ts_col.size(),
-                                               type_col.size(),
-                                               payload_col.size()});
+                const size_t nrows = (std::min)({ts_col.size(),
+                                                type_col.size(),
+                                                payload_col.size()});
 
                 for (size_t i = 0; i < nrows; ++i) {
                     if (result.size() >= opts.max_rows) break;
@@ -1039,7 +1039,7 @@ private:
 
     // Filter fields populated by create(Options) — default values = no filtering.
     int64_t  filter_start_ = 0;
-    int64_t  filter_end_   = std::numeric_limits<int64_t>::max();
+    int64_t  filter_end_   = (std::numeric_limits<int64_t>::max)();
     uint32_t filter_type_  = 0;
 };
 

@@ -61,7 +61,7 @@ struct ReportOptions {
 
     /// Inclusive end of the reporting period (nanoseconds since Unix epoch).
     /// Default: no upper bound.
-    int64_t end_ns = std::numeric_limits<int64_t>::max();
+    int64_t end_ns = (std::numeric_limits<int64_t>::max)();
 
     /// Output serialization format.
     ReportFormat format = ReportFormat::JSON;

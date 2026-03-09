@@ -164,7 +164,7 @@ public:
             const std::string& entity_id,
             const std::vector<std::string>& project = {}) const {
         return as_of(entity_id,
-                     std::numeric_limits<int64_t>::max(),
+                     (std::numeric_limits<int64_t>::max)(),
                      project);
     }
 

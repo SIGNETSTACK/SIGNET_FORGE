@@ -148,7 +148,7 @@ Six security hardening passes plus a static audit follow-up have been completed,
 **Static audit follow-up** (11 fixes):
 - Page CRC-32 in writer, mmap parity gaps, reader row_group OOB, Z-Order column count validation, Float16 shift UB + unaligned cast fixes, feature flush data loss prevention, getrandom EINTR retry, delta zigzag unsigned shift, statistics typed merge, compliance error reporting, WAL fsync checks
 
-Run hardening tests: `ctest -L hardening` — covers all 6 passes plus follow-up (423 total tests)
+Run hardening tests: `ctest -L hardening` — covers all 6 passes plus follow-up. Full test suite: 566 unit tests (100% passing) across 9 enterprise compliance gap-fix passes + 6 security hardening passes.
 
 ## Credit
 

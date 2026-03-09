@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Enterprise Compliance — 67 of 92 Gaps Resolved (2026-03-09)
+### Enterprise Compliance — 73 of 92 Gaps Resolved (2026-03-09)
 
-Eight compliance gap-fix passes resolving 67 of 92 enterprise regulatory gaps. 554 unit tests (100% passing). Covers FIPS 140-3, EU AI Act, MiFID II, GDPR, DORA, and Parquet PME spec.
+Nine compliance gap-fix passes resolving 73 of 92 enterprise regulatory gaps. 566 unit tests (100% passing). Covers FIPS 140-3, EU AI Act, MiFID II, GDPR, DORA, and Parquet PME spec.
 
 #### Gap Fix Pass 1 (7 gaps)
 - CodeQL SAST workflow with `security-extended` query suite (T-1)
@@ -88,9 +88,17 @@ Eight compliance gap-fix passes resolving 67 of 92 enterprise regulatory gaps. 5
 - Source file manifest in reports (R-18b)
 
 #### Gap Fix Pass 8 (3 gaps — Crypto infrastructure)
-- Algorithm deprecation framework per NIST SP 800-131A (C-4)
+- Algorithm deprecation framework per [NIST SP 800-131A](https://csrc.nist.gov/pubs/sp/800/131a/r2/final) (C-4)
 - `INTERNAL` key mode production gate per FIPS 140-3 §7.7 (C-15)
 - Key rotation request/result API per PCI-DSS/HIPAA/SOX (T-7)
+
+#### Gap Fix Pass 9 (6 gaps — Cryptographic validation & test vectors)
+- AES-256-only design decision documented per [NIST SP 800-131A Rev.2 §4](https://csrc.nist.gov/pubs/sp/800/131a/r2/final): post-quantum safety (Grover's algorithm), single key size eliminates [CWE-326](https://cwe.mitre.org/data/definitions/326.html) (C-14)
+- [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final) Test Case 15: AES-256-GCM with 64-byte plaintext and independent ciphertext + tag verification (C-16)
+- 7 [Wycheproof](https://github.com/google/wycheproof) X25519 edge-case tests: valid exchange, [RFC 7748 §6.1](https://www.rfc-editor.org/rfc/rfc7748#section-6.1) vector, RFC 8037 with manual scalar clamping, low-order point rejection, non-canonical u-coordinates, twist points (C-18)
+- [NIST SP 800-227](https://csrc.nist.gov/pubs/sp/800/227/final) updated from draft to Final (Sep 2025) across all source files and documentation (C-19)
+- 4 Wycheproof AES-256-GCM edge-case tests: empty plaintext + AAD (tcId 92), ciphertext verification (tcId 97), modified tag rejection (16 flips + boundary values), tampered ciphertext detection (T-5)
+- IV uniqueness verification: consecutive CSPRNG-generated nonces proven distinct, same plaintext with different IVs produces different ciphertext — validates GCM IV non-reuse guarantee (T-18)
 
 ### Security — Comprehensive Cryptographic & Systems Audit (2026-03-08)
 
@@ -103,7 +111,7 @@ End-to-end security audit across all 53 header files — crypto, encoding, compr
 - GCM: `encrypt()`/`decrypt()` now call `derive_j0()` for correct 12/16-byte IV handling (NIST SP 800-38D §7.1)
 - GCM `gctr()`: block count overflow guard (2^32-2 limit per NIST SP 800-38D)
 - MSVC X25519 `fe_sub`: corrected `2p` constants (was `0x3FFFFF0`, now `2^26-19`); all X25519 on Windows was broken
-- Hybrid KEM: added domain separation label `"signet-forge-hybrid-kem-v1"` to SHA-256 key combining (NIST SP 800-227 draft)
+- Hybrid KEM: added domain separation label `"signet-forge-hybrid-kem-v1"` to SHA-256 key combining (NIST SP 800-227, Final Sep 2025)
 - `AesGcmCipher`/`AesCtrCipher`: key storage changed from `std::vector` to `std::array<uint8_t, 32>` (prevents reallocation leaks)
 - `BCryptGenRandom`: return value now checked; size validated against `ULONG` truncation (Windows)
 - `KeyMode::INTERNAL`: runtime warning when raw key stored in Parquet metadata

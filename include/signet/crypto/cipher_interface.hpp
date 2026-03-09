@@ -272,6 +272,9 @@ inline bool lock_memory(void* ptr, size_t size) {
     if (!ptr || size == 0) return false;
 #if defined(_WIN32)
     return VirtualLock(ptr, size) != 0;
+#elif defined(__EMSCRIPTEN__)
+    (void)ptr; (void)size;
+    return false;  // mlock not available in WASM
 #elif defined(__unix__) || defined(__APPLE__)
     return ::mlock(ptr, size) == 0;
 #else
@@ -285,6 +288,8 @@ inline void unlock_memory(void* ptr, size_t size) {
     if (!ptr || size == 0) return;
 #if defined(_WIN32)
     VirtualUnlock(ptr, size);
+#elif defined(__EMSCRIPTEN__)
+    (void)ptr; (void)size;  // munlock not available in WASM
 #elif defined(__unix__) || defined(__APPLE__)
     ::munlock(ptr, size);
 #else
