@@ -123,6 +123,8 @@
 #  include "signet/ai/row_lineage.hpp"
 #  include "signet/ai/decision_log.hpp"
 #  include "signet/ai/inference_log.hpp"
+#  include "signet/ai/human_oversight.hpp"
+#  include "signet/ai/log_retention.hpp"
 #  include "signet/ai/compliance/compliance_types.hpp"
 #  include "signet/ai/compliance/mifid2_reporter.hpp"
 #  include "signet/ai/compliance/eu_ai_act_reporter.hpp"

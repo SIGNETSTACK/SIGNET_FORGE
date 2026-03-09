@@ -164,6 +164,7 @@ public:
     /// Write a list header. If size <= 14, uses the compact single-byte form.
     /// Otherwise writes (0xF0 | elem_type) followed by a varint size.
     void write_list_header(uint8_t elem_type, int32_t size) {
+        if (size < 0) return; // negative size is invalid
         if (size <= 14) {
             buf_.push_back(static_cast<uint8_t>((size << 4) | elem_type));
         } else {
@@ -221,8 +222,9 @@ private:
         return static_cast<uint32_t>((val << 1) ^ (val >> 31));
     }
 
+    // CWE-190, C++ [expr.shift] p7.6.7 — left shift on unsigned to avoid UB
     static uint64_t zigzag_encode_i64(int64_t val) {
-        return static_cast<uint64_t>((val << 1) ^ (val >> 63));
+        return (static_cast<uint64_t>(val) << 1) ^ static_cast<uint64_t>(val >> 63);
     }
 };
 
@@ -291,6 +293,11 @@ public:
         }
 
         if (++field_count_ > MAX_FIELD_COUNT) {
+            error_ = true;
+            return {0, 0};
+        }
+        // CWE-400: Uncontrolled Resource Consumption (DoS prevention)
+        if (++total_fields_read_ > MAX_TOTAL_FIELDS) {
             error_ = true;
             return {0, 0};
         }
@@ -377,7 +384,7 @@ public:
             size = static_cast<int32_t>(raw);
         }
         if (size < 0) {
-            // L-2: structured error for negative list size (likely corrupt data)
+            // CWE-20: Improper Input Validation — negative list size (likely corrupt data)
             error_ = true;
             return {0, 0};
         }
@@ -478,9 +485,8 @@ public:
 
     /// Pop the field-ID context after finishing a nested struct.
     void end_struct() {
-        if (!last_field_ids_.empty()) {
-            last_field_ids_.pop();
-        }
+        if (last_field_ids_.empty()) { error_ = true; return; } // CWE-124: Buffer Underwrite
+        last_field_ids_.pop();
     }
 
     // -- state queries --------------------------------------------------------
@@ -508,10 +514,12 @@ private:
 
     static constexpr size_t   MAX_NESTING_DEPTH   = 64;               ///< Reduced from 128 for embedded safety (CWE-674)
     static constexpr size_t   MAX_FIELD_COUNT     = 65536;            ///< Max fields per struct.
+    static constexpr size_t   MAX_TOTAL_FIELDS    = 1'000'000;        ///< 1M total fields across all nesting.
     static constexpr uint32_t MAX_STRING_BYTES    = 64u * 1024u * 1024u;  ///< 64 MB max string/binary field.
     static constexpr uint32_t MAX_COLLECTION_SIZE = 1'000'000u;       ///< 1M max entries for LIST/SET/MAP.
     std::stack<int16_t> last_field_ids_;
     size_t field_count_ = 0;
+    size_t total_fields_read_ = 0;                                    ///< Global field counter across all nesting.
 
     // -- bounds checking ------------------------------------------------------
 

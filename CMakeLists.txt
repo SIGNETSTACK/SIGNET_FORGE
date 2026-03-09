@@ -516,6 +516,9 @@ if(SIGNET_BUILD_FUZZ)
         fuzz_rle_decoder
         fuzz_delta_decoder
         fuzz_arrow_import
+        fuzz_aes_gcm
+        fuzz_pme
+        fuzz_key_metadata
     )
     foreach(_target ${SIGNET_FUZZ_TARGETS})
         add_executable(${_target} fuzz/${_target}.cpp)

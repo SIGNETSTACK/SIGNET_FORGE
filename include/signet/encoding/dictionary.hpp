@@ -37,13 +37,10 @@
 #include "signet/error.hpp"
 #include "signet/types.hpp"
 
-#include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -262,6 +259,15 @@ public:
     /// Default-construct an empty dictionary encoder.
     DictionaryEncoder() = default;
 
+    /// Maximum number of dictionary entries before fallback to PLAIN encoding.
+    /// CWE-400: Uncontrolled Resource Consumption — bounds dictionary memory growth.
+    static constexpr size_t MAX_DICTIONARY_ENTRIES = 1 << 20; // 1M entries
+
+    /// Check whether the dictionary has reached its maximum capacity.
+    /// Prevents DoS via unbounded dictionary growth from high-cardinality input.
+    /// @return @c true if the dictionary is full and put() will return false.
+    [[nodiscard]] bool is_full() const { return dict_values_.size() >= MAX_DICTIONARY_ENTRIES; }
+
     /// Add a value to the encoding stream.
     ///
     /// If @p value has not been seen before, it is assigned a fresh sequential
@@ -269,10 +275,15 @@ public:
     /// indices buffer regardless.
     ///
     /// @param value  The value to encode.
-    void put(const T& value) {
+    /// @return @c true on success, @c false if the dictionary is full (DoS
+    ///         prevention — caller should fall back to PLAIN encoding).
+    bool put(const T& value) {
         auto it = dict_map_.find(value);
         uint32_t index;
         if (it == dict_map_.end()) {
+            if (dict_values_.size() >= MAX_DICTIONARY_ENTRIES) {
+                return false; // dictionary full — caller should fall back to PLAIN
+            }
             index = static_cast<uint32_t>(dict_values_.size());
             dict_map_.emplace(value, index);
             dict_values_.push_back(value);
@@ -280,6 +291,7 @@ public:
             index = it->second;
         }
         indices_.push_back(index);
+        return true;
     }
 
     /// Finalize the encoding. Must be called after all put() calls.

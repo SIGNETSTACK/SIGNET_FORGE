@@ -33,6 +33,7 @@
 #include <lz4.h>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -60,6 +61,12 @@ public:
 
         if (size == 0) {
             return std::vector<uint8_t>{};
+        }
+
+        // CWE-190: Integer Overflow (liblz4 uses int for sizes)
+        if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "LZ4: input exceeds int32 limit"};
         }
 
         // LZ4_compressBound returns the maximum compressed size.
@@ -101,6 +108,17 @@ public:
 
         if (uncompressed_size == 0) {
             return std::vector<uint8_t>{};
+        }
+
+        // CWE-190: Integer Overflow (liblz4 uses int for sizes)
+        if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "LZ4: compressed input exceeds int32 limit"};
+        }
+        // CWE-190: Integer Overflow (liblz4 uses int for sizes)
+        if (uncompressed_size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "LZ4: uncompressed size exceeds int32 limit"};
         }
 
         std::vector<uint8_t> out(uncompressed_size);

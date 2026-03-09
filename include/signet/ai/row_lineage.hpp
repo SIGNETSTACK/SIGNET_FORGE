@@ -63,6 +63,12 @@ public:
                                 int32_t initial_version = 1)
         : origin_file_(origin_file)
         , version_(initial_version) {
+        // BSL 1.1 license gating: the license check result is intentionally
+        // discarded here. In demo/dev mode (SIGNET_REQUIRE_COMMERCIAL_LICENSE=OFF),
+        // require_feature() always succeeds. In production mode, a missing license
+        // causes a hard error at a higher level (InferenceLogWriter /
+        // DecisionLogWriter constructor). Discarding here allows RowLineageTracker
+        // to be used standalone in tests without the full license validation pipeline.
         auto gate = commercial::require_feature("RowLineageTracker");
         (void)gate;
     }

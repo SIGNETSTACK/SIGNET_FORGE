@@ -56,6 +56,7 @@
 
 namespace signet::forge {
 
+/// CWE-400: Uncontrolled Resource Consumption
 /// Maximum allowed uncompressed page size in bytes (256 MB).
 ///
 /// Any page whose declared uncompressed size exceeds this limit is rejected
@@ -1170,6 +1171,30 @@ private:
             type_length = schema_.column(column_index).type_length;
         }
 
+        // M22: Check that decoded page won't exceed a reasonable memory budget
+        {
+            size_t elem_size = 0;
+            switch (pt) {
+                case PhysicalType::BOOLEAN: elem_size = 1; break;
+                case PhysicalType::INT32:
+                case PhysicalType::FLOAT:   elem_size = 4; break;
+                case PhysicalType::INT64:
+                case PhysicalType::DOUBLE:  elem_size = 8; break;
+                case PhysicalType::FIXED_LEN_BYTE_ARRAY:
+                    elem_size = (type_length > 0) ? static_cast<size_t>(type_length) : 1;
+                    break;
+                default: elem_size = 0; break; // variable-length: skip budget check
+            }
+            // CWE-400: Uncontrolled Resource Consumption — 256 MB decoded page memory budget
+            if (elem_size > 0) {
+                size_t decoded_size = static_cast<size_t>(num_values) * elem_size;
+                if (decoded_size > 256ULL * 1024 * 1024) {
+                    return Error{ErrorCode::CORRUPT_DATA,
+                                 "decoded page exceeds 256 MB memory limit"};
+                }
+            }
+        }
+
         ColumnReader col_reader(pt, page_data, page_data_size,
                                 num_values, type_length);
 
@@ -1240,6 +1265,12 @@ private:
             if (uncompressed_size == 0 || uncompressed_size > PARQUET_MAX_PAGE_SIZE) {
                 return Error{ErrorCode::CORRUPT_PAGE,
                              "ParquetReader: uncompressed_page_size exceeds 256 MB hard cap"};
+            }
+            // CWE-409: Improper Handling of Highly Compressed Data (Zip Bomb)
+            // M20: Reject suspiciously high decompression ratios (zip bomb guard)
+            if (pdata_size > 0 && uncompressed_size / pdata_size > 1024) {
+                return Error{ErrorCode::CORRUPT_DATA,
+                             "ParquetReader: decompression ratio exceeds 1024x limit"};
             }
             auto dec_result = decompress(codec, pdata, pdata_size,
                                          uncompressed_size);

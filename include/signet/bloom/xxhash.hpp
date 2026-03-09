@@ -64,6 +64,10 @@ inline uint64_t read_u64_le(const uint8_t* p) {
     // x86, x86_64, and ARM (little-endian mode) are fine.
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     v = __builtin_bswap64(v);
+#elif defined(_MSC_VER)
+    // Portability: MSVC targets are always little-endian (x86/x64/ARM-LE),
+    // so no byte-swap is needed. If MSVC ever targets a big-endian arch,
+    // this branch must be revisited.
 #elif !defined(__BYTE_ORDER__)
 #  error "Cannot determine endianness — define __BYTE_ORDER__"
 #endif
@@ -79,6 +83,9 @@ inline uint32_t read_u32_le(const uint8_t* p) {
     std::memcpy(&v, p, 4);
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     v = __builtin_bswap32(v);
+#elif defined(_MSC_VER)
+    // Portability: MSVC targets are always little-endian (x86/x64/ARM-LE),
+    // so no byte-swap is needed.
 #elif !defined(__BYTE_ORDER__)
 #  error "Cannot determine endianness — define __BYTE_ORDER__"
 #endif

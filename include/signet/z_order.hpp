@@ -93,6 +93,10 @@ inline uint64_t normalize_double(double v) {
 /// `0x41420000`. This provides a coarse sort-preserving key suitable for
 /// Morton interleaving (lexicographic order is preserved for the first 4 chars).
 ///
+/// @note L16: Only uses first 4 bytes -- strings with shared prefixes will have
+///       identical Morton keys. Consider using xxhash32() for better distribution
+///       if lexicographic order is not required.
+///
 /// @param v String input (only the first 4 bytes are used).
 /// @return 32-bit sort key derived from the string prefix.
 inline uint32_t normalize_string(std::string_view v) {
@@ -311,6 +315,11 @@ private:
                                   std::vector<uint32_t>& out) {
         switch (col.type) {
             case PhysicalType::INT32: {
+                // CWE-704, C++ [basic.align] — alignment check before pointer cast
+                if (reinterpret_cast<uintptr_t>(col.data) % alignof(int32_t) != 0) {
+                    throw std::invalid_argument(
+                        "ZOrderSorter: INT32 data pointer not aligned for int32_t");
+                }
                 const auto* vals = static_cast<const int32_t*>(col.data);
                 for (size_t i = 0; i < col.count; ++i) {
                     out[i] = normalize_int32(vals[i]);
@@ -318,6 +327,11 @@ private:
                 break;
             }
             case PhysicalType::INT64: {
+                // CWE-704, C++ [basic.align] — alignment check before pointer cast
+                if (reinterpret_cast<uintptr_t>(col.data) % alignof(int64_t) != 0) {
+                    throw std::invalid_argument(
+                        "ZOrderSorter: INT64 data pointer not aligned for int64_t");
+                }
                 const auto* vals = static_cast<const int64_t*>(col.data);
                 for (size_t i = 0; i < col.count; ++i) {
                     out[i] = truncate_to_32(normalize_int64(vals[i]));
@@ -325,6 +339,11 @@ private:
                 break;
             }
             case PhysicalType::FLOAT: {
+                // CWE-704, C++ [basic.align] — alignment check before pointer cast
+                if (reinterpret_cast<uintptr_t>(col.data) % alignof(float) != 0) {
+                    throw std::invalid_argument(
+                        "ZOrderSorter: FLOAT data pointer not aligned for float");
+                }
                 const auto* vals = static_cast<const float*>(col.data);
                 for (size_t i = 0; i < col.count; ++i) {
                     out[i] = normalize_float(vals[i]);
@@ -332,6 +351,11 @@ private:
                 break;
             }
             case PhysicalType::DOUBLE: {
+                // CWE-704, C++ [basic.align] — alignment check before pointer cast
+                if (reinterpret_cast<uintptr_t>(col.data) % alignof(double) != 0) {
+                    throw std::invalid_argument(
+                        "ZOrderSorter: DOUBLE data pointer not aligned for double");
+                }
                 const auto* vals = static_cast<const double*>(col.data);
                 for (size_t i = 0; i < col.count; ++i) {
                     out[i] = truncate_to_32(normalize_double(vals[i]));

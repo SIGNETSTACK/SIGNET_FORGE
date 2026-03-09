@@ -315,14 +315,21 @@ inline std::array<uint8_t, 32> sha256(const std::vector<uint8_t>& data) {
     return sha256(data.data(), data.size());
 }
 
-/// Hash concatenation of two byte spans: SHA-256(a || b).
+/// Hash concatenation of two byte spans with domain separation:
+/// SHA-256(label || a || b).
 /// Used for hybrid key combining and HMAC-style constructions.
+///
+/// Domain separation label prevents cross-protocol attacks per
+/// NIST SP 800-227 (draft) §4.2 and Barker & Roginsky "Transitioning
+/// the Use of Cryptographic Algorithms" guidance.
 inline std::array<uint8_t, 32> sha256_concat(
     const uint8_t* a, size_t a_size,
     const uint8_t* b, size_t b_size) {
 
+    static constexpr uint8_t LABEL[] = "signet-forge-hybrid-kem-v1";
     std::vector<uint8_t> combined;
-    combined.reserve(a_size + b_size);
+    combined.reserve(sizeof(LABEL) - 1 + a_size + b_size);
+    combined.insert(combined.end(), LABEL, LABEL + sizeof(LABEL) - 1);
     combined.insert(combined.end(), a, a + a_size);
     combined.insert(combined.end(), b, b + b_size);
     return sha256(combined.data(), combined.size());
@@ -404,8 +411,8 @@ inline Fe fe_add(Fe a, const Fe& b) {
 }
 
 inline Fe fe_sub(Fe a, const Fe& b) {
-    // Add 2p before subtracting to stay positive
-    a[0] += 0xFFFFFFFFFFFDAULL - b[0]; // 2p[0] = 2*(2^51-19)
+    // Add 2p before subtracting to stay positive (RFC 7748 §5, p = 2^255-19)
+    a[0] += 0xFFFFFFFFFFFDAULL - b[0]; // 2p[0] = 2*(2^51-19) — absorbs p's -19 term
     a[1] += 0xFFFFFFFFFFFFEULL - b[1];
     a[2] += 0xFFFFFFFFFFFFEULL - b[2];
     a[3] += 0xFFFFFFFFFFFFEULL - b[3];
@@ -567,10 +574,21 @@ inline Fe fe_add(Fe a, const Fe& b) {
 }
 
 inline Fe fe_sub(Fe a, const Fe& b) {
-    // Add 2p in each limb to stay non-negative
+    // Add 2p in each limb to stay non-negative.
+    // RFC 7748 §5: p = 2^255 - 19. Limb 0 absorbs the -19 constant.
+    // Audit #6 fix: corrected 2p[0] from 0x3FFFFF0 to 2*(2^26-19) — the
+    // prior value silently corrupted all X25519 on MSVC (CWE-682).
     int32_t two_p[10] = {
-        2*0x3FFFFF0+2*19, 2*0x1FFFFFE, 2*0x3FFFFFE, 2*0x1FFFFFE, 2*0x3FFFFFE,
-        2*0x1FFFFFE,      2*0x3FFFFFE, 2*0x1FFFFFE, 2*0x3FFFFFE, 2*0x1FFFFFE
+        2 * (0x3FFFFFF - 18),  // 2*(2^26 - 19) — absorbs p's -19 term
+        2 * 0x1FFFFFF,         // 2*(2^25 - 1)
+        2 * 0x3FFFFFF,         // 2*(2^26 - 1)
+        2 * 0x1FFFFFF,         // 2*(2^25 - 1)
+        2 * 0x3FFFFFF,         // 2*(2^26 - 1)
+        2 * 0x1FFFFFF,         // 2*(2^25 - 1)
+        2 * 0x3FFFFFF,         // 2*(2^26 - 1)
+        2 * 0x1FFFFFF,         // 2*(2^25 - 1)
+        2 * 0x3FFFFFF,         // 2*(2^26 - 1)
+        2 * 0x1FFFFFF          // 2*(2^25 - 1)
     };
     for (int i = 0; i < 10; ++i) a[i] = a[i] + two_p[i] - b[i];
     fe_carry_10(a);
@@ -851,6 +869,14 @@ public:
     struct KeyPair {
         std::vector<uint8_t> public_key;   ///< PUBLIC_KEY_SIZE bytes.
         std::vector<uint8_t> secret_key;   ///< SECRET_KEY_SIZE bytes.
+
+        /// Zeroing destructor (CWE-244: heap inspection, NIST SP 800-38D §8.3).
+        ~KeyPair() {
+            if (!secret_key.empty()) {
+                volatile uint8_t* p = secret_key.data();
+                for (size_t i = 0; i < secret_key.size(); ++i) p[i] = 0;
+            }
+        }
     };
 
     /// Result of Kyber-768 encapsulation: ciphertext to send + shared secret to keep.
@@ -1162,6 +1188,14 @@ public:
     struct SignKeyPair {
         std::vector<uint8_t> public_key;   ///< PUBLIC_KEY_SIZE bytes.
         std::vector<uint8_t> secret_key;   ///< SECRET_KEY_SIZE bytes.
+
+        /// Zeroing destructor (CWE-244: heap inspection).
+        ~SignKeyPair() {
+            if (!secret_key.empty()) {
+                volatile uint8_t* p = secret_key.data();
+                for (size_t i = 0; i < secret_key.size(); ++i) p[i] = 0;
+            }
+        }
     };
 
     // -----------------------------------------------------------------------
@@ -1460,6 +1494,18 @@ public:
         std::vector<uint8_t> kyber_secret_key;   ///< Kyber-768 secret key (2400 bytes).
         std::vector<uint8_t> x25519_public_key;  ///< X25519 public key (32 bytes).
         std::vector<uint8_t> x25519_secret_key;  ///< X25519 clamped secret scalar (32 bytes).
+
+        /// Zeroing destructor (CWE-244: heap inspection).
+        ~HybridKeyPair() {
+            if (!kyber_secret_key.empty()) {
+                volatile uint8_t* p = kyber_secret_key.data();
+                for (size_t i = 0; i < kyber_secret_key.size(); ++i) p[i] = 0;
+            }
+            if (!x25519_secret_key.empty()) {
+                volatile uint8_t* p = x25519_secret_key.data();
+                for (size_t i = 0; i < x25519_secret_key.size(); ++i) p[i] = 0;
+            }
+        }
     };
 
     /// Result of hybrid encapsulation.
@@ -1545,7 +1591,8 @@ public:
         auto x25519_ss_result = detail::x25519::x25519(eph_sk, recip_x25519_pk);
         if (!x25519_ss_result) return x25519_ss_result.error();
 
-        // Step 4: Combined shared secret = SHA-256(kyber_ss || x25519_ss)
+        // Step 4: Combined shared secret = SHA-256(label || kyber_ss || x25519_ss)
+        // Domain separation per NIST SP 800-227 (draft) §4.2 hybrid combiner
         auto combined = detail::sha256::sha256_concat(
             kyber_result->shared_secret.data(),
             kyber_result->shared_secret.size(),
@@ -1608,6 +1655,7 @@ public:
         if (!x25519_ss_result) return x25519_ss_result.error();
 
         // Step 3: Combined shared secret — identical to encapsulate()
+        // Domain separation per NIST SP 800-227 (draft) §4.2 hybrid combiner
         auto combined = detail::sha256::sha256_concat(
             kyber_ss->data(), kyber_ss->size(),
             x25519_ss_result->data(), x25519_ss_result->size());
@@ -1686,6 +1734,18 @@ struct PostQuantumConfig {
     /// Used by the writer to sign the serialized footer.
     /// This is sensitive material -- protect it accordingly.
     std::vector<uint8_t> signing_secret_key;
+
+    /// Zeroing destructor (CWE-244: heap inspection).
+    ~PostQuantumConfig() {
+        auto zero_vec = [](std::vector<uint8_t>& v) {
+            if (!v.empty()) {
+                volatile uint8_t* p = v.data();
+                for (size_t i = 0; i < v.size(); ++i) p[i] = 0;
+            }
+        };
+        zero_vec(recipient_secret_key);
+        zero_vec(signing_secret_key);
+    }
 };
 
 } // namespace signet::forge::crypto

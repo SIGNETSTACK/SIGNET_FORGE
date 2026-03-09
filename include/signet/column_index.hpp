@@ -111,6 +111,10 @@ struct OffsetIndex {
             switch (fid) {
                 case 1: {
                     auto [elem_type, count] = dec.read_list_header();
+                    // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
+                    if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        return; // list count exceeds 10M cap or is negative
+                    }
                     page_locations.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         page_locations[static_cast<size_t>(i)].deserialize(dec);
@@ -206,6 +210,10 @@ struct ColumnIndex {
                 case 1: {
                     // null_pages: list<bool>
                     auto [elem_type, count] = dec.read_list_header();
+                    // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
+                    if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        return; // list count exceeds 10M cap or is negative
+                    }
                     null_pages.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         null_pages[static_cast<size_t>(i)] = dec.read_bool();
@@ -215,6 +223,10 @@ struct ColumnIndex {
                 case 2: {
                     // min_values: list<binary>
                     auto [elem_type, count] = dec.read_list_header();
+                    // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
+                    if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        return; // list count exceeds 10M cap or is negative
+                    }
                     min_values.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         min_values[static_cast<size_t>(i)] = dec.read_string();
@@ -224,6 +236,10 @@ struct ColumnIndex {
                 case 3: {
                     // max_values: list<binary>
                     auto [elem_type, count] = dec.read_list_header();
+                    // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
+                    if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        return; // list count exceeds 10M cap or is negative
+                    }
                     max_values.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         max_values[static_cast<size_t>(i)] = dec.read_string();
@@ -236,6 +252,10 @@ struct ColumnIndex {
                 case 5: {
                     // null_counts: list<i64>
                     auto [elem_type, count] = dec.read_list_header();
+                    // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
+                    if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        return; // list count exceeds 10M cap or is negative
+                    }
                     null_counts.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         null_counts[static_cast<size_t>(i)] = dec.read_i64();

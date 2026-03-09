@@ -1488,10 +1488,15 @@ private:
         size_t count = static_cast<size_t>(cw.num_values());
         std::vector<std::string> result;
         result.reserve(count);
+        const size_t buf_size = buf.size();
         size_t pos = 0;
         for (size_t i = 0; i < count; ++i) {
+            // CWE-125: Out-of-bounds Read — ensure 4-byte length prefix is within buffer
+            if (pos + 4 > buf_size) break;
             uint32_t len = 0;
             std::memcpy(&len, buf.data() + pos, 4);
+            // CWE-190: Integer Overflow — subtraction avoids unsigned wrap on crafted len
+            if (len > buf_size - pos - 4) break;
             pos += 4;
             result.emplace_back(
                 reinterpret_cast<const char*>(buf.data() + pos), len);

@@ -132,18 +132,14 @@ inline constexpr uint8_t xtime(uint8_t a) {
 }
 
 /// Multiply two elements in GF(2^8) using the Russian peasant algorithm.
-/// This is used for MixColumns and InvMixColumns.
+/// Constant-time: arithmetic masking instead of branches (CWE-208).
+/// This is used for MixColumns and InvMixColumns (FIPS-197 §5.1.3/§5.3.3).
 inline constexpr uint8_t gf_mul(uint8_t a, uint8_t b) {
     uint8_t result = 0;
     for (int i = 0; i < 8; ++i) {
-        if (b & 1) {
-            result ^= a;
-        }
-        uint8_t hi_bit = a & 0x80;
-        a <<= 1;
-        if (hi_bit) {
-            a ^= 0x1b; // Reduce modulo x^8 + x^4 + x^3 + x + 1
-        }
+        result ^= a & (static_cast<uint8_t>(0) - (b & 1));
+        uint8_t hi = a >> 7;
+        a = static_cast<uint8_t>(a << 1) ^ (0x1b & (static_cast<uint8_t>(0) - hi));
         b >>= 1;
     }
     return result;
@@ -175,6 +171,7 @@ inline void rot_word(uint8_t word[4]) {
 /// Uses volatile write + compiler barrier to prevent dead-store elimination.
 /// This is the approach used by libsodium and BoringSSL — portable across
 /// all compilers and platforms without relying on non-standard APIs.
+/// @note CWE-244: clearing of heap memory containing sensitive information.
 inline void secure_zero(void* ptr, size_t len) {
     if (len == 0) return;
     volatile unsigned char* p = static_cast<volatile unsigned char*>(ptr);
@@ -212,6 +209,11 @@ public:
         key_expansion(key);
     }
 
+    Aes256(const Aes256&) = delete;
+    Aes256& operator=(const Aes256&) = delete;
+    Aes256(Aes256&& other) noexcept { std::memcpy(round_keys_, other.round_keys_, sizeof(round_keys_)); detail::aes::secure_zero(other.round_keys_, sizeof(other.round_keys_)); }
+    Aes256& operator=(Aes256&& other) noexcept { if (this != &other) { detail::aes::secure_zero(round_keys_, sizeof(round_keys_)); std::memcpy(round_keys_, other.round_keys_, sizeof(round_keys_)); detail::aes::secure_zero(other.round_keys_, sizeof(other.round_keys_)); } return *this; }
+
     /// Destructor: securely zero round keys to prevent key material leakage.
     ~Aes256() {
         detail::aes::secure_zero(round_keys_, sizeof(round_keys_));
@@ -224,6 +226,13 @@ public:
     ///
     /// @param block 16-byte plaintext block; overwritten with ciphertext.
     void encrypt_block(uint8_t block[BLOCK_SIZE]) const {
+        // Prefetch entire S-box into cache to mitigate timing side-channels.
+        // Ref: D.J. Bernstein "Cache-timing attacks on AES" (2005), CWE-208.
+        for (size_t i = 0; i < 256; i += 64 / sizeof(uint8_t)) {
+            volatile uint8_t sink = detail::aes::SBOX[i];
+            (void)sink;
+        }
+
         // State is organized as a 4x4 column-major matrix:
         //   state[row][col] = block[row + 4*col]
         // We operate directly on the flat block array using index arithmetic.
@@ -253,6 +262,13 @@ public:
     ///
     /// @param block 16-byte ciphertext block; overwritten with plaintext.
     void decrypt_block(uint8_t block[BLOCK_SIZE]) const {
+        // Prefetch entire inverse S-box into cache to mitigate timing side-channels.
+        // Ref: D.J. Bernstein "Cache-timing attacks on AES" (2005), CWE-208.
+        for (size_t i = 0; i < 256; i += 64 / sizeof(uint8_t)) {
+            volatile uint8_t sink = detail::aes::INV_SBOX[i];
+            (void)sink;
+        }
+
         // Round 14: AddRoundKey
         add_round_key(block, NUM_ROUNDS);
 

@@ -84,6 +84,7 @@ inline size_t encode_varint(std::vector<uint8_t>& buf, uint64_t value) {
 inline uint64_t decode_varint(const uint8_t* data, size_t& pos, size_t size) {
     uint64_t result = 0;
     int shift = 0;
+    size_t start_pos = pos;
     while (pos < size) {
         uint8_t byte = data[pos++];
         result |= static_cast<uint64_t>(byte & 0x7F) << shift;
@@ -91,7 +92,7 @@ inline uint64_t decode_varint(const uint8_t* data, size_t& pos, size_t size) {
             return result;
         }
         shift += 7;
-        if (shift >= 64) break; // overflow protection
+        if (shift >= 64) { pos = start_pos; return 0; } // CWE-190: Integer Overflow — restore position on overflow
     }
     return result;
 }
@@ -369,6 +370,7 @@ public:
     static std::vector<uint8_t> encode_with_length(const uint32_t* values, size_t count,
                                                     int bit_width) {
         auto payload = encode(values, count, bit_width);
+        if (payload.size() > UINT32_MAX) return {}; // CWE-190: Integer Overflow — payload too large for uint32 length prefix
         std::vector<uint8_t> result;
         result.reserve(4 + payload.size());
         // 4-byte LE length prefix
@@ -409,6 +411,8 @@ private:
         // First flush any pending bit-pack groups
         flush_bp_groups();
 
+        // CWE-190: Integer Overflow / CWE-682: Incorrect Calculation — cap before left shift
+        if (rle_count_ > (SIZE_MAX >> 1)) rle_count_ = SIZE_MAX >> 1;
         // header = (run_length << 1) | 0
         encode_varint(buffer_, rle_count_ << 1);
         write_rle_value(rle_value_);
@@ -512,9 +516,12 @@ public:
 
             // Read the value in byte_width_ LE bytes
             uint64_t val = 0;
+            int bytes_read = 0;
             for (int i = 0; i < byte_width_ && pos_ < size_; ++i) {
                 val |= static_cast<uint64_t>(data_[pos_++]) << (8 * i);
+                ++bytes_read;
             }
+            if (bytes_read < byte_width_) return false; // CWE-125: Out-of-bounds Read — truncated RLE value
 
             rle_value_ = val;
             rle_remaining_ = run_length - 1; // return one now

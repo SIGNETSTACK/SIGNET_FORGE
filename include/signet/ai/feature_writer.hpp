@@ -122,6 +122,11 @@ public:
         // Validate output_dir against path traversal:
         // 1. Check raw path for '..' components (catches ../../etc, /tmp/a/../../../etc)
         // 2. Also check canonical path in case symlinks resolve to traversal
+        // CWE-59: Improper Link Resolution Before File Access —
+        // weakly_canonical() resolves symlinks for existing path prefixes but
+        // cannot fully validate symlinks for not-yet-created directories.
+        // Deployers should ensure the output directory is not a symlink to
+        // an untrusted location.
         {
             std::filesystem::path raw(opts.output_dir);
             for (const auto& part : raw) {
@@ -274,7 +279,14 @@ public:
             auto r = current_writer_->close();
             current_writer_.reset();
             current_file_rows_ = 0;
-            if (!r) return r.error();
+            if (!r) {
+                // CWE-459: Incomplete Cleanup — remove the partial/corrupt
+                // file on roll close failure to prevent downstream readers
+                // from ingesting an incomplete Parquet file.
+                std::error_code remove_ec;
+                std::filesystem::remove(current_file_path_, remove_ec);
+                return r.error();
+            }
             // Register file only after confirmed successful close
             register_file(current_file_path_);
         }

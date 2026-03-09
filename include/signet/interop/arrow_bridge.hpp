@@ -328,6 +328,11 @@ public:
         ArrowArray* out_array,
         ArrowSchema* out_schema)
     {
+        // CWE-457: Use of Uninitialized Variable — zero-init prevents double-free on partial init failure
+        // M27: Zero-initialize outputs so callers see release=nullptr on early error
+        std::memset(out_schema, 0, sizeof(ArrowSchema));
+        std::memset(out_array, 0, sizeof(ArrowArray));
+
         if (!tensor.is_valid()) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "cannot export invalid tensor to Arrow"};
@@ -406,6 +411,11 @@ public:
         ArrowArray* out_array,
         ArrowSchema* out_schema)
     {
+        // CWE-457: Use of Uninitialized Variable — zero-init prevents double-free on partial init failure
+        // M27: Zero-initialize outputs so callers see release=nullptr on early error
+        std::memset(out_schema, 0, sizeof(ArrowSchema));
+        std::memset(out_array, 0, sizeof(ArrowArray));
+
         if (data == nullptr || num_values <= 0) {
             return Error{ErrorCode::INTERNAL_ERROR,
                          "cannot export null/empty column to Arrow"};

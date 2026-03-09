@@ -45,6 +45,7 @@
 #include "signet/crypto/aes_gcm.hpp"
 #include "signet/crypto/aes_ctr.hpp"
 #include "signet/crypto/cipher_interface.hpp"
+#include "signet/crypto/hkdf.hpp"
 #include "signet/crypto/key_metadata.hpp"
 #include "signet/error.hpp"
 
@@ -57,6 +58,7 @@
 #include <cstring>
 #include <random>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace signet::forge::crypto {
@@ -74,6 +76,67 @@ static constexpr uint8_t MODULE_DATA_PAGE          = 2;  ///< PME module type: d
 static constexpr uint8_t MODULE_DICT_PAGE          = 3;  ///< PME module type: dictionary page.
 static constexpr uint8_t MODULE_DATA_PAGE_HEADER   = 4;  ///< PME module type: data page header.
 static constexpr uint8_t MODULE_COLUMN_META_HEADER = 5;  ///< PME module type: column metadata header.
+
+/// Signet v1 AAD format: prefix + '\0' + module_type + '\0' + extra
+inline std::string build_aad_legacy(const std::string& prefix,
+                                     uint8_t module_type,
+                                     const std::string& extra = "") {
+    std::string aad;
+    aad.reserve(prefix.size() + 3 + extra.size());
+    aad.append(prefix);
+    aad.push_back('\0');
+    aad.push_back(static_cast<char>(module_type));
+    aad.push_back('\0');
+    aad.append(extra);
+    return aad;
+}
+
+/// Parquet PME spec binary AAD (Gap P-4):
+/// aad_file_unique || module_type (1B) || rg_ordinal (2B LE) ||
+/// col_ordinal (2B LE) || page_ordinal (2B LE)
+inline std::string build_aad_spec(const std::string& prefix,
+                                   uint8_t module_type,
+                                   const std::string& extra = "") {
+    std::string aad;
+    aad.append(prefix);
+    aad.push_back(static_cast<char>(module_type));
+
+    uint16_t rg_ord = 0, col_ord = 0, pg_ord = 0;
+    if (!extra.empty()) {
+        auto colon1 = extra.find(':');
+        if (colon1 != std::string::npos) {
+            auto colon2 = extra.find(':', colon1 + 1);
+            if (colon2 != std::string::npos) {
+                try { rg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon1 + 1, colon2 - colon1 - 1))); } catch (...) {}
+                try { pg_ord  = static_cast<uint16_t>(std::stoi(extra.substr(colon2 + 1))); } catch (...) {}
+            }
+        }
+    }
+
+    auto append_le16 = [&](uint16_t v) {
+        aad.push_back(static_cast<char>(v & 0xFF));
+        aad.push_back(static_cast<char>((v >> 8) & 0xFF));
+    };
+
+    if (module_type >= MODULE_COLUMN_META) {
+        append_le16(rg_ord);
+        append_le16(col_ord);
+        append_le16(pg_ord);
+    }
+
+    return aad;
+}
+
+/// Dispatch to legacy or spec AAD based on config format flag.
+inline std::string build_aad(const EncryptionConfig& config,
+                              const std::string& prefix,
+                              uint8_t module_type,
+                              const std::string& extra = "") {
+    if (config.aad_format == EncryptionConfig::AadFormat::SPEC_BINARY) {
+        return build_aad_spec(prefix, module_type, extra);
+    }
+    return build_aad_legacy(prefix, module_type, extra);
+}
 
 } // namespace detail::pme
 /// @endcond
@@ -100,7 +163,12 @@ public:
     /// Construct an encryptor from an encryption configuration.
     /// @param config  Configuration specifying keys, algorithm, and AAD prefix.
     explicit FileEncryptor(const EncryptionConfig& config)
-        : config_(config) {}
+        : config_(config) {
+        // Gap P-8: Build O(1) column key lookup cache from O(n) vector
+        for (const auto& ck : config_.column_keys) {
+            key_cache_[ck.column_name] = &ck.key;
+        }
+    }
 
     // -----------------------------------------------------------------------
     // encrypt_footer -- Encrypt the serialized FileMetaData
@@ -238,6 +306,260 @@ public:
         return cipher->encrypt(metadata, size, aad);
     }
 
+    // -----------------------------------------------------------------------
+    // encrypt_dict_page -- Encrypt a dictionary page (Gap P-1)
+    //
+    // PME spec requires dictionary pages to be encrypted with the column key
+    // using the same algorithm as data pages. Module type = MODULE_DICT_PAGE (3).
+    // Without this, dictionary-encoded columns leak all distinct values.
+    //
+    // AAD = aad_prefix + '\0' + MODULE_DICT_PAGE + '\0'
+    //       + column_name + ':' + row_group_ordinal + ':0'
+    //
+    // Reference: Apache Parquet Encryption specification (PARQUET-1178)
+    //   https://github.com/apache/parquet-format/blob/master/Encryption.md
+    // -----------------------------------------------------------------------
+    /// Encrypt a dictionary page with the column's encryption key.
+    ///
+    /// Dictionary pages contain all distinct values for dictionary-encoded columns.
+    /// If left unencrypted, they leak the value domain even when data pages are encrypted.
+    ///
+    /// @param page_data          Pointer to the dictionary page data bytes.
+    /// @param size               Page data size in bytes.
+    /// @param column_name        Column path for key resolution and AAD.
+    /// @param row_group_ordinal  Row group index (for AAD binding).
+    /// @return Encrypted dictionary page, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> encrypt_dict_page(
+        const uint8_t* page_data, size_t size,
+        const std::string& column_name,
+        int32_t row_group_ordinal) const {
+
+        auto license = commercial::require_feature("PME encrypt_dict_page");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(page_data, page_data + size);
+        }
+
+        auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string extra = column_name + ":"
+                          + std::to_string(row_group_ordinal) + ":0";
+
+        if (config_.algorithm == EncryptionAlgorithm::AES_GCM_V1) {
+            std::string aad = build_aad(config_.aad_prefix,
+                                        detail::pme::MODULE_DICT_PAGE, extra);
+            return cipher->encrypt(page_data, size, aad);
+        } else {
+            return cipher->encrypt(page_data, size);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // encrypt_data_page_header -- Encrypt a data page header (Gap P-2)
+    //
+    // In AES_GCM_CTR_V1 mode, page headers contain min/max statistics that
+    // leak plaintext information about encrypted columns. The PME spec
+    // requires page headers to be GCM-encrypted even when page data uses CTR.
+    // Module type = MODULE_DATA_PAGE_HEADER (4).
+    //
+    // Reference: Apache Parquet Encryption specification (PARQUET-1178)
+    //   https://github.com/apache/parquet-format/blob/master/Encryption.md
+    // -----------------------------------------------------------------------
+    /// Encrypt a data page header (always AES-GCM authenticated).
+    ///
+    /// Page headers contain min/max statistics. In AES_GCM_CTR_V1 mode,
+    /// page data uses CTR but headers must use GCM to prevent statistics leakage.
+    ///
+    /// @param header_data        Pointer to the serialized page header bytes.
+    /// @param size               Header size in bytes.
+    /// @param column_name        Column path for key resolution and AAD.
+    /// @param row_group_ordinal  Row group index (for AAD binding).
+    /// @param page_ordinal       Page index within the row group (for AAD binding).
+    /// @return Encrypted page header, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> encrypt_data_page_header(
+        const uint8_t* header_data, size_t size,
+        const std::string& column_name,
+        int32_t row_group_ordinal,
+        int32_t page_ordinal) const {
+
+        auto license = commercial::require_feature("PME encrypt_data_page_header");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(header_data, header_data + size);
+        }
+
+        // Page headers always use GCM (authenticated) regardless of algorithm setting
+        auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string extra = column_name + ":"
+                          + std::to_string(row_group_ordinal) + ":"
+                          + std::to_string(page_ordinal);
+        std::string aad = build_aad(config_.aad_prefix,
+                                    detail::pme::MODULE_DATA_PAGE_HEADER, extra);
+        return cipher->encrypt(header_data, size, aad);
+    }
+
+    // -----------------------------------------------------------------------
+    // encrypt_column_meta_header -- Encrypt a column metadata header (Gap P-2)
+    //
+    // Module type = MODULE_COLUMN_META_HEADER (5). Always GCM-authenticated.
+    // -----------------------------------------------------------------------
+    /// Encrypt a column metadata header (always AES-GCM authenticated).
+    ///
+    /// @param header_data   Pointer to the serialized column metadata header.
+    /// @param size          Header size in bytes.
+    /// @param column_name   Column path for key resolution and AAD.
+    /// @return Encrypted header, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> encrypt_column_meta_header(
+        const uint8_t* header_data, size_t size,
+        const std::string& column_name) const {
+
+        auto license = commercial::require_feature("PME encrypt_column_meta_header");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(header_data, header_data + size);
+        }
+
+        auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string aad = build_aad(config_.aad_prefix,
+                                    detail::pme::MODULE_COLUMN_META_HEADER,
+                                    column_name);
+        return cipher->encrypt(header_data, size, aad);
+    }
+
+    // -----------------------------------------------------------------------
+    // sign_footer -- Sign plaintext footer with HMAC-SHA256 (Gap P-3)
+    //
+    // In "signed plaintext footer" mode, the footer is NOT encrypted but
+    // is signed with HMAC-SHA256 for tamper detection. This allows metadata
+    // inspection tools to read column names, statistics, and schema without
+    // decryption keys, while still detecting modifications.
+    //
+    // The signing key is derived from the footer key using HKDF:
+    //   signing_key = HKDF-Expand(HKDF-Extract(aad_prefix, footer_key),
+    //                             "signet-pme-footer-sign-v1", 32)
+    //
+    // Output format: [footer_data] [32-byte HMAC-SHA256 signature]
+    //
+    // Reference: Apache Parquet Encryption (PARQUET-1178) §4.2
+    // -----------------------------------------------------------------------
+    /// Sign the plaintext footer with HMAC-SHA256 (signed plaintext footer mode).
+    ///
+    /// The footer remains readable but any modification will invalidate the signature.
+    /// @param footer_data  Pointer to the serialized footer bytes.
+    /// @param size         Footer size in bytes.
+    /// @return Footer data with 32-byte HMAC signature appended.
+    [[nodiscard]] expected<std::vector<uint8_t>> sign_footer(
+        const uint8_t* footer_data, size_t size) const {
+
+        auto license = commercial::require_feature("PME sign_footer");
+        if (!license) return license.error();
+
+        if (config_.footer_key.empty() || config_.footer_key.size() != 32) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: footer key must be 32 bytes for signing"};
+        }
+
+        // Derive signing key via HKDF
+        auto signing_key = derive_footer_signing_key();
+
+        // Compute HMAC-SHA256(signing_key, aad || footer_data)
+        std::string aad = build_aad(config_.aad_prefix, detail::pme::MODULE_FOOTER);
+        std::vector<uint8_t> msg;
+        msg.reserve(aad.size() + size);
+        msg.insert(msg.end(), aad.begin(), aad.end());
+        msg.insert(msg.end(), footer_data, footer_data + size);
+
+        auto hmac = detail::hkdf::hmac_sha256(
+            signing_key.data(), signing_key.size(),
+            msg.data(), msg.size());
+
+        // Output: footer_data || hmac
+        std::vector<uint8_t> out;
+        out.reserve(size + 32);
+        out.insert(out.end(), footer_data, footer_data + size);
+        out.insert(out.end(), hmac.begin(), hmac.end());
+        return out;
+    }
+
+    // -----------------------------------------------------------------------
+    // wrap_keys -- Wrap all DEKs under their KEKs via KMS (Gap P-5)
+    //
+    // For EXTERNAL key mode with a KMS client configured: wraps the footer
+    // key and all column keys under their respective KEK identifiers.
+    //
+    // Returns a map of key_id → wrapped_dek for storage in file metadata.
+    //
+    // Reference: Parquet PME spec (PARQUET-1178) §3, NIST SP 800-38F
+    // -----------------------------------------------------------------------
+    /// Wrap all DEKs under their KEKs using the configured KMS client.
+    ///
+    /// @return Map of key_id → wrapped DEK bytes, or error if KMS unavailable.
+    [[nodiscard]] expected<std::vector<std::pair<std::string, std::vector<uint8_t>>>>
+    wrap_keys() const {
+
+        auto license = commercial::require_feature("PME wrap_keys");
+        if (!license) return license.error();
+
+        if (!config_.kms_client) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: KMS client not configured for key wrapping"};
+        }
+
+        std::vector<std::pair<std::string, std::vector<uint8_t>>> result;
+
+        // Wrap footer key
+        if (!config_.footer_key.empty() && !config_.footer_key_id.empty()) {
+            auto wrapped = config_.kms_client->wrap_key(
+                config_.footer_key, config_.footer_key_id);
+            if (!wrapped) return wrapped.error();
+            result.emplace_back(config_.footer_key_id, std::move(wrapped.value()));
+        }
+
+        // Wrap per-column keys
+        for (const auto& ck : config_.column_keys) {
+            if (!ck.key.empty() && !ck.key_id.empty()) {
+                auto wrapped = config_.kms_client->wrap_key(ck.key, ck.key_id);
+                if (!wrapped) return wrapped.error();
+                result.emplace_back(ck.key_id, std::move(wrapped.value()));
+            }
+        }
+
+        // Wrap default column key
+        if (!config_.default_column_key.empty() &&
+            !config_.default_column_key_id.empty()) {
+            auto wrapped = config_.kms_client->wrap_key(
+                config_.default_column_key, config_.default_column_key_id);
+            if (!wrapped) return wrapped.error();
+            result.emplace_back(config_.default_column_key_id,
+                                std::move(wrapped.value()));
+        }
+
+        return result;
+    }
+
     /// Get FileEncryptionProperties for embedding in FileMetaData.
     /// @return Properties struct with algorithm, footer-encrypted flag, and AAD prefix.
     [[nodiscard]] FileEncryptionProperties file_properties() const {
@@ -289,19 +611,35 @@ public:
 
 private:
     EncryptionConfig config_;  ///< Encryption configuration (keys, algorithm, AAD).
+    /// Gap P-8: O(1) column key lookup cache (column_name → key pointer).
+    std::unordered_map<std::string, const std::vector<uint8_t>*> key_cache_;
 
     /// Resolve the AES key for a given column.
     ///
-    /// Priority: (1) column-specific key, (2) default column key, (3) empty (unencrypted).
+    /// Priority: (1) column-specific key (O(1) cache), (2) default column key, (3) empty.
     [[nodiscard]] const std::vector<uint8_t>& get_column_key(
         const std::string& column_name) const {
 
-        for (const auto& ck : config_.column_keys) {
-            if (ck.column_name == column_name) {
-                return ck.key;
-            }
+        auto it = key_cache_.find(column_name);
+        if (it != key_cache_.end()) {
+            return *it->second;
         }
         return config_.default_column_key;
+    }
+
+    // -----------------------------------------------------------------------
+    // derive_footer_signing_key -- HKDF-derived key for signed plaintext footer
+    // -----------------------------------------------------------------------
+    [[nodiscard]] std::array<uint8_t, 32> derive_footer_signing_key() const {
+        static constexpr uint8_t INFO[] = "signet-pme-footer-sign-v1";
+        auto prk = hkdf_extract(
+            reinterpret_cast<const uint8_t*>(config_.aad_prefix.data()),
+            config_.aad_prefix.size(),
+            config_.footer_key.data(),
+            config_.footer_key.size());
+        std::array<uint8_t, 32> key{};
+        (void)hkdf_expand(prk, INFO, sizeof(INFO) - 1, key.data(), key.size());
+        return key;
     }
 
     // -----------------------------------------------------------------------
@@ -316,26 +654,12 @@ private:
     }
 
     // -----------------------------------------------------------------------
-    // build_aad -- Construct Parquet PME AAD string
-    //
-    // Format: prefix + '\0' + module_type_byte + '\0' + extra
-    //
-    // The null bytes are separators ensuring unambiguous parsing. The module
-    // type byte identifies what kind of Parquet component is being
-    // authenticated. The extra field carries component-specific context
-    // (column name, row group ordinal, etc.).
+    // build_aad -- Construct Parquet PME AAD (dispatches on config format)
     // -----------------------------------------------------------------------
-    [[nodiscard]] static std::string build_aad(const std::string& prefix,
-                                               uint8_t module_type,
-                                               const std::string& extra = "") {
-        std::string aad;
-        aad.reserve(prefix.size() + 3 + extra.size());
-        aad.append(prefix);
-        aad.push_back('\0');
-        aad.push_back(static_cast<char>(module_type));
-        aad.push_back('\0');
-        aad.append(extra);
-        return aad;
+    [[nodiscard]] std::string build_aad(const std::string& prefix,
+                                        uint8_t module_type,
+                                        const std::string& extra = "") const {
+        return detail::pme::build_aad(config_, prefix, module_type, extra);
     }
 
     // -----------------------------------------------------------------------
@@ -410,7 +734,12 @@ public:
     /// Construct a decryptor from an encryption configuration.
     /// @param config  Configuration with the same keys used during encryption.
     explicit FileDecryptor(const EncryptionConfig& config)
-        : config_(config) {}
+        : config_(config) {
+        // Gap P-8: Build O(1) column key lookup cache from O(n) vector
+        for (const auto& ck : config_.column_keys) {
+            key_cache_[ck.column_name] = &ck.key;
+        }
+    }
 
     // -----------------------------------------------------------------------
     // decrypt_footer -- Decrypt the encrypted FileMetaData
@@ -531,23 +860,290 @@ public:
         return cipher->decrypt(encrypted_metadata, size, aad);
     }
 
+    // -----------------------------------------------------------------------
+    // decrypt_dict_page -- Decrypt a dictionary page (Gap P-1)
+    //
+    // Counterpart to FileEncryptor::encrypt_dict_page().
+    // Uses MODULE_DICT_PAGE (3) for AAD construction.
+    // -----------------------------------------------------------------------
+    /// Decrypt a dictionary page.
+    ///
+    /// @param encrypted_page     Pointer to encrypted dictionary page bytes.
+    /// @param size               Total encrypted size.
+    /// @param column_name        Column path for key resolution and AAD.
+    /// @param row_group_ordinal  Row group index (for AAD reconstruction).
+    /// @return Decrypted dictionary page, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> decrypt_dict_page(
+        const uint8_t* encrypted_page, size_t size,
+        const std::string& column_name,
+        int32_t row_group_ordinal) const {
+
+        auto license = commercial::require_feature("PME decrypt_dict_page");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(encrypted_page, encrypted_page + size);
+        }
+
+        auto cipher = CipherFactory::create_column_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string extra = column_name + ":"
+                          + std::to_string(row_group_ordinal) + ":0";
+
+        if (config_.algorithm == EncryptionAlgorithm::AES_GCM_V1) {
+            std::string aad = build_aad(config_.aad_prefix,
+                                        detail::pme::MODULE_DICT_PAGE, extra);
+            return cipher->decrypt(encrypted_page, size, aad);
+        } else {
+            return cipher->decrypt(encrypted_page, size);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // decrypt_data_page_header -- Decrypt a data page header (Gap P-2)
+    //
+    // Counterpart to FileEncryptor::encrypt_data_page_header().
+    // Uses MODULE_DATA_PAGE_HEADER (4). Always GCM.
+    // -----------------------------------------------------------------------
+    /// Decrypt a data page header (always AES-GCM authenticated).
+    ///
+    /// @param encrypted_header   Pointer to encrypted page header bytes.
+    /// @param size               Total encrypted size.
+    /// @param column_name        Column path for key resolution and AAD.
+    /// @param row_group_ordinal  Row group index (for AAD reconstruction).
+    /// @param page_ordinal       Page index (for AAD reconstruction).
+    /// @return Decrypted page header, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> decrypt_data_page_header(
+        const uint8_t* encrypted_header, size_t size,
+        const std::string& column_name,
+        int32_t row_group_ordinal,
+        int32_t page_ordinal) const {
+
+        auto license = commercial::require_feature("PME decrypt_data_page_header");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(encrypted_header, encrypted_header + size);
+        }
+
+        auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string extra = column_name + ":"
+                          + std::to_string(row_group_ordinal) + ":"
+                          + std::to_string(page_ordinal);
+        std::string aad = build_aad(config_.aad_prefix,
+                                    detail::pme::MODULE_DATA_PAGE_HEADER, extra);
+        return cipher->decrypt(encrypted_header, size, aad);
+    }
+
+    // -----------------------------------------------------------------------
+    // decrypt_column_meta_header -- Decrypt a column metadata header (Gap P-2)
+    //
+    // Counterpart to FileEncryptor::encrypt_column_meta_header().
+    // Uses MODULE_COLUMN_META_HEADER (5). Always GCM.
+    // -----------------------------------------------------------------------
+    /// Decrypt a column metadata header (always AES-GCM authenticated).
+    ///
+    /// @param encrypted_header  Pointer to encrypted column metadata header.
+    /// @param size              Total encrypted size.
+    /// @param column_name       Column path for key resolution and AAD.
+    /// @return Decrypted header, or passthrough if column has no key.
+    [[nodiscard]] expected<std::vector<uint8_t>> decrypt_column_meta_header(
+        const uint8_t* encrypted_header, size_t size,
+        const std::string& column_name) const {
+
+        auto license = commercial::require_feature("PME decrypt_column_meta_header");
+        if (!license) return license.error();
+
+        const auto& key = get_column_key(column_name);
+        if (key.empty()) {
+            return std::vector<uint8_t>(encrypted_header,
+                                        encrypted_header + size);
+        }
+
+        auto cipher = CipherFactory::create_metadata_cipher(config_.algorithm, key);
+        if (key.size() != cipher->key_size()) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: column key must be 32 bytes for column '"
+                         + column_name + "'"};
+        }
+
+        std::string aad = build_aad(config_.aad_prefix,
+                                    detail::pme::MODULE_COLUMN_META_HEADER,
+                                    column_name);
+        return cipher->decrypt(encrypted_header, size, aad);
+    }
+
+    // -----------------------------------------------------------------------
+    // unwrap_keys -- Unwrap DEKs from wrapped blobs via KMS (Gap P-5)
+    //
+    // For EXTERNAL key mode: takes a list of (key_id, wrapped_dek) pairs
+    // read from file metadata and calls the KMS client to unwrap each DEK.
+    // The unwrapped keys are populated into the config for subsequent
+    // decrypt operations.
+    //
+    // Reference: Parquet PME spec (PARQUET-1178) §3, NIST SP 800-38F
+    // -----------------------------------------------------------------------
+    /// Unwrap DEKs from wrapped blobs using the configured KMS client.
+    ///
+    /// Call this before decrypt_footer / decrypt_column_page when using
+    /// EXTERNAL key mode. Populates the internal config with unwrapped keys.
+    ///
+    /// @param wrapped_keys  List of (key_id, wrapped_dek) pairs from file metadata.
+    /// @return void on success, or error if KMS unwrap fails.
+    [[nodiscard]] expected<void> unwrap_keys(
+        const std::vector<std::pair<std::string, std::vector<uint8_t>>>& wrapped_keys) {
+
+        auto license = commercial::require_feature("PME unwrap_keys");
+        if (!license) return license.error();
+
+        if (!config_.kms_client) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: KMS client not configured for key unwrapping"};
+        }
+
+        for (const auto& [key_id, wrapped_dek] : wrapped_keys) {
+            auto unwrapped = config_.kms_client->unwrap_key(wrapped_dek, key_id);
+            if (!unwrapped) return unwrapped.error();
+
+            // Match key_id to the appropriate config slot
+            if (key_id == config_.footer_key_id) {
+                config_.footer_key = std::move(unwrapped.value());
+            } else if (key_id == config_.default_column_key_id) {
+                config_.default_column_key = std::move(unwrapped.value());
+            } else {
+                // Check per-column keys
+                bool found = false;
+                for (auto& ck : config_.column_keys) {
+                    if (ck.key_id == key_id) {
+                        ck.key = std::move(unwrapped.value());
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    return Error{ErrorCode::ENCRYPTION_ERROR,
+                                 "PME: no config slot for KMS key_id '" + key_id + "'"};
+                }
+            }
+        }
+
+        // Rebuild O(1) cache after key population
+        key_cache_.clear();
+        for (const auto& ck : config_.column_keys) {
+            key_cache_[ck.column_name] = &ck.key;
+        }
+
+        return {};
+    }
+
+    // -----------------------------------------------------------------------
+    // verify_footer_signature -- Verify signed plaintext footer (Gap P-3)
+    //
+    // Counterpart to FileEncryptor::sign_footer(). Splits the signed footer
+    // into [footer_data] and [32-byte HMAC], recomputes the HMAC, and
+    // performs constant-time comparison to detect tampering.
+    //
+    // Reference: Apache Parquet Encryption (PARQUET-1178) §4.2
+    // -----------------------------------------------------------------------
+    /// Verify a signed plaintext footer and return the original footer data.
+    ///
+    /// @param signed_footer  Pointer to footer bytes with appended 32-byte HMAC.
+    /// @param size           Total size including the 32-byte signature.
+    /// @return Original footer data (without signature), or ENCRYPTION_ERROR on mismatch.
+    [[nodiscard]] expected<std::vector<uint8_t>> verify_footer_signature(
+        const uint8_t* signed_footer, size_t size) const {
+
+        auto license = commercial::require_feature("PME verify_footer_signature");
+        if (!license) return license.error();
+
+        if (size < 32) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: signed footer too short (need at least 32 bytes for HMAC)"};
+        }
+
+        if (config_.footer_key.empty() || config_.footer_key.size() != 32) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: footer key must be 32 bytes for signature verification"};
+        }
+
+        size_t footer_size = size - 32;
+        const uint8_t* footer_data = signed_footer;
+        const uint8_t* expected_hmac = signed_footer + footer_size;
+
+        // Derive the same signing key as FileEncryptor
+        auto signing_key = derive_footer_signing_key();
+
+        // Recompute HMAC-SHA256(signing_key, aad || footer_data)
+        std::string aad = build_aad(config_.aad_prefix, detail::pme::MODULE_FOOTER);
+        std::vector<uint8_t> msg;
+        msg.reserve(aad.size() + footer_size);
+        msg.insert(msg.end(), aad.begin(), aad.end());
+        msg.insert(msg.end(), footer_data, footer_data + footer_size);
+
+        auto computed_hmac = detail::hkdf::hmac_sha256(
+            signing_key.data(), signing_key.size(),
+            msg.data(), msg.size());
+
+        // Constant-time comparison to prevent timing side-channel
+        uint8_t diff = 0;
+        for (size_t i = 0; i < 32; ++i) {
+            diff |= computed_hmac[i] ^ expected_hmac[i];
+        }
+
+        if (diff != 0) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "PME: footer signature verification failed — data may be tampered"};
+        }
+
+        return std::vector<uint8_t>(footer_data, footer_data + footer_size);
+    }
+
     /// Access the underlying EncryptionConfig.
     /// @return Const reference to the configuration.
     [[nodiscard]] const EncryptionConfig& config() const { return config_; }
 
 private:
     EncryptionConfig config_;  ///< Decryption configuration (keys, algorithm, AAD).
+    /// Gap P-8: O(1) column key lookup cache (column_name → key pointer).
+    std::unordered_map<std::string, const std::vector<uint8_t>*> key_cache_;
 
-    /// Resolve the AES key for a given column (same logic as FileEncryptor).
+    /// Resolve the AES key for a given column (O(1) cache lookup).
     [[nodiscard]] const std::vector<uint8_t>& get_column_key(
         const std::string& column_name) const {
 
-        for (const auto& ck : config_.column_keys) {
-            if (ck.column_name == column_name) {
-                return ck.key;
-            }
+        auto it = key_cache_.find(column_name);
+        if (it != key_cache_.end()) {
+            return *it->second;
         }
         return config_.default_column_key;
+    }
+
+    // -----------------------------------------------------------------------
+    // derive_footer_signing_key -- HKDF-derived key for signed plaintext footer
+    // -----------------------------------------------------------------------
+    [[nodiscard]] std::array<uint8_t, 32> derive_footer_signing_key() const {
+        static constexpr uint8_t INFO[] = "signet-pme-footer-sign-v1";
+        auto prk = hkdf_extract(
+            reinterpret_cast<const uint8_t*>(config_.aad_prefix.data()),
+            config_.aad_prefix.size(),
+            config_.footer_key.data(),
+            config_.footer_key.size());
+        std::array<uint8_t, 32> key{};
+        (void)hkdf_expand(prk, INFO, sizeof(INFO) - 1, key.data(), key.size());
+        return key;
     }
 
     // -----------------------------------------------------------------------
@@ -592,19 +1188,12 @@ private:
     }
 
     // -----------------------------------------------------------------------
-    // build_aad -- Same construction as FileEncryptor
+    // build_aad -- Same construction as FileEncryptor (dispatches on format)
     // -----------------------------------------------------------------------
-    [[nodiscard]] static std::string build_aad(const std::string& prefix,
-                                               uint8_t module_type,
-                                               const std::string& extra = "") {
-        std::string aad;
-        aad.reserve(prefix.size() + 3 + extra.size());
-        aad.append(prefix);
-        aad.push_back('\0');
-        aad.push_back(static_cast<char>(module_type));
-        aad.push_back('\0');
-        aad.append(extra);
-        return aad;
+    [[nodiscard]] std::string build_aad(const std::string& prefix,
+                                        uint8_t module_type,
+                                        const std::string& extra = "") const {
+        return detail::pme::build_aad(config_, prefix, module_type, extra);
     }
 
     // -----------------------------------------------------------------------

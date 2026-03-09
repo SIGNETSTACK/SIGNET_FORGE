@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -155,9 +156,12 @@ public:
     /// @param data  Pointer to the raw byte payload.
     /// @param len   Number of bytes in the payload.
     void write_byte_array(const uint8_t* data, size_t len) {
+        // CWE-190: Integer Overflow — Parquet BYTE_ARRAY uses 4-byte LE length prefix;
+        // payloads > 4 GiB would truncate the length field, corrupting the output.
         if (len > static_cast<size_t>(UINT32_MAX)) {
-            // BYTE_ARRAY length prefix is a 4-byte LE uint32; reject > 4 GB payloads.
-            return; // caller should pre-validate; silent no-op matches existing error model
+            // H14: BYTE_ARRAY length prefix is a 4-byte LE uint32; reject > 4 GiB payloads.
+            // Throw instead of silently dropping the value, which would corrupt the output.
+            throw std::length_error("BYTE_ARRAY value exceeds 4 GiB limit");
         }
         append_le32(buf_, static_cast<uint32_t>(len));
         buf_.insert(buf_.end(), data, data + len);
@@ -171,6 +175,10 @@ public:
     /// Write a single FIXED_LEN_BYTE_ARRAY value from raw bytes.
     ///
     /// PLAIN encoding: raw bytes only (no length prefix -- length is in the schema).
+    ///
+    /// @pre @p len must exactly match the schema's @c type_length. Passing a
+    ///      different length produces a corrupt column chunk (no runtime check
+    ///      is performed here for performance -- the caller must validate).
     ///
     /// @param data  Pointer to the raw byte payload.
     /// @param len   Number of bytes (must match the schema's @c type_length).

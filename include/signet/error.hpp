@@ -23,6 +23,10 @@
 #include <variant>
 #include <vector>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 namespace signet::forge {
 
 // ---------------------------------------------------------------------------
@@ -384,6 +388,11 @@ struct UsageState {
 };
 
 /// Compute a 64-bit FNV-1a hash over a byte buffer.
+///
+/// L15: FNV-1a is used here for license key validation only (not security).
+/// It is NOT a cryptographic hash and should not be relied upon for tamper
+/// resistance. A determined attacker can find collisions. For production
+/// license enforcement, consider HMAC-SHA256 or a public-key signature.
 [[nodiscard]] inline uint64_t fnv1a64(const char* data, size_t size) noexcept {
     constexpr uint64_t kOffset = 14695981039346656037ull;
     constexpr uint64_t kPrime  = 1099511628211ull;
@@ -559,7 +568,24 @@ parse_claims(const std::string& text) {
 }
 
 /// Return the default filesystem path for the usage-state persistence file.
+///
+/// M23: Uses XDG_STATE_HOME or HOME-based path instead of /tmp to avoid
+/// world-readable state files and symlink attacks in shared /tmp.
 [[nodiscard]] inline std::string default_usage_state_path() {
+    // Prefer XDG_STATE_HOME (e.g. ~/.local/state)
+    const char* xdg = std::getenv("XDG_STATE_HOME");
+    if (xdg && xdg[0]) {
+        return std::string(xdg) + "/signet-forge/usage_state";
+    }
+    // Fall back to HOME-based path
+    const char* home = std::getenv("HOME");
+#ifdef _WIN32
+    if (!home || !home[0]) home = std::getenv("USERPROFILE");
+#endif
+    if (home && home[0]) {
+        return std::string(home) + "/.local/state/signet-forge/usage_state";
+    }
+    // Last resort: /tmp (less secure but functional)
 #if defined(SIGNET_COMMERCIAL_LICENSE_HASH_U64)
     char buf[96];
     std::snprintf(buf, sizeof(buf),
@@ -573,10 +599,20 @@ parse_claims(const std::string& text) {
 }
 
 /// Return the usage-state file path (environment override or default).
+///
+/// H15: The environment variable path is sanitized to reject path traversal
+/// sequences ("..") which could be used to overwrite arbitrary files.
 [[nodiscard]] inline std::string usage_state_path() {
     const char* env = std::getenv(kUsageFileEnvVar);
     if (env != nullptr && env[0] != '\0') {
-        return std::string(env);
+        std::string dir(env);
+        // CWE-22: Improper Limitation of a Pathname to a Restricted Directory
+        // Reject path traversal sequences that could escape the intended directory.
+        if (dir.find("..") != std::string::npos) {
+            // Fall through to default path
+        } else {
+            return dir;
+        }
     }
     return default_usage_state_path();
 }
@@ -679,9 +715,23 @@ inline void load_usage_state_from_file(const std::string& path, UsageState& st) 
 }
 
 /// Atomically persist the UsageState to a file (write-to-tmp + rename); return false on I/O failure.
+///
+/// M24: Refuses to write through symlinks to prevent symlink-based file overwrites (CWE-61).
 [[nodiscard]] inline bool persist_usage_state_to_file(const std::string& path,
                                                       UsageState& st) {
     const std::string tmp_path = path + ".tmp";
+
+#ifndef _WIN32
+    // CWE-59: Improper Link Resolution Before File Access
+    // Refuse to write through symlinks — lstat() detects symlinks without following them.
+    struct stat st_link;
+    if (::lstat(tmp_path.c_str(), &st_link) == 0 && S_ISLNK(st_link.st_mode)) {
+        return false;
+    }
+    if (::lstat(path.c_str(), &st_link) == 0 && S_ISLNK(st_link.st_mode)) {
+        return false;
+    }
+#endif
 
     std::ofstream out(tmp_path, std::ios::out | std::ios::trunc);
     if (!out.is_open()) return false;

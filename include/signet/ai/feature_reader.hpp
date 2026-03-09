@@ -249,6 +249,10 @@ public:
     [[nodiscard]] size_t num_entities()  const { return index_.size(); }
     /// Total number of rows indexed across all files and row groups.
     [[nodiscard]] size_t total_rows()    const { return total_rows_; }
+    /// L22: Number of files that failed to open during build_index().
+    /// Exposed for error observability — callers can detect partial index
+    /// builds caused by missing/corrupt files and alert or retry accordingly.
+    [[nodiscard]] size_t failed_file_count() const { return failed_file_count_; }
 
 private:
     // =========================================================================
@@ -279,12 +283,14 @@ private:
             std::error_code ec;
             if (!std::filesystem::exists(path, ec)) {
                 readers_.push_back(nullptr);
+                ++failed_file_count_;
                 continue;
             }
 
             auto rdr_result = ParquetReader::open(path);
             if (!rdr_result) {
                 readers_.push_back(nullptr);
+                ++failed_file_count_;
                 continue;
             }
 
@@ -430,6 +436,7 @@ private:
     EntityIndex              index_;
     std::vector<std::string> feature_names_;
     size_t                   total_rows_{0};
+    size_t                   failed_file_count_{0};
 
     // One entry per file in opts_.parquet_files (nullptr for unreadable files).
     // Mutable because ParquetReader::read_column() updates an internal

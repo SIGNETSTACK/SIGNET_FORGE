@@ -224,6 +224,10 @@ private:
 
     alignas(64) std::atomic<size_t> head_;
     alignas(64) std::atomic<size_t> tail_;
+    // L28: storage_ is a fixed-size C array embedded in the object. For large
+    // Capacity values, this can exceed stack limits if allocated on the stack.
+    // Always heap-allocate SpscRingBuffer (e.g., via std::make_unique) when
+    // Capacity * sizeof(T) is significant.
     T storage_[Capacity];
 };
 
@@ -431,13 +435,15 @@ public:
         if (opts.output_dir.empty())
             return Error{ErrorCode::IO_ERROR, "StreamingSink: output_dir must not be empty"};
 
-        // Path traversal guard: reject ".." segments
-        for (size_t s = 0, e; s <= opts.output_dir.size(); s = e + 1) {
-            e = opts.output_dir.find_first_of("/\\", s);
-            if (e == std::string::npos) e = opts.output_dir.size();
-            if (opts.output_dir.substr(s, e - s) == "..")
-                return Error{ErrorCode::IO_ERROR,
-                             "StreamingSink: output_dir must not contain '..' path traversal"};
+        // L29: Path traversal guard using std::filesystem::path iteration
+        // instead of manual string splitting for correctness across platforms.
+        {
+            std::filesystem::path p(opts.output_dir);
+            for (const auto& comp : p) {
+                if (comp == "..")
+                    return Error{ErrorCode::IO_ERROR,
+                                 "StreamingSink: output_dir must not contain '..' path traversal"};  // CWE-22: Improper Limitation of a Pathname to a Restricted Directory
+            }
         }
 
         std::error_code ec;

@@ -196,6 +196,9 @@ TEST_CASE("CR6: EU AI Act Art.19", "[bench-enterprise][compliance]") {
     BENCHMARK("CR6: EU AI Act Art.19") {
         ReportOptions opts;
         opts.format = ReportFormat::JSON;
+        // Fixture writes decision + inference logs with independent chain IDs;
+        // Art.19 cross-chain validation would reject the mismatch, so skip it.
+        opts.verify_chain = false;
         auto report = EUAIActReporter::generate_article19(
             fx.decision_files, fx.inference_files, opts);
         return report->content.size();

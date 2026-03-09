@@ -277,6 +277,7 @@ inline Block128 gf128_mul(const Block128& X, const Block128& Y) {
 ///   X_i = (X_{i-1} ^ A_i) * H   for each block A_i
 ///
 /// The input data is padded with zeros to a multiple of 16 bytes.
+[[deprecated("Use ghash_update (constant-time) instead")]]
 inline Block128 ghash(const Block128& H,
                       const uint8_t* data, size_t data_size) {
     Block128 X; // X_0 = 0
@@ -322,6 +323,10 @@ inline void gctr(const Aes256& cipher,
                  const uint8_t* input, size_t input_size,
                  uint8_t* output) {
     if (input_size == 0) return;
+
+    const size_t num_blocks = (input_size + 15) / 16;
+    // NIST SP 800-38D §5.2.1.1: 32-bit counter must not wrap (max 2^32-2 blocks)
+    if (num_blocks > 0xFFFFFFFEULL) return;
 
     uint8_t counter[16];
     std::memcpy(counter, icb, 16);
@@ -427,6 +432,18 @@ public:
     static constexpr uint64_t MAX_GCM_PLAINTEXT =
         (static_cast<uint64_t>(UINT32_MAX) - 1) * 16; // ~64 GB
 
+    /// NIST SP 800-38D §5.2.1.1: AAD length limit is 2^64-1 bits.
+    /// Practical limit: 2^61-1 bytes (to avoid overflow when converting to bits).
+    static constexpr uint64_t MAX_AAD_BYTES = (UINT64_MAX / 8);
+
+    // Gap C-6: Compile-time assertion that TAG_SIZE is the full 128 bits.
+    // NIST SP 800-38D §5.2.1.2 specifies allowed tag lengths {128,120,112,104,96,64,32}.
+    // Truncated tags weaken authentication strength. Signet enforces full 128-bit tags
+    // only — no truncation API is exposed. This static_assert guards against accidental
+    // changes to TAG_SIZE.
+    static_assert(TAG_SIZE == 16,
+                  "GCM tag truncation prohibited (NIST SP 800-38D §5.2.1.2, CWE-328)");
+
     /// Authenticated encryption with additional data (AEAD).
     ///
     /// @param plaintext       Pointer to data to encrypt.
@@ -448,14 +465,15 @@ public:
             return Error{ErrorCode::ENCRYPTION_ERROR,
                          "AES-GCM: plaintext exceeds NIST SP 800-38D maximum"};
         }
+        // Gap C-12: AAD length limit per NIST SP 800-38D §5.2.1.1
+        if (static_cast<uint64_t>(aad_size) > MAX_AAD_BYTES) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "AES-GCM: AAD exceeds NIST SP 800-38D §5.2.1.1 maximum (2^64-1 bits)"};
+        }
 
-        // Step 1: Form J0 = IV (12 bytes) || 0x00000001
+        // Step 1: Derive J0 from IV (supports both 12-byte and 16-byte IVs)
         uint8_t J0[16] = {};
-        std::memcpy(J0, iv, IV_SIZE);
-        J0[12] = 0x00;
-        J0[13] = 0x00;
-        J0[14] = 0x00;
-        J0[15] = 0x01;
+        derive_j0(iv, J0);
 
         // Step 2: Form ICB = inc32(J0) -- first counter for GCTR
         uint8_t ICB[16];
@@ -558,18 +576,19 @@ public:
             return Error{ErrorCode::ENCRYPTION_ERROR,
                          "AES-GCM: ciphertext exceeds NIST SP 800-38D maximum"};
         }
+        // Gap C-12: AAD length limit per NIST SP 800-38D §5.2.1.1
+        if (static_cast<uint64_t>(aad_size) > MAX_AAD_BYTES) {
+            return Error{ErrorCode::ENCRYPTION_ERROR,
+                         "AES-GCM: AAD exceeds NIST SP 800-38D §5.2.1.1 maximum"};
+        }
 
         size_t ciphertext_size = total_size - TAG_SIZE;
         const uint8_t* ciphertext = ciphertext_with_tag;
         const uint8_t* received_tag = ciphertext_with_tag + ciphertext_size;
 
-        // Step 1: Form J0
+        // Step 1: Derive J0 from IV (supports both 12-byte and 16-byte IVs)
         uint8_t J0[16] = {};
-        std::memcpy(J0, iv, IV_SIZE);
-        J0[12] = 0x00;
-        J0[13] = 0x00;
-        J0[14] = 0x00;
-        J0[15] = 0x01;
+        derive_j0(iv, J0);
 
         // Step 2: Recompute GHASH over AAD and ciphertext (BEFORE decryption)
         Block128 X;

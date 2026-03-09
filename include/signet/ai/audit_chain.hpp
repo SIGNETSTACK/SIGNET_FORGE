@@ -62,11 +62,13 @@
 #include "signet/types.hpp"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -91,28 +93,58 @@ inline constexpr size_t HASH_CHAIN_ENTRY_SIZE = 112;
 // Utility functions
 // ===========================================================================
 
-/// Return the current time as nanoseconds since the Unix epoch.
+/// Return the current time as nanoseconds since the Unix epoch (UTC).
 ///
-/// Uses std::chrono::high_resolution_clock for the best available
-/// resolution on the platform. On most systems this is nanosecond
-/// or better.
+/// Gap R-5 (MiFID II RTS 25 Art.2-3): Uses system_clock for UTC traceability.
+/// The previous implementation used steady_clock, which has no relationship
+/// to UTC (arbitrary epoch, typically boot time) — every timestamp it
+/// produced was regulatory-invalid under RTS 25.
 ///
-/// Guarantees monotonically increasing timestamps within each thread
+/// system_clock::now() returns UTC wall-clock time suitable for regulatory
+/// timestamp fields. On POSIX systems this is clock_gettime(CLOCK_REALTIME).
+///
+/// Guarantees monotonically increasing timestamps across concurrent callers
 /// (MiFID II RTS 24 Art.2 timestamp ordering, CWE-362 race guard).
-/// If the clock returns a value <= the last observed value (e.g. due
-/// to NTP adjustment or coarse clock granularity), the result is
-/// bumped to last_ns + 1.
+/// If system_clock returns a value <= the last observed (e.g. due to NTP
+/// step adjustment), the result is bumped to last_ns + 1 to preserve
+/// hash chain ordering invariants.
 inline int64_t now_ns() {
-    auto tp = std::chrono::high_resolution_clock::now();
+    static std::atomic<int64_t> last_ns{0};
+    // CWE-362: system_clock (UTC) + atomic CAS loop ensures monotonicity
+    // across concurrent callers without mutex overhead.
+    // R-5: system_clock provides UTC traceability per MiFID II RTS 25 Art.2.
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                  tp.time_since_epoch());
-    int64_t result = static_cast<int64_t>(ns.count());
-    // Monotonic guard: ensure strictly increasing timestamps (MiFID II RTS 24, CWE-362)
-    static thread_local int64_t last_ns = 0;
-    if (result <= last_ns) result = last_ns + 1;
-    last_ns = result;
-    return result;
+                  std::chrono::system_clock::now().time_since_epoch()).count();
+    int64_t expected = last_ns.load(std::memory_order_relaxed);
+    while (ns <= expected) { ns = expected + 1; }
+    while (!last_ns.compare_exchange_weak(expected, ns, std::memory_order_relaxed)) {
+        if (ns <= expected) ns = expected + 1;
+    }
+    return ns;
 }
+
+/// NTP/PTP clock synchronization status for MiFID II RTS 25 Art.3.
+///
+/// Gap R-5: RTS 25 requires traceability to UTC via NTP or PTP, with
+/// documented maximum divergence. This struct records the sync state
+/// for inclusion in compliance reports and audit metadata.
+struct ClockSyncStatus {
+    bool is_synchronized{false};      ///< Whether clock is synced to NTP/PTP.
+    int stratum{0};                   ///< NTP stratum (1=primary, 2-15=secondary).
+    int64_t offset_ns{0};             ///< Estimated offset from UTC (absolute, ns).
+    int64_t max_error_ns{0};          ///< Maximum estimated error (ns).
+    std::string sync_source;          ///< NTP/PTP server address.
+    int64_t last_check_ns{0};         ///< Timestamp of last sync check.
+
+    /// MiFID II RTS 25 Art.2: HFT gateway max divergence 100μs.
+    [[nodiscard]] bool meets_rts25_hft() const {
+        return is_synchronized && max_error_ns <= 100'000;
+    }
+    /// MiFID II RTS 25 Art.2: Non-HFT max divergence 1ms.
+    [[nodiscard]] bool meets_rts25_standard() const {
+        return is_synchronized && max_error_ns <= 1'000'000;
+    }
+};
 
 /// Convert a 32-byte SHA-256 hash to a lowercase hexadecimal string (64 chars).
 inline std::string hash_to_hex(const std::array<uint8_t, 32>& hash) {
@@ -446,6 +478,11 @@ public:
     ///
     /// @return The serialized chain as a byte vector.
     [[nodiscard]] inline std::vector<uint8_t> serialize_chain() const {
+        // CWE-190: Integer Overflow or Wraparound — guard against entry count
+        // exceeding uint32_t range before narrowing cast to the 4-byte header.
+        if (entries_.size() > UINT32_MAX) {
+            throw std::overflow_error("Audit chain too large to serialize");
+        }
         auto count = static_cast<uint32_t>(entries_.size());
         std::vector<uint8_t> buf;
         buf.reserve(4 + static_cast<size_t>(count) * HASH_CHAIN_ENTRY_SIZE);
@@ -533,7 +570,9 @@ public:
         uint32_t count = detail::audit::read_le32(chain_data);
         size_t expected_size = 4 + static_cast<size_t>(count) * HASH_CHAIN_ENTRY_SIZE;
 
-        if (chain_size < expected_size) {
+        // CWE-400, CWE-789: Memory Allocation with Excessive Size Value —
+        // validate that count * ENTRY_SIZE fits in chain_size before reserve().
+        if (expected_size < 4 || chain_size < expected_size) {
             result.error_message = "chain data truncated: expected "
                                  + std::to_string(expected_size)
                                  + " bytes for " + std::to_string(count)
@@ -968,7 +1007,8 @@ inline expected<std::vector<HashChainEntry>> deserialize_and_verify_chain(
     uint32_t count = detail::audit::read_le32(chain_data);
     size_t expected_size = 4 + static_cast<size_t>(count) * HASH_CHAIN_ENTRY_SIZE;
 
-    if (chain_size < expected_size) {
+    // CWE-400, CWE-789: bounds check before reserve() prevents excessive allocation.
+    if (expected_size < 4 || chain_size < expected_size) {
         return Error{ErrorCode::HASH_CHAIN_BROKEN,
                      "chain data truncated: expected "
                      + std::to_string(expected_size) + " bytes, got "

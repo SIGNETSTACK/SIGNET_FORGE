@@ -79,7 +79,9 @@ struct InferenceRecord {
     std::string          session_id;           ///< Session identifier
     std::string          metadata_json;        ///< Additional JSON metadata
 
-    // EU AI Act Art.13(3)(b)(ii): training data provenance fields
+    // EU AI Act Art.13(3)(b)(ii): training data provenance for high-risk AI
+    // transparency — deployers must be able to identify the data used to train
+    // the model that produced each inference.
     std::string          training_dataset_id;           ///< Training data identifier
     int64_t              training_dataset_size{0};      ///< Number of samples in training dataset
     std::string          training_data_characteristics; ///< Description of training data properties
@@ -144,6 +146,11 @@ struct InferenceRecord {
 
         // metadata_json: string
         append_string(buf, metadata_json);
+
+        // M31: EU AI Act Art.13(3)(b)(ii) training data provenance fields
+        append_string(buf, training_dataset_id);
+        append_le64(buf, static_cast<uint64_t>(training_dataset_size));
+        append_string(buf, training_data_characteristics);
 
         return buf;
     }
@@ -217,6 +224,20 @@ struct InferenceRecord {
         }
         if (!read_string(data, size, offset, rec.metadata_json)) {
             return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated metadata_json"};
+        }
+
+        // M31: EU AI Act Art.13(3)(b)(ii) training data provenance fields
+        // These fields are optional for backward compatibility with older serialized data.
+        if (offset < size) {
+            if (!read_string(data, size, offset, rec.training_dataset_id)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated training_dataset_id"};
+            }
+            if (!read_le64(data, size, offset, rec.training_dataset_size)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated training_dataset_size"};
+            }
+            if (!read_string(data, size, offset, rec.training_data_characteristics)) {
+                return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated training_data_characteristics"};
+            }
         }
 
         return rec;
@@ -336,6 +357,8 @@ inline std::string embedding_to_json(const std::vector<float>& embedding) {
 /// @param json  The JSON array string to decode.
 /// @return The parsed float vector, or empty if the input is malformed.
 inline std::vector<float> json_to_embedding(const std::string& json) {
+    // L25: limit parsed elements to prevent memory exhaustion from crafted input
+    static constexpr size_t MAX_JSON_ARRAY_ELEMENTS = 1'000'000;
     std::vector<float> result;
     if (json.size() < 2 || json.front() != '[' || json.back() != ']') {
         return result;
@@ -345,6 +368,7 @@ inline std::vector<float> json_to_embedding(const std::string& json) {
     size_t end = json.size() - 1;
 
     while (pos < end) {
+        if (result.size() >= MAX_JSON_ARRAY_ELEMENTS) break;
         while (pos < end && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
         if (pos >= end) break;
 

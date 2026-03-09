@@ -207,8 +207,10 @@ inline void emit_copy(std::vector<uint8_t>& out, uint32_t offset,
 
 /// Find the match length between `src[s1..]` and `src[s2..]`, bounded by
 /// `src_end`. Returns the number of matching bytes (0 if first byte differs).
+/// CWE-125: Out-of-bounds Read — bounds guard prevents reading past src_end.
 inline uint32_t match_length(const uint8_t* src, size_t s1, size_t s2,
                              size_t src_end) {
+    if (s1 >= src_end || s2 >= src_end) return 0; // CWE-125 guard
     uint32_t len = 0;
     size_t limit = src_end - ((s1 > s2) ? s1 : s2);
     // Cap match length to avoid overly long copy chains. The Snappy format
@@ -255,6 +257,13 @@ public:
         // the data itself. Snappy's worst case is about 1.004x the input.
         std::vector<uint8_t> out;
         out.reserve(size + size / 64 + 16);
+
+        // Snappy uses a uint32 varint for uncompressed length; reject >4 GiB
+        // CWE-190: Integer Overflow (Snappy uses 32-bit lengths)
+        if (size > UINT32_MAX) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "Snappy: input exceeds 4 GiB limit"};
+        }
 
         // -- 1. Write the preamble: uncompressed length as varint ----------
         uint8_t varint_buf[5];
@@ -381,6 +390,12 @@ public:
         }
 
         // -- 2. Allocate the output buffer ---------------------------------
+        // CWE-409: Improper Handling of Highly Compressed Data (Decompression Bomb)
+        static constexpr size_t MAX_SNAPPY_DECOMPRESS = 256ULL * 1024 * 1024;
+        if (uncompressed_size > MAX_SNAPPY_DECOMPRESS) {
+            return Error{ErrorCode::CORRUPT_PAGE,
+                         "Snappy: decompressed size exceeds 256 MB"};
+        }
         std::vector<uint8_t> out(uncompressed_size);
         size_t out_pos = 0;
 

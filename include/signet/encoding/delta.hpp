@@ -323,7 +323,8 @@ inline void bit_unpack_values(const uint8_t* src,
     size_t num_deltas = count - 1;
     std::vector<int64_t> deltas(num_deltas);
     for (size_t i = 0; i < num_deltas; ++i) {
-        deltas[i] = values[i + 1] - values[i];
+        // CWE-190: Integer Overflow — unsigned subtraction avoids signed overflow UB; C++ [expr.shift] §7.6.7
+        deltas[i] = static_cast<int64_t>(static_cast<uint64_t>(values[i + 1]) - static_cast<uint64_t>(values[i]));
     }
 
     // Process deltas in blocks of DEFAULT_BLOCK_SIZE
@@ -487,7 +488,7 @@ inline void bit_unpack_values(const uint8_t* src,
             }
         }
 
-        // Decode each miniblock
+        // Decode each miniblock (buffer allocated once, reused across miniblocks)
         std::vector<uint64_t> unpacked(values_per_miniblock);
         for (size_t mb = 0; mb < static_cast<size_t>(miniblock_count); ++mb) {
             if (values_remaining == 0) break;
@@ -565,6 +566,8 @@ inline void bit_unpack_values(const uint8_t* src,
     auto wide = decode_int64(data, size, num_values);
     std::vector<int32_t> result(wide.size());
     for (size_t i = 0; i < wide.size(); ++i) {
+        // CWE-681: Incorrect Conversion between Numeric Types — range check before int64→int32 narrowing
+        if (wide[i] < std::numeric_limits<int32_t>::min() || wide[i] > std::numeric_limits<int32_t>::max()) return {};
         result[i] = static_cast<int32_t>(wide[i]);
     }
     return result;

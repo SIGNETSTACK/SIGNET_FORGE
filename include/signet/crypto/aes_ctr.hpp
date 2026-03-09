@@ -113,7 +113,7 @@ public:
 
         // Counter overflow guard: 32-bit counter supports at most 2^32-1 blocks (64 GiB)
         static constexpr size_t MAX_CTR_BYTES = static_cast<size_t>(UINT32_MAX) * 16;
-        if (size > MAX_CTR_BYTES) return {}; // exceeds CTR counter space
+        if (size > MAX_CTR_BYTES) return {}; // empty = error: exceeds 2^32 block limit
 
         // Initialize counter block from IV
         uint8_t counter[16];

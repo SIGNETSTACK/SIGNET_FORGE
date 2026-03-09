@@ -29,6 +29,7 @@
 #include <zlib.h>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -69,6 +70,12 @@ public:
         // plus gzip header/trailer (~18 bytes). deflateBound gives an
         // accurate upper bound once the stream is initialized, but we
         // need a reasonable initial allocation before that.
+        // CWE-190: Integer Overflow (zlib uses uInt for sizes)
+        if (size > std::numeric_limits<uInt>::max()) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "GZIP: input exceeds uInt limit"};
+        }
+
         z_stream stream{};
         stream.next_in  = const_cast<Bytef*>(data);
         stream.avail_in = static_cast<uInt>(size);
@@ -126,6 +133,17 @@ public:
 
         if (uncompressed_size == 0) {
             return std::vector<uint8_t>{};
+        }
+
+        // CWE-190: Integer Overflow (zlib uses uInt for sizes)
+        if (size > std::numeric_limits<uInt>::max()) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "GZIP: compressed input exceeds uInt limit"};
+        }
+        // CWE-190: Integer Overflow (zlib uses uInt for sizes)
+        if (uncompressed_size > std::numeric_limits<uInt>::max()) {
+            return Error{ErrorCode::INTERNAL_ERROR,
+                         "GZIP: uncompressed size exceeds uInt limit"};
         }
 
         std::vector<uint8_t> out(uncompressed_size);

@@ -177,7 +177,11 @@ public:
 
 private:
     /// Per-slot storage: sequence number + data.
-    struct Slot {
+    /// Vyukov MPMC queue — alignas(64) cache line alignment prevents false
+    /// sharing between adjacent slots (CWE-1066: Missing Serialization of
+    /// Resource Access). Each slot occupies its own cache line so concurrent
+    /// CAS operations on different slots do not invalidate each other.
+    struct alignas(64) Slot {
         std::atomic<size_t> seq{0};
         T                   data{};
     };

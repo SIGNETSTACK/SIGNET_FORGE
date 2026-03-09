@@ -219,11 +219,25 @@ private:
         return std::vector<uint8_t>(data, data + size);
     }
 
+    // Absolute decompressed size cap (256 MB)
+    // CWE-409: Improper Handling of Highly Compressed Data (Decompression Bomb)
+    static constexpr size_t MAX_DECOMPRESS_SIZE = 256ULL * 1024 * 1024;
+    if (uncompressed_size > MAX_DECOMPRESS_SIZE) {
+        return Error{ErrorCode::CORRUPT_PAGE,
+                     "Decompressed size exceeds 256 MB limit"};
+    }
+    // Reject zero-length compressed data claiming non-zero output
+    // CWE-20: Improper Input Validation
+    if (size == 0 && uncompressed_size > 0) {
+        return Error{ErrorCode::CORRUPT_PAGE,
+                     "Zero-length compressed data with non-zero uncompressed size"};
+    }
     // Decompression bomb guard: ratio > 1024:1 is suspicious
+    // CWE-409: Improper Handling of Highly Compressed Data (Decompression Bomb)
     static constexpr size_t MAX_DECOMPRESSION_RATIO = 1024;
     if (size > 0 && uncompressed_size / size > MAX_DECOMPRESSION_RATIO) {
         return Error{ErrorCode::CORRUPT_PAGE,
-                     "decompression ratio exceeds safety limit (1024:1)"};
+                     "Decompression ratio exceeds limit"};
     }
 
     const CompressionCodec* impl = CodecRegistry::instance().get(codec);

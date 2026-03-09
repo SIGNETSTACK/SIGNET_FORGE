@@ -490,8 +490,28 @@ public:
             return dtype_result.error();
         }
 
+        // CWE-20: Improper Input Validation (DLPack §3.2 max_ndim)
+        // L14: Reject unreasonable ndim values (DLPack spec uses int32_t)
+        if (dl.ndim > 32) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "DLTensor ndim exceeds reasonable limit (32)"};
+        }
+
         TensorShape shape;
         shape.dims.assign(dl.shape, dl.shape + dl.ndim);
+
+        // CWE-190: Integer Overflow — validate byte_offset is within tensor data bounds
+        const size_t elem_size = tensor_element_size(*dtype_result);
+        size_t total_elements = 1;
+        for (int32_t d = 0; d < dl.ndim; ++d) {
+            total_elements *= static_cast<size_t>(dl.shape[d]);
+        }
+        // CWE-190: Integer Overflow — num_elements*elem_size checked below
+        const size_t total_size = total_elements * elem_size;
+        if (dl.byte_offset > total_size) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "DLPack byte_offset out of range"};
+        }
 
         // Apply byte_offset
         void* data_ptr = static_cast<uint8_t*>(dl.data) + dl.byte_offset;
@@ -547,6 +567,12 @@ public:
         TensorShape shape;
         shape.dims.assign(dl.shape, dl.shape + dl.ndim);
         const size_t num_elements = shape.num_elements();
+
+        // CWE-190: Integer Overflow — check for multiplication overflow before allocating
+        if (elem_size != 0 && num_elements > SIZE_MAX / elem_size) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "DLPack tensor size overflow (num_elements * elem_size)"};
+        }
 
         // Source data pointer with byte offset applied
         const uint8_t* src_base = static_cast<const uint8_t*>(dl.data)

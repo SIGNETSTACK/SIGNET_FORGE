@@ -121,11 +121,29 @@ TEST_CASE("Snappy direct codec", "[compression][snappy]") {
 
 TEST_CASE("Codec registry has Snappy", "[compression][registry]") {
     register_snappy_codec();
+#ifdef SIGNET_HAS_ZSTD
+    register_zstd_codec();
+#endif
+#ifdef SIGNET_HAS_LZ4
+    register_lz4_codec();
+#endif
+#ifdef SIGNET_HAS_GZIP
+    register_gzip_codec();
+#endif
 
     REQUIRE(CodecRegistry::instance().has(Compression::SNAPPY) == true);
     REQUIRE(CodecRegistry::instance().has(Compression::UNCOMPRESSED) == true);
-    // ZSTD is not linked in this build
+#ifdef SIGNET_HAS_ZSTD
+    REQUIRE(CodecRegistry::instance().has(Compression::ZSTD) == true);
+#else
     REQUIRE(CodecRegistry::instance().has(Compression::ZSTD) == false);
+#endif
+#ifdef SIGNET_HAS_LZ4
+    REQUIRE(CodecRegistry::instance().has(Compression::LZ4_RAW) == true);
+#endif
+#ifdef SIGNET_HAS_GZIP
+    REQUIRE(CodecRegistry::instance().has(Compression::GZIP) == true);
+#endif
 }
 
 TEST_CASE("Uncompressed passthrough", "[compression]") {

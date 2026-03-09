@@ -157,9 +157,10 @@ public:
     /// @return true on success; false if the Tier-2 ring is full (caller may retry or drop).
     bool publish(SharedColumnBatch batch) {
         // Tier 3 first (cheap shared_ptr copy, async submit)
-        if (opts_.enable_tier3 && sink_) {
+        StreamingSink* sink = sink_.load(std::memory_order_acquire);
+        if (opts_.enable_tier3 && sink) {
             auto rec = batch->to_stream_record();
-            auto r   = sink_->submit(std::move(rec));
+            auto r   = sink->submit(std::move(rec));
             if (!r) tier3_drops_.fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -189,18 +190,18 @@ public:
     ///
     /// @param sink  Pointer to an externally owned StreamingSink.
     void attach_sink(StreamingSink* sink) {
-        sink_ = sink;
+        sink_.store(sink, std::memory_order_release);
     }
 
     /// Detach the currently attached Tier-3 sink (no-op if none attached).
     void detach_sink() {
-        sink_ = nullptr;
+        sink_.store(nullptr, std::memory_order_release);
     }
 
     /// Check whether a Tier-3 StreamingSink is currently attached.
     /// @return true if a sink is attached.
     [[nodiscard]] bool has_sink() const noexcept {
-        return sink_ != nullptr;
+        return sink_.load(std::memory_order_acquire) != nullptr;
     }
 
     // =========================================================================
@@ -255,8 +256,10 @@ private:
     mutable std::mutex channels_mutex_;
     std::unordered_map<std::string, std::shared_ptr<Channel>> channels_;
 
-    // Tier 3 — WAL sink (not owned)
-    StreamingSink* sink_{nullptr};
+    // Tier 3 — WAL sink (not owned; atomic for lock-free publish path).
+    // CWE-362: atomic load/store on sink_ avoids data races between the
+    // publish() hot path and attach_sink()/detach_sink() called from other threads.
+    std::atomic<StreamingSink*> sink_{nullptr};
 
     // Stats
     std::atomic<uint64_t> published_{0};

@@ -477,7 +477,8 @@ public:
             std::memcpy(&len, data_ + pos_, 4);
             pos_ += 4;
 
-            if (pos_ + len > size_) {
+            // CWE-190: Integer Overflow — subtraction-based bounds check avoids unsigned wrap
+            if (pos_ > size_ || len > size_ - pos_) {
                 return Error{ErrorCode::CORRUPT_PAGE,
                              "BYTE_ARRAY data read past end of page data"};
             }

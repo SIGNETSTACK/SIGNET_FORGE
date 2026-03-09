@@ -412,6 +412,21 @@ private:
         o += ind + "}," + nl;
         o += ind + "\"inference_records\":" + sp + "[" + nl;
 
+        // EU AI Act Art.12(2): consistent statistical anomaly detection methodology.
+        // Precompute mean + 3*sigma threshold for per-record anomaly flag — the
+        // same formula used in compute_perf() for aggregate anomaly_count, ensuring
+        // per-record and summary anomaly classifications are always consistent.
+        double per_record_sigma3 = 0.0;
+        if (!records.empty()) {
+            double var = 0.0;
+            for (const auto& r : records) {
+                double diff = static_cast<double>(r.latency_ns) - ps.avg_latency_ns;
+                var += diff * diff;
+            }
+            var /= static_cast<double>(records.size());
+            per_record_sigma3 = ps.avg_latency_ns + 3.0 * std::sqrt(var);
+        }
+
         for (size_t i = 0; i < records.size(); ++i) {
             const auto& rec = records[i];
             o += ind2 + "{" + nl;
@@ -435,8 +450,10 @@ private:
                + std::to_string(rec.batch_size) + "," + nl;
             o += ind2 + ind + "\"user_id_hash\":" + sp
                + "\"" + j(rec.user_id_hash) + "\"," + nl;
+            // L23: per-record anomaly uses mean + 3*stddev (consistent with aggregate)
+            // Compute sigma3 threshold (same formula as compute_perf)
             o += ind2 + ind + "\"anomaly\":" + sp
-               + (rec.latency_ns > static_cast<int64_t>(ps.avg_latency_ns * 3)
+               + (rec.latency_ns > static_cast<int64_t>(per_record_sigma3)
                   ? "true" : "false");
             if (opts.include_features && !rec.input_embedding.empty()) {
                 o += "," + nl;
@@ -487,6 +504,48 @@ private:
         o += ind + "\"system_id\":" + sp
            + "\"" + j(opts.system_id.empty() ? "UNSPECIFIED" : opts.system_id) + "\"," + nl;
         o += ind + "\"generated_at\":" + sp + "\"" + meta.generated_at_iso + "\"," + nl;
+        // EU AI Act Art.13(3) transparency disclosure (Gap R-2)
+        o += ind + "\"provider\":" + sp + "{" + nl;
+        o += ind2 + "\"name\":" + sp + "\""
+           + j(opts.provider_name.empty() ? "UNSPECIFIED" : opts.provider_name)
+           + "\"," + nl;
+        o += ind2 + "\"contact\":" + sp + "\""
+           + j(opts.provider_contact.empty() ? "UNSPECIFIED" : opts.provider_contact)
+           + "\"" + nl;
+        o += ind + "}," + nl;
+        o += ind + "\"intended_purpose\":" + sp + "\""
+           + j(opts.intended_purpose.empty()
+               ? "Not specified — Art.13(3)(b)(i) requires disclosure"
+               : opts.intended_purpose) + "\"," + nl;
+        o += ind + "\"known_limitations\":" + sp + "\""
+           + j(opts.known_limitations.empty()
+               ? "Not specified — Art.13(3)(b)(ii) requires disclosure"
+               : opts.known_limitations) + "\"," + nl;
+        o += ind + "\"instructions_for_use\":" + sp + "\""
+           + j(opts.instructions_for_use.empty()
+               ? "Not specified — Art.13(3)(b)(iv) requires disclosure"
+               : opts.instructions_for_use) + "\"," + nl;
+        o += ind + "\"human_oversight_measures\":" + sp + "\""
+           + j(opts.human_oversight_measures.empty()
+               ? "Not specified — Art.14 requires disclosure"
+               : opts.human_oversight_measures) + "\"," + nl;
+        if (!opts.accuracy_metrics.empty()) {
+            o += ind + "\"accuracy_metrics\":" + sp + "\""
+               + j(opts.accuracy_metrics) + "\"," + nl;
+        }
+        if (!opts.bias_risks.empty()) {
+            o += ind + "\"bias_risks\":" + sp + "\""
+               + j(opts.bias_risks) + "\"," + nl;
+        }
+        if (opts.risk_level > 0) {
+            o += ind + "\"risk_classification\":" + sp + "{" + nl;
+            o += ind2 + "\"level\":" + sp + std::to_string(opts.risk_level) + "," + nl;
+            const char* risk_labels[] = {"","minimal","limited","high","unacceptable"};
+            o += ind2 + "\"label\":" + sp + "\""
+               + std::string(opts.risk_level <= 4 ? risk_labels[opts.risk_level] : "unknown")
+               + "\"" + nl;
+            o += ind + "}," + nl;
+        }
         o += ind + "\"system_capabilities\":" + sp + "{" + nl;
         o += ind2 + "\"supported_inference_types\":" + sp + "[";
         const char* type_names[] = {
@@ -740,6 +799,263 @@ private:
         if (f.size() > max_n) o += ",...";
         o += "]";
         return o;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Art.15 Accuracy/Robustness Metrics (Gap R-3b)
+// ---------------------------------------------------------------------------
+
+/// Computed accuracy, robustness, and drift metrics per EU AI Act Art.15.
+///
+/// Art.15(1): Accuracy metrics appropriate to the system's intended purpose.
+/// Art.15(3): Resilience against errors, faults, and inconsistencies.
+/// Art.15(4): Cybersecurity posture (addressed at infrastructure level).
+///
+/// Defined at namespace scope for Apple Clang compatibility.
+struct Art15Metrics {
+    // --- Accuracy / Confidence ---
+    int64_t total_inferences = 0;
+    int64_t low_confidence_count = 0;       ///< Inferences below low_confidence_threshold
+    float   low_confidence_rate = 0.0f;     ///< low_confidence_count / total_inferences
+    float   mean_confidence = 0.0f;         ///< Mean output_score across all inferences
+    float   median_confidence = 0.0f;       ///< Median output_score
+    float   std_dev_confidence = 0.0f;      ///< Standard deviation of output_score
+    float   min_confidence = 1.0f;          ///< Minimum output_score observed
+    float   max_confidence = 0.0f;          ///< Maximum output_score observed
+
+    // --- Latency / Robustness ---
+    int64_t mean_latency_ns = 0;            ///< Mean inference latency
+    int64_t p50_latency_ns = 0;             ///< Median (p50) latency
+    int64_t p95_latency_ns = 0;             ///< 95th percentile latency
+    int64_t p99_latency_ns = 0;             ///< 99th percentile latency
+    int64_t max_latency_ns = 0;             ///< Maximum latency
+
+    // --- Drift Detection ---
+    int64_t distinct_model_versions = 0;    ///< Number of distinct model versions seen
+    float   psi_score = 0.0f;              ///< Population Stability Index (0 = no drift)
+    ///< PSI < 0.1: no significant change
+    ///< PSI 0.1–0.25: moderate shift
+    ///< PSI > 0.25: significant distribution shift
+
+    // --- Coverage ---
+    int64_t period_start_ns = 0;
+    int64_t period_end_ns = 0;
+    int64_t period_duration_ns = 0;
+
+    /// Serialize metrics to a JSON string.
+    [[nodiscard]] std::string to_json(bool pretty = true) const {
+        const char* nl = pretty ? "\n" : "";
+        const char* sp = pretty ? " " : "";
+        const std::string ind = pretty ? "  " : "";
+
+        std::string o = "{" + std::string(nl);
+        char buf[64];
+
+        o += ind + "\"total_inferences\":" + sp + std::to_string(total_inferences) + "," + nl;
+        o += ind + "\"low_confidence_count\":" + sp + std::to_string(low_confidence_count) + "," + nl;
+        std::snprintf(buf, sizeof(buf), "%.6f", low_confidence_rate);
+        o += ind + "\"low_confidence_rate\":" + sp + buf + "," + std::string(nl);
+        std::snprintf(buf, sizeof(buf), "%.6f", mean_confidence);
+        o += ind + "\"mean_confidence\":" + sp + buf + "," + std::string(nl);
+        std::snprintf(buf, sizeof(buf), "%.6f", median_confidence);
+        o += ind + "\"median_confidence\":" + sp + buf + "," + std::string(nl);
+        std::snprintf(buf, sizeof(buf), "%.6f", std_dev_confidence);
+        o += ind + "\"std_dev_confidence\":" + sp + buf + "," + std::string(nl);
+        std::snprintf(buf, sizeof(buf), "%.6f", min_confidence);
+        o += ind + "\"min_confidence\":" + sp + buf + "," + std::string(nl);
+        std::snprintf(buf, sizeof(buf), "%.6f", max_confidence);
+        o += ind + "\"max_confidence\":" + sp + buf + "," + std::string(nl);
+        o += ind + "\"mean_latency_ns\":" + sp + std::to_string(mean_latency_ns) + "," + nl;
+        o += ind + "\"p50_latency_ns\":" + sp + std::to_string(p50_latency_ns) + "," + nl;
+        o += ind + "\"p95_latency_ns\":" + sp + std::to_string(p95_latency_ns) + "," + nl;
+        o += ind + "\"p99_latency_ns\":" + sp + std::to_string(p99_latency_ns) + "," + nl;
+        o += ind + "\"max_latency_ns\":" + sp + std::to_string(max_latency_ns) + "," + nl;
+        o += ind + "\"distinct_model_versions\":" + sp + std::to_string(distinct_model_versions) + "," + nl;
+        std::snprintf(buf, sizeof(buf), "%.6f", psi_score);
+        o += ind + "\"psi_score\":" + sp + buf + "," + std::string(nl);
+        o += ind + "\"period_start_ns\":" + sp + std::to_string(period_start_ns) + "," + nl;
+        o += ind + "\"period_end_ns\":" + sp + std::to_string(period_end_ns) + "," + nl;
+        o += ind + "\"period_duration_ns\":" + sp + std::to_string(period_duration_ns) + nl;
+        o += "}";
+        return o;
+    }
+};
+
+/// Computes Art.15 accuracy, robustness, and drift metrics from inference records.
+///
+/// Usage:
+///   auto metrics = Art15MetricsCalculator::compute(records, 0.5f);
+///   auto json = metrics.to_json();
+class Art15MetricsCalculator {
+public:
+    /// Compute Art.15 metrics from a set of inference records.
+    ///
+    /// @param records                  Inference records to analyze
+    /// @param low_confidence_threshold Confidence threshold for flagging (default 0.5)
+    /// @return Computed metrics
+    [[nodiscard]] static Art15Metrics compute(
+            const std::vector<InferenceRecord>& records,
+            float low_confidence_threshold = 0.5f) {
+        Art15Metrics m;
+
+        if (records.empty()) return m;
+
+        m.total_inferences = static_cast<int64_t>(records.size());
+
+        // Collect confidence scores and latencies
+        std::vector<float>   confidences;
+        std::vector<int64_t> latencies;
+        confidences.reserve(records.size());
+        latencies.reserve(records.size());
+
+        std::vector<std::string> model_versions;
+        double sum_conf = 0.0;
+        int64_t sum_lat = 0;
+        m.min_confidence = 1.0f;
+        m.max_confidence = 0.0f;
+
+        for (const auto& rec : records) {
+            confidences.push_back(rec.output_score);
+            latencies.push_back(rec.latency_ns);
+
+            sum_conf += rec.output_score;
+            if (rec.output_score < m.min_confidence) m.min_confidence = rec.output_score;
+            if (rec.output_score > m.max_confidence) m.max_confidence = rec.output_score;
+            if (rec.output_score < low_confidence_threshold) ++m.low_confidence_count;
+
+            sum_lat += rec.latency_ns;
+
+            // Track distinct model versions
+            if (std::find(model_versions.begin(), model_versions.end(), rec.model_version)
+                == model_versions.end()) {
+                model_versions.push_back(rec.model_version);
+            }
+
+            // Period bounds
+            if (m.period_start_ns == 0 || rec.timestamp_ns < m.period_start_ns)
+                m.period_start_ns = rec.timestamp_ns;
+            if (rec.timestamp_ns > m.period_end_ns)
+                m.period_end_ns = rec.timestamp_ns;
+        }
+
+        auto n = static_cast<double>(records.size());
+
+        // Confidence statistics
+        m.mean_confidence = static_cast<float>(sum_conf / n);
+        m.low_confidence_rate = static_cast<float>(m.low_confidence_count) / static_cast<float>(n);
+
+        // Standard deviation
+        double var_sum = 0.0;
+        for (float c : confidences) {
+            double diff = c - m.mean_confidence;
+            var_sum += diff * diff;
+        }
+        m.std_dev_confidence = static_cast<float>(std::sqrt(var_sum / n));
+
+        // Median confidence
+        std::sort(confidences.begin(), confidences.end());
+        m.median_confidence = percentile(confidences, 0.5f);
+
+        // Latency statistics
+        m.mean_latency_ns = sum_lat / static_cast<int64_t>(records.size());
+        std::sort(latencies.begin(), latencies.end());
+        m.p50_latency_ns = percentile_i64(latencies, 0.50f);
+        m.p95_latency_ns = percentile_i64(latencies, 0.95f);
+        m.p99_latency_ns = percentile_i64(latencies, 0.99f);
+        m.max_latency_ns = latencies.back();
+
+        // Drift
+        m.distinct_model_versions = static_cast<int64_t>(model_versions.size());
+        m.period_duration_ns = m.period_end_ns - m.period_start_ns;
+
+        // PSI: split records into two halves (time-ordered) and compare
+        // confidence distributions
+        if (records.size() >= 20) {
+            size_t half = records.size() / 2;
+            std::vector<float> first_half, second_half;
+            first_half.reserve(half);
+            second_half.reserve(records.size() - half);
+
+            // Records are typically in chronological order
+            for (size_t i = 0; i < half; ++i)
+                first_half.push_back(records[i].output_score);
+            for (size_t i = half; i < records.size(); ++i)
+                second_half.push_back(records[i].output_score);
+
+            m.psi_score = compute_psi(first_half, second_half, 10);
+        }
+
+        return m;
+    }
+
+private:
+    /// Compute percentile from a sorted vector.
+    static float percentile(const std::vector<float>& sorted, float p) {
+        if (sorted.empty()) return 0.0f;
+        float idx = p * static_cast<float>(sorted.size() - 1);
+        auto lo = static_cast<size_t>(idx);
+        float frac = idx - static_cast<float>(lo);
+        if (lo + 1 >= sorted.size()) return sorted.back();
+        return sorted[lo] * (1.0f - frac) + sorted[lo + 1] * frac;
+    }
+
+    static int64_t percentile_i64(const std::vector<int64_t>& sorted, float p) {
+        if (sorted.empty()) return 0;
+        auto idx = static_cast<size_t>(p * static_cast<float>(sorted.size() - 1));
+        if (idx >= sorted.size()) idx = sorted.size() - 1;
+        return sorted[idx];
+    }
+
+    /// Compute Population Stability Index (PSI) between two distributions.
+    /// Uses histogram binning with `n_bins` equal-width bins.
+    /// PSI = Σ (P_i - Q_i) * ln(P_i / Q_i)
+    static float compute_psi(const std::vector<float>& reference,
+                              const std::vector<float>& current,
+                              int n_bins) {
+        if (reference.empty() || current.empty() || n_bins <= 0) return 0.0f;
+
+        // Find global min/max
+        float gmin = std::min(*std::min_element(reference.begin(), reference.end()),
+                              *std::min_element(current.begin(), current.end()));
+        float gmax = std::max(*std::max_element(reference.begin(), reference.end()),
+                              *std::max_element(current.begin(), current.end()));
+
+        if (gmax <= gmin) return 0.0f;
+
+        float bin_width = (gmax - gmin) / static_cast<float>(n_bins);
+        // Small epsilon to avoid division by zero
+        constexpr float eps = 1e-6f;
+
+        std::vector<float> ref_pct(static_cast<size_t>(n_bins), 0.0f);
+        std::vector<float> cur_pct(static_cast<size_t>(n_bins), 0.0f);
+
+        auto bin_idx = [&](float v) -> int {
+            int b = static_cast<int>((v - gmin) / bin_width);
+            if (b >= n_bins) b = n_bins - 1;
+            if (b < 0) b = 0;
+            return b;
+        };
+
+        for (float v : reference) ref_pct[static_cast<size_t>(bin_idx(v))] += 1.0f;
+        for (float v : current)   cur_pct[static_cast<size_t>(bin_idx(v))] += 1.0f;
+
+        // Normalize to proportions
+        float ref_total = static_cast<float>(reference.size());
+        float cur_total = static_cast<float>(current.size());
+        for (int i = 0; i < n_bins; ++i) {
+            ref_pct[static_cast<size_t>(i)] = ref_pct[static_cast<size_t>(i)] / ref_total + eps;
+            cur_pct[static_cast<size_t>(i)] = cur_pct[static_cast<size_t>(i)] / cur_total + eps;
+        }
+
+        float psi = 0.0f;
+        for (int i = 0; i < n_bins; ++i) {
+            float p = cur_pct[static_cast<size_t>(i)];
+            float q = ref_pct[static_cast<size_t>(i)];
+            psi += (p - q) * std::log(p / q);
+        }
+
+        return psi;
     }
 };
 

@@ -70,6 +70,8 @@ static constexpr size_t WAL_MMAP_DEFAULT_SEGMENT = 64ULL * 1024ULL * 1024ULL;
 static constexpr size_t WAL_MMAP_MAX_SEGMENT     = 16ULL * 1024ULL * 1024ULL * 1024ULL;
 /// Maximum number of ring segments in WalMmapWriter.
 static constexpr size_t WAL_MMAP_MAX_RING        = 16;
+/// Maximum record size (64 MB) — mirrors WAL_MAX_RECORD_SIZE in wal.hpp.
+static constexpr size_t WAL_MMAP_MAX_RECORD_SIZE = 64ULL * 1024ULL * 1024ULL;
 
 // ---------------------------------------------------------------------------
 // detail_mmap — private helpers (no dependency on wal.hpp detail:: namespace)
@@ -440,17 +442,17 @@ public:
 
         opts_        = std::move(o.opts_);
         ring_        = std::move(o.ring_);
-        active_idx_  = o.active_idx_;
+        active_idx_.store(o.active_idx_.load(std::memory_order_acquire), std::memory_order_release);
         next_seq_    = o.next_seq_;
         next_seg_id_ = o.next_seg_id_;
-        closed_      = o.closed_;
+        closed_.store(o.closed_.load(std::memory_order_acquire), std::memory_order_release);
         bg_deferred_ = false;
         bg_stop_.store(false, std::memory_order_release);
-        if (!closed_ && !ring_.empty())
+        if (!closed_.load(std::memory_order_acquire) && !ring_.empty())
             bg_thread_ = std::thread(&WalMmapWriter::bg_worker, this);
 
-        o.closed_    = true;
-        o.active_idx_ = 0;
+        o.closed_.store(true, std::memory_order_release);
+        o.active_idx_.store(0, std::memory_order_release);
     }
 
     WalMmapWriter& operator=(WalMmapWriter&& o) {
@@ -466,23 +468,23 @@ public:
 
             opts_        = std::move(o.opts_);
             ring_        = std::move(o.ring_);
-            active_idx_  = o.active_idx_;
+            active_idx_.store(o.active_idx_.load(std::memory_order_acquire), std::memory_order_release);
             next_seq_    = o.next_seq_;
             next_seg_id_ = o.next_seg_id_;
-            closed_      = o.closed_;
+            closed_.store(o.closed_.load(std::memory_order_acquire), std::memory_order_release);
             bg_deferred_ = false;
             bg_stop_.store(false, std::memory_order_release);
-            if (!closed_ && !ring_.empty())
+            if (!closed_.load(std::memory_order_acquire) && !ring_.empty())
                 bg_thread_ = std::thread(&WalMmapWriter::bg_worker, this);
 
-            o.closed_    = true;
-            o.active_idx_ = 0;
+            o.closed_.store(true, std::memory_order_release);
+            o.active_idx_.store(0, std::memory_order_release);
         }
         return *this;
     }
 
     ~WalMmapWriter() {
-        if (!closed_)
+        if (!closed_.load(std::memory_order_acquire))
             (void)close();
     }
 
@@ -554,7 +556,7 @@ public:
         w.ring_[0]->first_seq    = static_cast<uint64_t>(w.next_seq_);
         w.ring_[0]->write_offset = 0;
         w.ring_[0]->state.store(SlotState::ACTIVE, std::memory_order_release);
-        w.active_idx_ = 0;
+        w.active_idx_.store(0, std::memory_order_release);
         w.init_slot_header(*w.ring_[0]);
 
         // Background thread is started by the move constructor to avoid a
@@ -575,10 +577,13 @@ public:
     /// @param size  Size of the payload in bytes (max 4 GB).
     /// @return The sequence number assigned to this record, or an Error.
     [[nodiscard]] expected<int64_t> append(const uint8_t* data, size_t size) {
-        if (closed_)
+        if (closed_.load(std::memory_order_acquire))
             return Error{ErrorCode::IO_ERROR, "WalMmapWriter: already closed"};
         if (size > static_cast<size_t>(UINT32_MAX))
             return Error{ErrorCode::IO_ERROR, "WalMmapWriter: record too large (> 4 GB)"};
+        // CWE-400: Uncontrolled Resource Consumption — enforce WAL_MAX_RECORD_SIZE cap.
+        if (size > WAL_MMAP_MAX_RECORD_SIZE)
+            return Error{ErrorCode::IO_ERROR, "WalMmapWriter: record exceeds WAL_MAX_RECORD_SIZE (64 MB)"};
 
         const size_t entry_size = 28 + size; // 24-byte hdr + data + 4-byte crc
 
@@ -587,14 +592,22 @@ public:
                 "WalMmapWriter: record larger than segment usable space"};
 
         // Check if active slot has room; rotate if not
-        RingSlot* active = ring_[active_idx_].get();
+        RingSlot* active = ring_[active_idx_.load(std::memory_order_acquire)].get();
         if (active->write_offset + entry_size > usable()) {
             auto r = rotate();
             if (!r) return r.error();
-            active = ring_[active_idx_].get();
+            active = ring_[active_idx_.load(std::memory_order_acquire)].get();
         }
 
-        // --- Defensive bounds check ---
+        // CWE-617: Reachable Assertion — runtime bounds check replaces assert()
+        // so that out-of-bounds writes are caught in Release builds (not just Debug).
+        if (active->seg.data() == nullptr ||
+            active->seg.data() + detail_mmap::MMAP_WAL_FILE_HDR_SIZE +
+                active->write_offset + entry_size
+                > active->seg.data() + active->seg.capacity()) {
+            return Error{ErrorCode::IO_ERROR,
+                "WalMmapWriter: write would exceed mmap'd segment bounds"};
+        }
         assert(active->seg.data() != nullptr);
         assert(active->seg.data() + detail_mmap::MMAP_WAL_FILE_HDR_SIZE +
                active->write_offset + entry_size
@@ -667,9 +680,9 @@ public:
     /// @param do_sync  If true (or opts_.sync_on_flush), use synchronous flush; otherwise async.
     /// @return Success, or an Error if already closed.
     [[nodiscard]] expected<void> flush(bool do_sync = false) {
-        if (closed_)
+        if (closed_.load(std::memory_order_acquire))
             return Error{ErrorCode::IO_ERROR, "WalMmapWriter: already closed"};
-        RingSlot& active = *ring_[active_idx_];
+        RingSlot& active = *ring_[active_idx_.load(std::memory_order_acquire)];
         if (do_sync || opts_.sync_on_flush)
             active.seg.flush_sync();
         else
@@ -680,8 +693,8 @@ public:
     /// Close the writer: stop the background thread, flush and close all segments.
     /// @return Success (always succeeds after joining the background thread).
     [[nodiscard]] expected<void> close() {
-        if (closed_) return {};
-        closed_ = true;
+        if (closed_.load(std::memory_order_acquire)) return {};
+        closed_.store(true, std::memory_order_release);
 
         // Stop background thread
         bg_stop_.store(true, std::memory_order_release);
@@ -701,7 +714,7 @@ public:
     }
 
     /// Check whether the writer is still open (not yet closed).
-    [[nodiscard]] bool            is_open()  const noexcept { return !closed_; }
+    [[nodiscard]] bool            is_open()  const noexcept { return !closed_.load(std::memory_order_acquire); }
     /// Return the next sequence number that will be assigned.
     [[nodiscard]] int64_t         next_seq() const noexcept { return next_seq_; }
     /// Return the output directory path.
@@ -819,7 +832,7 @@ private:
 
     /// Rotate the active slot to a standby one (called when active is full).
     expected<void> rotate() {
-        RingSlot& old_slot = *ring_[active_idx_];
+        RingSlot& old_slot = *ring_[active_idx_.load(std::memory_order_acquire)];
         old_slot.last_seq  = static_cast<uint64_t>(next_seq_ - 1);
 
         // Async flush before setting DRAINING so the bg thread doesn't close
@@ -858,7 +871,7 @@ private:
         new_slot.first_seq    = static_cast<uint64_t>(next_seq_);
         new_slot.write_offset = 0;
         new_slot.state.store(SlotState::ACTIVE, std::memory_order_release);
-        active_idx_ = static_cast<size_t>(standby_idx);
+        active_idx_.store(static_cast<size_t>(standby_idx), std::memory_order_release);
         init_slot_header(new_slot);
 
         bg_cv_.notify_one();
@@ -908,8 +921,9 @@ private:
                                 return true;
                         }
                         // Wake if active slot is getting full
-                        if (active_idx_ < ring_.size()) {
-                            const RingSlot& a = *ring_[active_idx_];
+                        const size_t aidx = active_idx_.load(std::memory_order_acquire);
+                        if (aidx < ring_.size()) {
+                            const RingSlot& a = *ring_[aidx];
                             if (a.write_offset > usable() * 3 / 4)
                                 return true;
                         }
@@ -982,10 +996,10 @@ private:
     // --- Data members ---
     WalMmapOptions                    opts_;
     std::vector<std::unique_ptr<RingSlot>> ring_;
-    size_t                            active_idx_  = 0;
+    std::atomic<size_t>               active_idx_{0};   // CWE-362: atomic for lock-free publish path
     int64_t                           next_seq_    = 0;
     uint64_t                          next_seg_id_ = 0;  // protected by bg_mutex_
-    bool                              closed_      = false;
+    std::atomic<bool>                 closed_{false};    // CWE-362: atomic for safe cross-thread close detection
     bool                              bg_deferred_ = false;  // bg thread start deferred until after move
 
     std::thread             bg_thread_;

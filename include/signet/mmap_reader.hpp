@@ -55,8 +55,7 @@ namespace signet::forge {
 /// maps it entirely into memory, and unmaps on destruction (or explicit
 /// close()). Non-copyable, movable.
 ///
-/// @note No bounds checking is performed by data_at() -- the caller must
-///       ensure offsets are within [0, size()).
+/// @note data_at() returns nullptr for out-of-bounds offsets (C4 hardening).
 class MmapReader {
 public:
     /// Open a file and memory-map it read-only.
@@ -104,6 +103,20 @@ public:
         ::madvise(mapped, file_size, MADV_SEQUENTIAL);
 #endif
 
+#ifdef __linux__
+        // POSIX mmap(2): pre-fault pages to detect truncated files early (SIGBUS risk)
+        // CWE-252: Unchecked Return Value — madvise failure is non-fatal, but
+        // the volatile reads below detect truncation before any real parsing.
+        ::madvise(mapped, file_size, MADV_WILLNEED);
+#endif
+
+        // POSIX mmap(2) + CWE-252: volatile byte reads force page-in; a SIGBUS
+        // here means the file was truncated after stat() — fail fast.
+        if (file_size >= 4) {
+            volatile uint8_t check = static_cast<const uint8_t*>(mapped)[0]; (void)check;
+            check = static_cast<const uint8_t*>(mapped)[file_size - 1]; (void)check;
+        }
+
         MmapReader reader;
         reader.mapped_ = mapped;
         reader.size_   = file_size;
@@ -122,8 +135,12 @@ public:
     [[nodiscard]] size_t size() const { return size_; }
 
     /// Pointer to mapped memory at a given offset.
-    /// No bounds checking -- caller must ensure offset < size().
+    /// Returns nullptr if offset is out of bounds.
+    // CWE-125: Out-of-bounds Read — reject offset beyond mapped region
     [[nodiscard]] const uint8_t* data_at(size_t offset) const {
+        if (offset >= size_) {
+            return nullptr;
+        }
         return data() + offset;
     }
 
@@ -728,6 +745,12 @@ private:
                 return Error{ErrorCode::CORRUPT_PAGE,
                              "mmap: uncompressed page size out of range (0 or > 256 MB)"};
             }
+            // CWE-409: Improper Handling of Highly Compressed Data (Zip Bomb)
+            // M21: Reject suspiciously high decompression ratios (zip bomb guard)
+            if (compressed_size > 0 && uncompressed_size / compressed_size > 1024) {
+                return Error{ErrorCode::CORRUPT_DATA,
+                             "mmap: decompression ratio exceeds 1024x limit"};
+            }
             auto dec_result = decompress(codec, pdata, pdata_size,
                                          uncompressed_size);
             if (!dec_result) {
@@ -804,6 +827,12 @@ private:
             if (uncompressed_size == 0 || uncompressed_size > MMAP_MAX_PAGE_SIZE) {
                 return Error{ErrorCode::CORRUPT_PAGE,
                              "mmap: uncompressed page size out of range (0 or > 256 MB)"};
+            }
+            // CWE-409: Improper Handling of Highly Compressed Data (Zip Bomb)
+            // M21: Reject suspiciously high decompression ratios (zip bomb guard)
+            if (page_data_size > 0 && uncompressed_size / page_data_size > 1024) {
+                return Error{ErrorCode::CORRUPT_DATA,
+                             "mmap: decompression ratio exceeds 1024x limit"};
             }
             auto decompressed = decompress(col_meta.codec,
                                            page_data, page_data_size,

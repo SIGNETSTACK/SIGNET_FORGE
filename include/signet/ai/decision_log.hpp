@@ -67,12 +67,43 @@ enum class RiskGateResult : int32_t {
     THROTTLED  = 3   ///< Order delayed by rate limiting
 };
 
+/// Order type classification for MiFID II RTS 24 Annex I Table 2 Field 7.
+enum class OrderType : int32_t {
+    MARKET         = 0,  ///< Market order
+    LIMIT          = 1,  ///< Limit order
+    STOP           = 2,  ///< Stop order
+    STOP_LIMIT     = 3,  ///< Stop-limit order
+    PEGGED         = 4,  ///< Pegged order
+    OTHER          = 99  ///< Other order type
+};
+
+/// Time-in-force classification for MiFID II RTS 24 Annex I Table 2 Field 8.
+enum class TimeInForce : int32_t {
+    DAY            = 0,  ///< Day order (valid until end of trading day)
+    GTC            = 1,  ///< Good-Till-Cancelled
+    IOC            = 2,  ///< Immediate-Or-Cancel
+    FOK            = 3,  ///< Fill-Or-Kill
+    GTD            = 4,  ///< Good-Till-Date
+    OTHER          = 99  ///< Other
+};
+
+/// Buy/sell direction for MiFID II RTS 24 Annex I Table 2 Field 6.
+enum class BuySellIndicator : int32_t {
+    BUY            = 0,
+    SELL           = 1,
+    SHORT_SELL     = 2   ///< Short selling (RTS 24 Annex I Field 16)
+};
+
 /// A single AI-driven trading decision with full provenance.
 ///
 /// Each record captures the complete decision context: what the model saw
 /// (input features), what it decided (decision type, price, quantity),
 /// how confident it was (confidence), and whether risk management approved
 /// (risk result). All fields are serialized deterministically for hashing.
+///
+/// Gap R-4 (MiFID II RTS 24 Annex I): Includes all mandatory fields from
+/// Table 2: buy_sell_indicator, order_type, time_in_force, isin, currency,
+/// short_selling_flag, aggregated_order, validity_period, parent_order_id.
 struct DecisionRecord {
     int64_t              timestamp_ns{0};      ///< Decision timestamp (nanoseconds since epoch)
     int32_t              strategy_id{0};       ///< Which strategy made this decision
@@ -88,6 +119,17 @@ struct DecisionRecord {
     double               quantity{0.0};        ///< Decision quantity
     std::string          venue;                ///< Execution venue
     std::string          notes;                ///< Optional free-text notes
+
+    // --- MiFID II RTS 24 Annex I mandatory fields (Gap R-4) ---
+    BuySellIndicator     buy_sell{BuySellIndicator::BUY};     ///< Field 6: Buy/sell direction
+    OrderType            order_type{OrderType::MARKET};       ///< Field 7: Order type
+    TimeInForce          time_in_force{TimeInForce::DAY};     ///< Field 8: Time-in-force
+    std::string          isin;                ///< Field 5: ISIN (ISO 6166, 12 chars)
+    std::string          currency;            ///< Field 9: Currency (ISO 4217, 3 chars, e.g. "USD")
+    bool                 short_selling_flag{false}; ///< Field 16: Short selling indicator
+    bool                 aggregated_order{false};   ///< Field 17: Aggregated order flag
+    int64_t              validity_period_ns{0};     ///< Field 10: GTD validity timestamp (0=N/A)
+    std::string          parent_order_id;     ///< R-17: Parent order for lifecycle linking
 
     /// Serialize the record to a deterministic byte sequence.
     /// Format: each field written sequentially as little-endian values.
@@ -141,6 +183,17 @@ struct DecisionRecord {
 
         // notes: string
         append_string(buf, notes);
+
+        // MiFID II RTS 24 Annex I mandatory fields (Gap R-4)
+        append_le32(buf, static_cast<uint32_t>(buy_sell));
+        append_le32(buf, static_cast<uint32_t>(order_type));
+        append_le32(buf, static_cast<uint32_t>(time_in_force));
+        append_string(buf, isin);
+        append_string(buf, currency);
+        append_le32(buf, short_selling_flag ? 1u : 0u);
+        append_le32(buf, aggregated_order ? 1u : 0u);
+        append_le64(buf, static_cast<uint64_t>(validity_period_ns));
+        append_string(buf, parent_order_id);
 
         return buf;
     }
@@ -215,6 +268,31 @@ struct DecisionRecord {
         }
         if (!read_string(data, size, offset, rec.notes)) {
             return Error{ErrorCode::CORRUPT_PAGE, "DecisionRecord: truncated notes"};
+        }
+
+        // MiFID II RTS 24 Annex I fields (Gap R-4) — optional for backward compat
+        if (offset < size) {
+            int32_t bs_val = 0;
+            if (read_le32(data, size, offset, bs_val))
+                rec.buy_sell = static_cast<BuySellIndicator>(bs_val);
+            int32_t ot_val = 0;
+            if (read_le32(data, size, offset, ot_val))
+                rec.order_type = static_cast<OrderType>(ot_val);
+            int32_t tif_val = 0;
+            if (read_le32(data, size, offset, tif_val))
+                rec.time_in_force = static_cast<TimeInForce>(tif_val);
+            read_string(data, size, offset, rec.isin);
+            read_string(data, size, offset, rec.currency);
+            uint32_t ssf = 0;
+            if (read_le32_u(data, size, offset, ssf))
+                rec.short_selling_flag = (ssf != 0);
+            uint32_t agg = 0;
+            if (read_le32_u(data, size, offset, agg))
+                rec.aggregated_order = (agg != 0);
+            int64_t vp = 0;
+            if (read_le64(data, size, offset, vp))
+                rec.validity_period_ns = vp;
+            read_string(data, size, offset, rec.parent_order_id);
         }
 
         return rec;
@@ -351,6 +429,9 @@ inline std::string features_to_json(const std::vector<float>& features) {
 /// @param json  The JSON array string to decode.
 /// @return The parsed float vector, or empty if the input is malformed.
 inline std::vector<float> json_to_features(const std::string& json) {
+    // CWE-400: Uncontrolled Resource Consumption — cap parsed elements at 1M
+    // to prevent memory exhaustion from crafted JSON input.
+    static constexpr size_t MAX_JSON_ARRAY_ELEMENTS = 1'000'000;
     std::vector<float> result;
     if (json.size() < 2 || json.front() != '[' || json.back() != ']') {
         return result;
@@ -360,6 +441,7 @@ inline std::vector<float> json_to_features(const std::string& json) {
     size_t end = json.size() - 1;  // Before ']'
 
     while (pos < end) {
+        if (result.size() >= MAX_JSON_ARRAY_ELEMENTS) break;
         // Skip whitespace
         while (pos < end && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
         if (pos >= end) break;
@@ -474,6 +556,13 @@ public:
         }
 
         // Validate output_dir: must not be empty or contain ".." traversal segments
+        // CWE-59: Improper Link Resolution Before File Access — this check
+        // catches literal ".." path components but does NOT resolve symlinks.
+        // A symlink pointing outside the intended directory tree would bypass
+        // this guard. Full symlink resolution (e.g., via
+        // std::filesystem::canonical()) is not used here because the target
+        // directory may not exist yet at validation time. Deployers should
+        // ensure the output directory is not a symlink to an untrusted location.
         if (output_dir_.empty())
             throw std::invalid_argument("DecisionLogWriter: output_dir must not be empty");
         for (size_t s = 0, e; s <= output_dir_.size(); s = e + 1) {

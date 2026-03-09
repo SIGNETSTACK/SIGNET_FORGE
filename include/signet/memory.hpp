@@ -77,6 +77,23 @@ public:
         return ptr;
     }
 
+    /// Allocate zero-initialized memory from the arena.
+    ///
+    /// CWE-908: Use of Uninitialized Resource — zeroing prevents information
+    /// leaks from recycled arena blocks or stale heap memory.
+    ///
+    /// Equivalent to allocate() followed by memset to zero. Useful for
+    /// security-sensitive buffers where uninitialized memory could leak data.
+    ///
+    /// @param size       Number of bytes to allocate (0 returns nullptr).
+    /// @param alignment  Required alignment (must be a power of 2, default max_align_t).
+    /// @return Pointer to zero-filled memory, or nullptr if @p size is 0.
+    void* allocate_zeroed(size_t size, size_t alignment = alignof(std::max_align_t)) {
+        void* ptr = allocate(size, alignment);
+        if (ptr) std::memset(ptr, 0, size);
+        return ptr;
+    }
+
     /// Allocate a typed array of @p count elements from the arena.
     ///
     /// Elements are **not** constructed (raw memory only). The alignment

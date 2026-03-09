@@ -72,6 +72,13 @@ static constexpr uint32_t WAL_MAX_RECORD_SIZE = 64u * 1024u * 1024u;  // 64 MB h
 namespace detail {
 
 /// Compute CRC-32 over a contiguous byte buffer (polynomial 0xEDB88320).
+///
+/// @note L20: This CRC-32 is used for **crash recovery only** (detecting torn
+///       writes / partial records). It is NOT a cryptographic integrity check
+///       and provides no tamper-evidence guarantees — CRC-32 is trivially
+///       forgeable. For tamper-evident audit trails, use the SHA-256 hash
+///       chain in audit_chain.hpp.
+///
 /// @param data   Pointer to input bytes.
 /// @param length Number of bytes to checksum.
 /// @return CRC-32 checksum.
@@ -271,7 +278,14 @@ public:
             std::fclose(f);
             return Error{ErrorCode::IO_ERROR, "WalWriter: fseek failed"};
         }
+        // L17: use 64-bit ftell on Windows for files > 2 GB.
+        // Note: _ftelli64 is required on Windows LLP64 data model where
+        // long is 32-bit; standard ftell would silently truncate offsets > 2 GB.
+#ifdef _WIN32
+        int64_t file_size = _ftelli64(f);
+#else
         long file_size = std::ftell(f);
+#endif
         if (file_size < 0) {
             std::fclose(f);
             return Error{ErrorCode::IO_ERROR, "WalWriter: ftell failed"};
@@ -309,6 +323,9 @@ public:
                     if (magic != WAL_RECORD_MAGIC) break;
                     int64_t  seq      = static_cast<int64_t>(detail::read_le64(hdr + 4));
                     uint32_t data_sz  = detail::read_le32(hdr + 20);
+                    // CWE-400: reject corrupt/oversized records during resume scan
+                    // (H18+L18: prevents unbounded fseek from crafted data_sz).
+                    if (data_sz > WAL_MAX_RECORD_SIZE) break;
                     // Skip data + crc(4).
                     if (std::fseek(rf, static_cast<long>(data_sz) + 4, SEEK_CUR) != 0) break;
                     last_seq = seq;
@@ -581,6 +598,8 @@ public:
         int64_t  ts      = static_cast<int64_t>(detail::read_le64(hdr + 12));
         uint32_t data_sz = detail::read_le32(hdr + 20);
 
+        // CWE-400: Uncontrolled Resource Consumption — reject oversized records
+        // to prevent unbounded memory allocation from crafted data_sz values.
         if (data_sz > WAL_MAX_RECORD_SIZE) {
             return std::optional<WalEntry>{std::nullopt}; // treat as end-of-valid-records
         }

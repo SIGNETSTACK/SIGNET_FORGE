@@ -54,11 +54,18 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#  include <stdlib.h>  // arc4random_buf
+#elif !defined(_WIN32)
+#  include <sys/random.h>  // getrandom
+#endif
 
 namespace signet::forge {
 
@@ -154,8 +161,12 @@ public:
         report.period_end_iso   = (opts.end_ns == std::numeric_limits<int64_t>::max())
                                       ? "open"
                                       : ns_to_iso8601(opts.end_ns);
+        // MiFID II RTS 24 Annex I Table 2, Field 1: unique report ID.
+        // CSPRNG random hex suffix prevents predictable/guessable report IDs
+        // (timestamp alone is insufficient for uniqueness under concurrent generation).
         report.report_id = opts.report_id.empty()
-                               ? ("MIFID2-" + std::to_string(report.generated_at_ns))
+                               ? ("MIFID2-" + std::to_string(report.generated_at_ns)
+                                  + "-" + random_hex_suffix_())
                                : opts.report_id;
 
         switch (opts.format) {
@@ -178,6 +189,8 @@ public:
         return "timestamp_utc,order_id,firm_id,algo_identifier,"
                "model_version,instrument,venue,decision_type,"
                "price,quantity,risk_gate,model_output,confidence,"
+               "buy_sell,order_type,time_in_force,isin,currency,"
+               "short_selling,aggregated_order,parent_order_id,"
                "chain_seq,chain_hash\n";
     }
 
@@ -208,6 +221,15 @@ public:
         row += csv_escape(risk_result_str(rec.risk_result)) + ",";
         row += double_str(rec.model_output)                + ",";
         row += double_str(rec.confidence)                  + ",";
+        // RTS 24 Annex I mandatory fields (Gap R-4)
+        row += csv_escape(buy_sell_str(rec.buy_sell))       + ",";
+        row += csv_escape(order_type_str(rec.order_type))   + ",";
+        row += csv_escape(time_in_force_str(rec.time_in_force)) + ",";
+        row += csv_escape(rec.isin)                        + ",";
+        row += csv_escape(rec.currency)                    + ",";
+        row += (rec.short_selling_flag ? "true" : "false") + std::string(",");
+        row += (rec.aggregated_order ? "true" : "false")   + std::string(",");
+        row += csv_escape(rec.parent_order_id)             + ",";
         // chain fields omitted for single-record streaming use
         row += ",\n";
         return row;
@@ -288,7 +310,30 @@ private:
                + double_str(rec.model_output) + "," + nl;
             o += ind2 + ind + "\"field_14_confidence\":" + sp
                + double_str(rec.confidence) + "," + nl;
-            o += ind2 + ind + "\"field_15_notes\":" + sp
+            // MiFID II RTS 24 Annex I mandatory fields (Gap R-4)
+            o += ind2 + ind + "\"field_15_buy_sell\":" + sp
+               + "\"" + buy_sell_str(rec.buy_sell) + "\"," + nl;
+            o += ind2 + ind + "\"field_16_order_type\":" + sp
+               + "\"" + order_type_str(rec.order_type) + "\"," + nl;
+            o += ind2 + ind + "\"field_17_time_in_force\":" + sp
+               + "\"" + time_in_force_str(rec.time_in_force) + "\"," + nl;
+            o += ind2 + ind + "\"field_18_isin\":" + sp
+               + "\"" + j(rec.isin) + "\"," + nl;
+            o += ind2 + ind + "\"field_19_currency\":" + sp
+               + "\"" + j(rec.currency) + "\"," + nl;
+            o += ind2 + ind + "\"field_20_short_selling\":" + sp
+               + (rec.short_selling_flag ? "true" : "false") + "," + nl;
+            o += ind2 + ind + "\"field_21_aggregated_order\":" + sp
+               + (rec.aggregated_order ? "true" : "false") + "," + nl;
+            if (rec.validity_period_ns > 0) {
+                o += ind2 + ind + "\"field_22_validity_period\":" + sp
+                   + "\"" + ns_to_iso8601(rec.validity_period_ns) + "\"," + nl;
+            }
+            if (!rec.parent_order_id.empty()) {
+                o += ind2 + ind + "\"field_23_parent_order_id\":" + sp
+                   + "\"" + j(rec.parent_order_id) + "\"," + nl;
+            }
+            o += ind2 + ind + "\"field_24_notes\":" + sp
                + "\"" + j(rec.notes) + "\"";
             if (opts.include_features && !rec.input_features.empty()) {
                 o += "," + nl;
@@ -318,7 +363,15 @@ private:
         o += "\"qty\":" + double_str(rec.quantity) + ",";
         o += "\"risk_gate\":\"" + risk_result_str(rec.risk_result) + "\",";
         o += "\"output\":" + double_str(rec.model_output) + ",";
-        o += "\"conf\":" + double_str(rec.confidence);
+        o += "\"conf\":" + double_str(rec.confidence) + ",";
+        // RTS 24 Annex I mandatory fields (Gap R-4)
+        o += "\"buy_sell\":\"" + buy_sell_str(rec.buy_sell) + "\",";
+        o += "\"order_type\":\"" + order_type_str(rec.order_type) + "\",";
+        o += "\"tif\":\"" + time_in_force_str(rec.time_in_force) + "\",";
+        o += "\"isin\":\"" + j(rec.isin) + "\",";
+        o += "\"ccy\":\"" + j(rec.currency) + "\",";
+        o += "\"short_sell\":" + std::string(rec.short_selling_flag ? "true" : "false") + ",";
+        o += "\"aggregated\":" + std::string(rec.aggregated_order ? "true" : "false");
         o += "}";
         return o;
     }
@@ -345,6 +398,15 @@ private:
             out += csv_escape(risk_result_str(rec.risk_result))        + ",";
             out += double_str(rec.model_output)                        + ",";
             out += double_str(rec.confidence)                          + ",";
+            // RTS 24 Annex I mandatory fields (Gap R-4)
+            out += csv_escape(buy_sell_str(rec.buy_sell))               + ",";
+            out += csv_escape(order_type_str(rec.order_type))           + ",";
+            out += csv_escape(time_in_force_str(rec.time_in_force))    + ",";
+            out += csv_escape(rec.isin)                                + ",";
+            out += csv_escape(rec.currency)                            + ",";
+            out += std::string(rec.short_selling_flag ? "true":"false") + ",";
+            out += std::string(rec.aggregated_order ? "true":"false")   + ",";
+            out += csv_escape(rec.parent_order_id)                     + ",";
             out += ",\n";  // chain_seq + chain_hash left empty (not in DecisionRecord)
         }
         return out;
@@ -422,6 +484,40 @@ private:
         return "UNKNOWN";
     }
 
+    // MiFID II RTS 24 Annex I enum stringifiers (Gap R-4)
+    static std::string buy_sell_str(BuySellIndicator bs) {
+        switch (bs) {
+            case BuySellIndicator::BUY:        return "BUYI";
+            case BuySellIndicator::SELL:       return "SELL";
+            case BuySellIndicator::SHORT_SELL: return "SSEX";
+        }
+        return "UNKNOWN";
+    }
+
+    static std::string order_type_str(OrderType ot) {
+        switch (ot) {
+            case OrderType::MARKET:     return "MARKET";
+            case OrderType::LIMIT:      return "LIMIT";
+            case OrderType::STOP:       return "STOP";
+            case OrderType::STOP_LIMIT: return "STOP_LIMIT";
+            case OrderType::PEGGED:     return "PEGGED";
+            case OrderType::OTHER:      return "OTHER";
+        }
+        return "UNKNOWN";
+    }
+
+    static std::string time_in_force_str(TimeInForce tif) {
+        switch (tif) {
+            case TimeInForce::DAY:   return "DAY";
+            case TimeInForce::GTC:   return "GTC";
+            case TimeInForce::IOC:   return "IOC";
+            case TimeInForce::FOK:   return "FOK";
+            case TimeInForce::GTD:   return "GTD";
+            case TimeInForce::OTHER: return "OTHER";
+        }
+        return "UNKNOWN";
+    }
+
     static constexpr size_t MAX_FIELD_LENGTH = 4096;
 
     static std::string truncate_field(const std::string& s) {
@@ -464,6 +560,40 @@ private:
         char buf[64];
         std::snprintf(buf, sizeof(buf), "%.*g", significant_digits, v);
         return buf;
+    }
+
+    /// L21: Generate an 8-character hex suffix using platform CSPRNG.
+    /// Platform-specific random sources:
+    ///   macOS/FreeBSD/OpenBSD: arc4random_buf (kernel CSPRNG, never blocks)
+    ///   Windows:               rand_s (RtlGenRandom-backed)
+    ///   Linux:                 getrandom(2) (blocks until urandom is seeded)
+    static std::string random_hex_suffix_() {
+        uint8_t buf[4];
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+        arc4random_buf(buf, sizeof(buf));   // kernel CSPRNG, never fails
+#elif defined(_WIN32)
+        // BCryptGenRandom is available on Vista+; for simplicity use rand_s
+        for (auto& b : buf) {
+            unsigned int val;
+            rand_s(&val);                   // RtlGenRandom-backed CSPRNG
+            b = static_cast<uint8_t>(val);
+        }
+#else
+        // Linux: getrandom() with flags=0 blocks until urandom is seeded
+        size_t written = 0;
+        while (written < sizeof(buf)) {
+            ssize_t ret = getrandom(buf + written, sizeof(buf) - written, 0);
+            if (ret > 0) written += static_cast<size_t>(ret);
+            else break;
+        }
+#endif
+        static constexpr char hex[] = "0123456789abcdef";
+        std::string result(8, '\0');
+        for (size_t i = 0; i < 4; ++i) {
+            result[2 * i]     = hex[buf[i] >> 4];
+            result[2 * i + 1] = hex[buf[i] & 0x0F];
+        }
+        return result;
     }
 
     static std::string features_array(const std::vector<float>& feats) {

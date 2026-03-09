@@ -160,6 +160,10 @@ public:
     /// @tparam T  The original value type used during update().
     /// @note Caller is responsible for matching T to the PhysicalType tracked by type_.
     ///       Mismatched types produce undefined byte-reinterpretation (CWE-843).
+    ///       M25: There is no runtime type check because the stored bytes are
+    ///       type-erased. If a runtime check is needed, compare sizeof(T) against
+    ///       min_bytes().size() or use the type() accessor to verify the PhysicalType
+    ///       before calling this method.
     template <typename T>
     [[nodiscard]] T min_as() const {
         if constexpr (std::is_same_v<T, bool>) {
@@ -175,6 +179,7 @@ public:
     /// @tparam T  The original value type used during update().
     /// @note Caller is responsible for matching T to the PhysicalType tracked by type_.
     ///       Mismatched types produce undefined byte-reinterpretation (CWE-843).
+    ///       M25: See min_as() note on runtime type-safety verification.
     template <typename T>
     [[nodiscard]] T max_as() const {
         if constexpr (std::is_same_v<T, bool>) {

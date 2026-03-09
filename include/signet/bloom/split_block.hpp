@@ -144,12 +144,13 @@ public:
         const auto block_idx = static_cast<size_t>(
             (static_cast<uint64_t>(hash >> 32) * nblocks) >> 32);
 
-        uint32_t* block = block_ptr(block_idx);
         const auto key = static_cast<uint32_t>(hash);
 
         for (size_t i = 0; i < kWordsPerBlock; ++i) {
             uint32_t bit_pos = (key * kSalt[i]) >> 27;  // top 5 bits
-            block[i] |= (UINT32_C(1) << bit_pos);
+            uint32_t word = block_read(block_idx, i);
+            word |= (UINT32_C(1) << bit_pos);
+            block_write(block_idx, i, word);
         }
     }
 
@@ -163,12 +164,12 @@ public:
         const auto block_idx = static_cast<size_t>(
             (static_cast<uint64_t>(hash >> 32) * nblocks) >> 32);
 
-        const uint32_t* block = block_ptr(block_idx);
         const auto key = static_cast<uint32_t>(hash);
 
         for (size_t i = 0; i < kWordsPerBlock; ++i) {
             uint32_t bit_pos = (key * kSalt[i]) >> 27;
-            if ((block[i] & (UINT32_C(1) << bit_pos)) == 0) {
+            uint32_t word = block_read(block_idx, i);
+            if ((word & (UINT32_C(1) << bit_pos)) == 0) {
                 return false;
             }
         }
@@ -264,6 +265,12 @@ public:
                 "SplitBlockBloomFilter::from_data: "
                 "size must be a positive multiple of 32");
         }
+        // CWE-400: Uncontrolled Resource Consumption — kMaxBytes (128 MiB) cap
+        if (size > kMaxBytes) {
+            throw std::invalid_argument(
+                "SplitBlockBloomFilter::from_data: "
+                "data exceeds maximum filter size");
+        }
         SplitBlockBloomFilter f;
         f.data_.assign(src, src + size);
         return f;
@@ -353,12 +360,30 @@ private:
         return ((bytes + kBytesPerBlock - 1) / kBytesPerBlock) * kBytesPerBlock;
     }
 
+    /// Read a uint32_t word from block @p block_idx at word position @p word_idx.
+    /// CWE-704: Incorrect Type Conversion (strict aliasing, C++ [basic.lval] §6.7.2)
+    /// — memcpy avoids UB from reinterpret_cast<uint32_t*> on a uint8_t[] buffer.
+    uint32_t block_read(size_t block_idx, size_t word_idx) const {
+        uint32_t val;
+        std::memcpy(&val, data_.data() + block_idx * kBytesPerBlock + word_idx * sizeof(uint32_t), sizeof(uint32_t));
+        return val;
+    }
+
+    /// Write a uint32_t word to block @p block_idx at word position @p word_idx.
+    /// CWE-704: Incorrect Type Conversion (strict aliasing, C++ [basic.lval] §6.7.2)
+    /// — memcpy avoids UB from reinterpret_cast<uint32_t*> on a uint8_t[] buffer.
+    void block_write(size_t block_idx, size_t word_idx, uint32_t val) {
+        std::memcpy(data_.data() + block_idx * kBytesPerBlock + word_idx * sizeof(uint32_t), &val, sizeof(uint32_t));
+    }
+
     /// Get a mutable pointer to the 8 uint32_t words of block @p idx.
+    /// @note Provided for backward compatibility; prefer block_read/block_write.
     uint32_t* block_ptr(size_t idx) {
         return reinterpret_cast<uint32_t*>(data_.data() + idx * kBytesPerBlock);
     }
 
     /// Get a const pointer to the 8 uint32_t words of block @p idx.
+    /// @note Provided for backward compatibility; prefer block_read/block_write.
     const uint32_t* block_ptr(size_t idx) const {
         return reinterpret_cast<const uint32_t*>(
             data_.data() + idx * kBytesPerBlock);

@@ -234,6 +234,10 @@ public:
             int64_t  timestamp_ns = 0,
             uint32_t type_id      = 0x434F4C42u /*"COLB"*/) const {
 
+        // CWE-190: Integer Overflow or Wraparound — check row count fits in
+        // uint32_t before narrowing cast into the serialization header.
+        if (num_rows_ > static_cast<size_t>(UINT32_MAX))
+            return StreamRecord{}; // silently return empty record for oversized batch
         const auto ncols = static_cast<uint32_t>(schema_.size());
         const auto nrows = static_cast<uint32_t>(num_rows_);
 

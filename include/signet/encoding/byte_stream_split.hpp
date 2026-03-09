@@ -63,6 +63,7 @@ namespace byte_stream_split {
 [[nodiscard]] inline std::vector<uint8_t> encode_float(const float* values,
                                                         size_t count) {
     constexpr size_t WIDTH = sizeof(float); // 4
+    if (count > SIZE_MAX / WIDTH) return {}; // CWE-190: Integer Overflow — prevent count * WIDTH wraparound
     std::vector<uint8_t> out(count * WIDTH);
 
     if (count == 0) return out;
@@ -96,6 +97,7 @@ namespace byte_stream_split {
 [[nodiscard]] inline std::vector<uint8_t> encode_double(const double* values,
                                                          size_t count) {
     constexpr size_t WIDTH = sizeof(double); // 8
+    if (count > SIZE_MAX / WIDTH) return {}; // CWE-190: Integer Overflow — prevent count * WIDTH wraparound
     std::vector<uint8_t> out(count * WIDTH);
 
     if (count == 0) return out;

@@ -185,7 +185,18 @@ inline expected<OnnxTensorInfo> prepare_for_onnx(const TensorView& tensor) {
                      "call clone() first to produce a contiguous copy"};
     }
 
+    // CWE-20: Improper Input Validation — all ONNX dimensions must be positive
+    for (auto d : tensor.shape().dims) {
+        if (d <= 0) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "ONNX tensor dimensions must be positive"};
+        }
+    }
+
     OnnxTensorInfo info;
+    // M28 WARNING: ONNX Runtime requires non-const void*. The caller MUST ensure
+    // the source tensor data is not backed by read-only memory (e.g., mmap PROT_READ).
+    // If the tensor originates from an mmap'd file, copy it first via OwnedTensor.
     info.data         = const_cast<void*>(tensor.data());
     info.shape        = tensor.shape().dims;
     info.element_type = to_onnx_type(tensor.dtype());
