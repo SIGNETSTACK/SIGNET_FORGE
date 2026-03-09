@@ -11,6 +11,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <climits>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <mutex>
@@ -24,7 +26,9 @@
 #include <vector>
 
 #ifndef _WIN32
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace signet::forge {
@@ -606,11 +610,26 @@ parse_claims(const std::string& text) {
     const char* env = std::getenv(kUsageFileEnvVar);
     if (env != nullptr && env[0] != '\0') {
         std::string dir(env);
-        // CWE-22: Improper Limitation of a Pathname to a Restricted Directory
-        // Reject path traversal sequences that could escape the intended directory.
+        // CWE-22: Reject path traversal sequences.
         if (dir.find("..") != std::string::npos) {
             // Fall through to default path
         } else {
+#ifndef _WIN32
+            // CWE-426: Canonicalize to resolve symlinks and relative components.
+            // realpath() requires the parent directory to exist; the file itself
+            // may not yet exist, so we canonicalize the parent and append the
+            // basename.
+            auto fs_path = std::filesystem::path(dir);
+            auto parent = fs_path.parent_path();
+            if (!parent.empty()) {
+                char resolved[PATH_MAX] = {};
+                if (::realpath(parent.string().c_str(), resolved)) {
+                    dir = std::string(resolved) + "/" + fs_path.filename().string();
+                }
+                // If realpath fails (dir doesn't exist yet), use the original
+                // validated path — it already passed the ".." check.
+            }
+#endif
             return dir;
         }
     }
@@ -733,7 +752,18 @@ inline void load_usage_state_from_file(const std::string& path, UsageState& st) 
     }
 #endif
 
-    std::ofstream out(tmp_path, std::ios::out | std::ios::trunc);
+    std::ofstream out;
+#ifndef _WIN32
+    // CWE-732: Create with explicit 0600 permissions to prevent world-readable state files.
+    int sfd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (sfd < 0) return false;
+    // Wrap the fd in a stdio FILE*, then attach to ofstream via the path
+    // (fd ownership: we close it after ofstream opens the same path).
+    ::close(sfd);
+    out.open(tmp_path, std::ios::out | std::ios::trunc);
+#else
+    out.open(tmp_path, std::ios::out | std::ios::trunc);
+#endif
     if (!out.is_open()) return false;
 
     out << "month_tag=" << st.month_tag << '\n';

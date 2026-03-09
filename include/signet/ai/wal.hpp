@@ -264,7 +264,14 @@ public:
     /// @return WalWriter on success, Error on I/O failure.
     static expected<WalWriter> open(const std::string& path, Options opts = {}) {
         // Try to open existing file for appending.
-        FILE* f = std::fopen(path.c_str(), "a+b");
+        FILE* f = nullptr;
+#ifdef _WIN32
+        f = std::fopen(path.c_str(), "a+b");
+#else
+        // CWE-732: Open with explicit 0600 permissions to prevent world-writable files.
+        int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_APPEND, 0600);
+        if (fd >= 0) f = ::fdopen(fd, "a+b");
+#endif
         if (!f)
             return Error{ErrorCode::IO_ERROR,
                          std::string("WalWriter: cannot open '") + path + "': " + std::strerror(errno)};
@@ -357,7 +364,13 @@ public:
             }
 
             // Re-open for appending.
+#ifdef _WIN32
             f = std::fopen(path.c_str(), "ab");
+#else
+            // CWE-732: Reopen with explicit 0600 permissions.
+            int fd2 = ::open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0600);
+            if (fd2 >= 0) f = ::fdopen(fd2, "ab");
+#endif
             if (!f)
                 return Error{ErrorCode::IO_ERROR,
                              std::string("WalWriter: cannot reopen '") + path + "': " + std::strerror(errno)};
@@ -1075,7 +1088,14 @@ private:
         }
 
         const std::string tmp = path + ".tmp." + std::to_string(detail::now_ns());
-        FILE* f = std::fopen(tmp.c_str(), "wb");
+        FILE* f = nullptr;
+#ifdef _WIN32
+        f = std::fopen(tmp.c_str(), "wb");
+#else
+        // CWE-732: Create manifest with explicit 0600 permissions.
+        int mfd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        if (mfd >= 0) f = ::fdopen(mfd, "wb");
+#endif
         if (!f) {
             return Error{ErrorCode::IO_ERROR,
                          std::string("WalManager: cannot open temp manifest '") + tmp + "': " + std::strerror(errno)};
