@@ -17,9 +17,12 @@
 #include <type_traits>
 #include <vector>
 
-// Windows <mmsystem.h> defines TIME_MS as a macro — undefine to avoid collision.
+// Windows macro pollution — undefine after all includes.
 #ifdef TIME_MS
 #undef TIME_MS
+#endif
+#ifdef OPTIONAL
+#undef OPTIONAL
 #endif
 
 namespace fs = std::filesystem;

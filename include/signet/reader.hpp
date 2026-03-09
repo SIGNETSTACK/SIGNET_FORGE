@@ -54,9 +54,13 @@
 #include <string>
 #include <vector>
 
-// Windows <mmsystem.h> defines TIME_MS as a macro — undefine after all includes.
+// Windows macro pollution: undefine after all includes.
+// TIME_MS from <mmsystem.h>, OPTIONAL from <sal.h>
 #ifdef TIME_MS
 #undef TIME_MS
+#endif
+#ifdef OPTIONAL
+#undef OPTIONAL
 #endif
 
 namespace signet::forge {

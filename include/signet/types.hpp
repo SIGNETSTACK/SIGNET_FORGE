@@ -133,6 +133,10 @@ enum class PageType : int32_t {
 
 /// Parquet field repetition types (nullability / cardinality).
 /// @see ColumnDescriptor::repetition
+// Windows <sal.h> defines OPTIONAL as a SAL annotation macro — undefine.
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
 enum class Repetition : int32_t {
     REQUIRED = 0, ///< Exactly one value per row (non-nullable).
     OPTIONAL = 1, ///< Zero or one value per row (nullable).

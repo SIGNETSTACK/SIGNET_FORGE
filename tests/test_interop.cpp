@@ -663,6 +663,7 @@ TEST_CASE("Arrow offset and length caps enforced", "[interop][hardening]") {
     std::filesystem::remove(path);
 }
 
+#ifndef _WIN32  // MmapParquetReader not available on Windows
 TEST_CASE("mmap footer validation rejects invalid footer length", "[interop][hardening]") {
     // H-7: footer_len > sz - 12 check
     // Create a minimal invalid Parquet file with bad footer length
@@ -684,3 +685,4 @@ TEST_CASE("mmap footer validation rejects invalid footer length", "[interop][har
     REQUIRE_FALSE(result.has_value());
     std::filesystem::remove(path);
 }
+#endif  // !_WIN32

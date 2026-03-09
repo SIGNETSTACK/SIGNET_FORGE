@@ -10,6 +10,11 @@
 #include <type_traits>
 #include <vector>
 
+// Windows <sal.h> defines OPTIONAL as a SAL annotation macro — undefine.
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
+
 namespace signet::forge {
 
 /// @file schema.hpp
