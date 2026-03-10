@@ -156,9 +156,9 @@ public:
     /// @param batch  The column batch to publish (moved into the ring).
     /// @return true on success; false if the Tier-2 ring is full (caller may retry or drop).
     bool publish(SharedColumnBatch batch) {
-        // Tier 3 first — copy shared_ptr under lock so sink stays alive for the call
-        std::shared_ptr<StreamingSink> sink;
-        { std::lock_guard<std::mutex> lk(sink_mutex_); sink = sink_; }
+        // Tier 3 first — atomic load ensures sink stays alive for the call
+        // (lock-free: no mutex on the publish() hot path)
+        auto sink = std::atomic_load_explicit(&sink_, std::memory_order_acquire);
         if (opts_.enable_tier3 && sink) {
             auto rec = batch->to_stream_record();
             auto r   = sink->submit(std::move(rec));
@@ -189,21 +189,21 @@ public:
     ///
     /// @param sink  Shared pointer to a StreamingSink (bus shares ownership).
     void attach_sink(std::shared_ptr<StreamingSink> sink) {
-        std::lock_guard<std::mutex> lk(sink_mutex_);
-        sink_ = std::move(sink);
+        std::atomic_store_explicit(&sink_, std::move(sink),
+                                   std::memory_order_release);
     }
 
     /// Detach the currently attached Tier-3 sink (no-op if none attached).
     void detach_sink() {
-        std::lock_guard<std::mutex> lk(sink_mutex_);
-        sink_.reset();
+        std::atomic_store_explicit(&sink_, std::shared_ptr<StreamingSink>{},
+                                   std::memory_order_release);
     }
 
     /// Check whether a Tier-3 StreamingSink is currently attached.
     /// @return true if a sink is attached.
     [[nodiscard]] bool has_sink() const {
-        std::lock_guard<std::mutex> lk(sink_mutex_);
-        return sink_ != nullptr;
+        return std::atomic_load_explicit(&sink_, std::memory_order_acquire)
+                   != nullptr;
     }
 
     // =========================================================================
@@ -258,10 +258,9 @@ private:
     mutable std::mutex channels_mutex_;
     std::unordered_map<std::string, std::shared_ptr<Channel>> channels_;
 
-    // Tier 3 — WAL sink (shared ownership; mutex-guarded for thread safety).
-    // CWE-362: H-16 fix — shared_ptr prevents use-after-detach race between
-    // publish() and attach_sink()/detach_sink() called from other threads.
-    mutable std::mutex sink_mutex_;
+    // Tier 3 — WAL sink (shared ownership; lock-free via atomic shared_ptr).
+    // CWE-362: H-16 fix — atomic_load/store on shared_ptr prevents
+    // use-after-detach race without mutex overhead on the publish() hot path.
     std::shared_ptr<StreamingSink> sink_;
 
     // Stats

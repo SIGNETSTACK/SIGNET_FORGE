@@ -24,6 +24,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -355,44 +356,40 @@ private:
         return expected<void>{};
     }
 
-    /// Read actual feature values for a specific row location.
-    [[nodiscard]] expected<FeatureVector> fetch_row(
-            const RowLocation& loc,
-            const std::vector<std::string>& project) const {
+    // =========================================================================
+    // Row group cache — avoids re-decoding entire columns per point query
+    // =========================================================================
+
+    /// Cached decoded columns for a single row group.
+    struct RowGroupCache {
+        size_t file_idx  = SIZE_MAX;
+        size_t row_group = SIZE_MAX;
+
+        std::vector<std::string> eids;
+        std::vector<int64_t>     tss;
+        std::vector<int32_t>     vers;
+        std::vector<std::vector<double>> feat_cols;  ///< one vector per feature column
+    };
+
+    /// Populate or reuse the row group cache for the given location.
+    [[nodiscard]] expected<const RowGroupCache*> ensure_cached(
+            const RowLocation& loc) const {
+
+        // Cache hit — same (file_idx, row_group) as last query
+        if (rg_cache_.file_idx == loc.file_idx &&
+            rg_cache_.row_group == loc.row_group) {
+            return &rg_cache_;
+        }
 
         if (loc.file_idx >= readers_.size() || !readers_[loc.file_idx])
             return Error{ErrorCode::IO_ERROR,
                          "FeatureReader: reader for file index " +
                          std::to_string(loc.file_idx) + " is not available"};
 
-        // ParquetReader::read_column() is logically const but modifies an
-        // internal decompression cache — hence readers_ is mutable.
-        auto& rdr           = *readers_[loc.file_idx];
-        const auto& schema  = rdr.schema();
+        auto& rdr          = *readers_[loc.file_idx];
+        const auto& schema = rdr.schema();
 
-        // --- Determine which feature columns to fetch ---
-        std::vector<size_t>      feat_col_indices;
-        std::vector<std::string> feat_names_out;
-
-        if (project.empty()) {
-            // All features in schema order
-            for (size_t ci = 3; ci < schema.num_columns(); ++ci) {
-                feat_col_indices.push_back(ci);
-                feat_names_out.push_back(schema.column(ci).name);
-            }
-        } else {
-            // Projected subset — skip features not present in this file
-            // (handles schema evolution: older files may lack newer features)
-            for (const auto& fname : project) {
-                auto idx = schema.find_column(fname);
-                if (idx.has_value()) {
-                    feat_col_indices.push_back(*idx);
-                    feat_names_out.push_back(fname);
-                }
-            }
-        }
-
-        // --- Read the fixed columns from this row group ---
+        // Decode the three fixed columns
         auto eid_result = rdr.read_column<std::string>(loc.row_group, 0);
         if (!eid_result) return eid_result.error();
 
@@ -402,34 +399,77 @@ private:
         auto ver_result = rdr.read_column<int32_t>(loc.row_group, 2);
         if (!ver_result) return ver_result.error();
 
-        const auto& eids = *eid_result;
-        const auto& tss  = *ts_result;
-        const auto& vers = *ver_result;
+        // Decode all feature columns (col 3..N)
+        std::vector<std::vector<double>> feat_cols;
+        for (size_t ci = 3; ci < schema.num_columns(); ++ci) {
+            auto feat_result = rdr.read_column<double>(loc.row_group, ci);
+            if (!feat_result) return feat_result.error();
+            feat_cols.push_back(std::move(*feat_result));
+        }
 
-        if (loc.row_offset >= tss.size())
+        // Store in cache
+        rg_cache_.file_idx  = loc.file_idx;
+        rg_cache_.row_group = loc.row_group;
+        rg_cache_.eids      = std::move(*eid_result);
+        rg_cache_.tss       = std::move(*ts_result);
+        rg_cache_.vers      = std::move(*ver_result);
+        rg_cache_.feat_cols = std::move(feat_cols);
+
+        return &rg_cache_;
+    }
+
+    /// Read actual feature values for a specific row location.
+    [[nodiscard]] expected<FeatureVector> fetch_row(
+            const RowLocation& loc,
+            const std::vector<std::string>& project) const {
+
+        auto cache_result = ensure_cached(loc);
+        if (!cache_result) return cache_result.error();
+        const auto* cache = *cache_result;
+
+        if (loc.row_offset >= cache->tss.size())
             return Error{ErrorCode::OUT_OF_RANGE,
                          "FeatureReader: row_offset " +
                          std::to_string(loc.row_offset) +
                          " out of range for row group with " +
-                         std::to_string(tss.size()) + " rows"};
+                         std::to_string(cache->tss.size()) + " rows"};
 
         FeatureVector fv;
-        fv.entity_id    = (loc.row_offset < eids.size())
-                              ? eids[loc.row_offset] : "";
-        fv.timestamp_ns = tss[loc.row_offset];
-        fv.version      = (loc.row_offset < vers.size())
-                              ? vers[loc.row_offset] : 1;
+        fv.entity_id    = (loc.row_offset < cache->eids.size())
+                              ? cache->eids[loc.row_offset] : "";
+        fv.timestamp_ns = cache->tss[loc.row_offset];
+        fv.version      = (loc.row_offset < cache->vers.size())
+                              ? cache->vers[loc.row_offset] : 1;
 
-        // --- Read feature columns ---
-        fv.values.reserve(feat_col_indices.size());
-        for (size_t ci : feat_col_indices) {
-            auto feat_result = rdr.read_column<double>(loc.row_group, ci);
-            if (!feat_result) return feat_result.error();
-            const auto& col = *feat_result;
-            fv.values.push_back(
-                (loc.row_offset < col.size())
-                    ? col[loc.row_offset]
-                    : std::numeric_limits<double>::quiet_NaN());
+        // --- Determine which feature columns to extract ---
+        if (project.empty()) {
+            // All features — direct index into cached columns
+            fv.values.reserve(cache->feat_cols.size());
+            for (const auto& col : cache->feat_cols) {
+                fv.values.push_back(
+                    (loc.row_offset < col.size())
+                        ? col[loc.row_offset]
+                        : std::numeric_limits<double>::quiet_NaN());
+            }
+        } else {
+            // Projected subset — look up column indices by name
+            if (loc.file_idx < readers_.size() && readers_[loc.file_idx]) {
+                const auto& schema = readers_[loc.file_idx]->schema();
+                fv.values.reserve(project.size());
+                for (const auto& fname : project) {
+                    auto idx = schema.find_column(fname);
+                    if (idx.has_value() && *idx >= 3) {
+                        size_t feat_idx = *idx - 3;
+                        if (feat_idx < cache->feat_cols.size()) {
+                            const auto& col = cache->feat_cols[feat_idx];
+                            fv.values.push_back(
+                                (loc.row_offset < col.size())
+                                    ? col[loc.row_offset]
+                                    : std::numeric_limits<double>::quiet_NaN());
+                        }
+                    }
+                }
+            }
         }
 
         return fv;
@@ -449,6 +489,10 @@ private:
     // Mutable because ParquetReader::read_column() updates an internal
     // decompression cache even though it is logically a read operation.
     mutable std::vector<std::unique_ptr<ParquetReader>> readers_;
+
+    // Single-entry row group cache — consecutive point queries hitting the
+    // same (file_idx, row_group) reuse decoded columns instead of re-decoding.
+    mutable RowGroupCache rg_cache_;
 };
 
 } // namespace signet::forge
