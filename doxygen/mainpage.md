@@ -30,15 +30,18 @@
 | **Core** | `signet::forge` | schema.hpp, types.hpp, error.hpp, writer.hpp, reader.hpp |
 | **Encodings** | `signet::forge` | encoding/rle.hpp, encoding/delta.hpp, encoding/dictionary.hpp, encoding/byte_stream_split.hpp |
 | **Compression** | `signet::forge` | compression/codec.hpp, compression/snappy.hpp, compression/zstd.hpp, compression/lz4.hpp, compression/gzip.hpp |
-| **Crypto** | `signet::forge::crypto` | crypto/aes_core.hpp, crypto/aes_gcm.hpp, crypto/aes_ctr.hpp, crypto/pme.hpp, crypto/key_metadata.hpp, crypto/post_quantum.hpp |
+| **Thrift** | `signet::forge` | thrift/compact.hpp, thrift/types.hpp |
+| **Crypto** | `signet::forge::crypto` | crypto/aes_core.hpp, crypto/aes_gcm.hpp, crypto/aes_ctr.hpp, crypto/pme.hpp, crypto/key_metadata.hpp, crypto/post_quantum.hpp, crypto/cipher_interface.hpp, crypto/hkdf.hpp, crypto/hsm_client_stub.hpp |
 | **Bloom Filters** | `signet::forge` | bloom/split_block.hpp, bloom/xxhash.hpp |
-| **Indexes** | `signet::forge` | column_index.hpp, mmap_reader.hpp |
+| **Indexes** | `signet::forge` | column_index.hpp, mmap_reader.hpp, z_order.hpp |
 | **AI Vectors** | `signet::forge` | ai/vector_type.hpp, ai/quantized_vector.hpp, ai/tensor_bridge.hpp |
 | **Streaming** | `signet::forge` | ai/wal.hpp, ai/wal_mapped_segment.hpp, ai/streaming_sink.hpp |
 | **Feature Store** | `signet::forge` | ai/feature_writer.hpp, ai/feature_reader.hpp |
 | **Event Bus** | `signet::forge` | ai/mpmc_ring.hpp, ai/column_batch.hpp, ai/event_bus.hpp |
 | **Audit & Compliance** | `signet::forge` | ai/audit_chain.hpp, ai/decision_log.hpp, ai/inference_log.hpp, ai/compliance/* |
+| **Governance** | `signet::forge` | ai/data_classification.hpp, ai/human_oversight.hpp, ai/threat_model.hpp, ai/log_retention.hpp, ai/incident_response.hpp, ai/regulatory_monitor.hpp, ai/row_lineage.hpp |
 | **Interop** | `signet::forge` | interop/arrow_bridge.hpp, interop/onnx_bridge.hpp, interop/numpy_bridge.hpp |
+| **WASM** | — | wasm/signet_wasm.cpp (Emscripten embind) |
 
 ---
 
