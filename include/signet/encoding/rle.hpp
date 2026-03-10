@@ -412,7 +412,9 @@ private:
         // First flush any pending bit-pack groups
         flush_bp_groups();
 
-        // CWE-190: Integer Overflow / CWE-682: Incorrect Calculation — cap before left shift
+        // CWE-190: Integer Overflow / CWE-682: Incorrect Calculation — cap before left shift.
+        // Runs exceeding SIZE_MAX/2 are capped to prevent varint overflow on (count << 1).
+        // In practice, Parquet page sizes limit run lengths well below this threshold.
         if (rle_count_ > (SIZE_MAX >> 1)) rle_count_ = SIZE_MAX >> 1;
         // header = (run_length << 1) | 0
         encode_varint(buffer_, rle_count_ << 1);

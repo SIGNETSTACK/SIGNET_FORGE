@@ -323,6 +323,19 @@ public:
                          std::to_string(schema_.num_columns()) + " columns)"};
         }
 
+        // Validate that T matches the schema's physical type for this column
+        constexpr PhysicalType expected_pt = parquet_type_of_v<T>;
+        const PhysicalType actual_pt = schema_.column(col_index).physical_type;
+        if (expected_pt != actual_pt) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "Type mismatch for column " + std::to_string(col_index) +
+                         " (\"" + schema_.column(col_index).name + "\")" +
+                         ": schema physical type is " +
+                         std::to_string(static_cast<int>(actual_pt)) +
+                         " but write_column<T> maps to " +
+                         std::to_string(static_cast<int>(expected_pt))};
+        }
+
         col_writers_[col_index].write_batch(values, count);
         col_row_counts_[col_index] = col_writers_[col_index].num_values();
 
@@ -356,6 +369,18 @@ public:
             return Error{ErrorCode::OUT_OF_RANGE,
                          "Column index " + std::to_string(col_index) +
                          " out of range"};
+        }
+
+        // Validate that column is BYTE_ARRAY (string-compatible)
+        const PhysicalType actual_pt = schema_.column(col_index).physical_type;
+        if (actual_pt != PhysicalType::BYTE_ARRAY &&
+            actual_pt != PhysicalType::FIXED_LEN_BYTE_ARRAY) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "Type mismatch for column " + std::to_string(col_index) +
+                         " (\"" + schema_.column(col_index).name + "\")" +
+                         ": schema physical type is " +
+                         std::to_string(static_cast<int>(actual_pt)) +
+                         " but write_column was called with std::string (BYTE_ARRAY)"};
         }
 
         col_writers_[col_index].write_batch(values, count);
@@ -656,7 +681,7 @@ public:
                 auto& builder = col_index_builders_[c];
 
                 // Serialize and write ColumnIndex
-                auto col_idx = builder.build_column_index();
+                auto col_idx = builder.build_column_index(schema_.column(c).physical_type);
                 thrift::CompactEncoder ci_enc;
                 col_idx.serialize(ci_enc);
                 int64_t ci_offset = file_offset_;

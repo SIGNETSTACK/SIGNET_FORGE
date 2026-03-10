@@ -324,6 +324,11 @@ inline void inc32(uint8_t counter[16]) {
 ///   3. Increment the counter
 ///
 /// The last block may be partial (only XOR the relevant bytes).
+///
+/// @note This function returns void and silently returns if the counter would
+///       wrap (> 2^32-2 blocks). Callers MUST enforce MAX_GCM_PLAINTEXT (< 64 GB)
+///       before calling gctr() to ensure this path is never reached.
+///       AesGcm::encrypt()/decrypt() enforce this limit at lines 470-473.
 inline void gctr(const Aes256& cipher,
                  const uint8_t icb[16],
                  const uint8_t* input, size_t input_size,
@@ -331,7 +336,8 @@ inline void gctr(const Aes256& cipher,
     if (input_size == 0) return;
 
     const size_t num_blocks = (input_size + 15) / 16;
-    // NIST SP 800-38D §5.2.1.1: 32-bit counter must not wrap (max 2^32-2 blocks)
+    // NIST SP 800-38D §5.2.1.1: 32-bit counter must not wrap (max 2^32-2 blocks).
+    // Protected by MAX_GCM_PLAINTEXT guard in calling code — this is a defense-in-depth check.
     if (num_blocks > 0xFFFFFFFEULL) return;
 
     uint8_t counter[16];

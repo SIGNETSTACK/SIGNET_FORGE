@@ -556,7 +556,7 @@ struct ColumnMetaData {
                 case 8: {
                     auto [elem_type, count] = dec.read_list_header();
                     static constexpr int32_t MAX_STRUCT_LIST_SIZE = 10000;
-                    if (count > MAX_STRUCT_LIST_SIZE) { return; }
+                    if (count < 0 || count > MAX_STRUCT_LIST_SIZE) { return; }
                     key_value_metadata.emplace();
                     key_value_metadata->resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
@@ -705,7 +705,7 @@ struct RowGroup {
                 case 1: {
                     auto [elem_type, count] = dec.read_list_header();
                     static constexpr int32_t MAX_STRUCT_LIST_SIZE = 10000;
-                    if (count > MAX_STRUCT_LIST_SIZE) { return; }
+                    if (count < 0 || count > MAX_STRUCT_LIST_SIZE) { return; }
                     columns.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         columns[static_cast<size_t>(i)].deserialize(dec);
@@ -791,7 +791,7 @@ struct FileMetaData {
                 case 2: {
                     auto [elem_type, count] = dec.read_list_header();
                     static constexpr int32_t MAX_STRUCT_LIST_SIZE = 10000;
-                    if (count > MAX_STRUCT_LIST_SIZE) { return; }
+                    if (count < 0 || count > MAX_STRUCT_LIST_SIZE) { return; }
                     schema.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         schema[static_cast<size_t>(i)].deserialize(dec);
@@ -802,7 +802,7 @@ struct FileMetaData {
                 case 4: {
                     auto [elem_type, count] = dec.read_list_header();
                     static constexpr int32_t MAX_STRUCT_LIST_SIZE_RG = 10000;
-                    if (count > MAX_STRUCT_LIST_SIZE_RG) { return; }
+                    if (count < 0 || count > MAX_STRUCT_LIST_SIZE_RG) { return; }
                     row_groups.resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {
                         row_groups[static_cast<size_t>(i)].deserialize(dec);

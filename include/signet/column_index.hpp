@@ -21,6 +21,7 @@
 #include "signet/statistics.hpp"    // from_le_bytes<T>
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,7 @@ struct OffsetIndex {
                     auto [elem_type, count] = dec.read_list_header();
                     // CWE-400: Uncontrolled Resource Consumption — 10M cap on list counts
                     if (count < 0 || static_cast<size_t>(count) > 10'000'000) {
+                        valid_ = false;
                         return; // list count exceeds 10M cap or is negative
                     }
                     page_locations.resize(static_cast<size_t>(count));
@@ -450,9 +452,12 @@ public:
     /// Finalize and return the ColumnIndex from accumulated page info.
     ///
     /// Automatically detects boundary order from the min_values sequence.
+    /// @param pt  Physical type of the column — used for type-aware boundary
+    ///            order detection (signed comparison for INT32/INT64, etc.).
     ///
     /// @return A fully populated ColumnIndex ready for serialization.
-    [[nodiscard]] ColumnIndex build_column_index() const {
+    [[nodiscard]] ColumnIndex build_column_index(
+            PhysicalType pt = PhysicalType::BYTE_ARRAY) const {
         ColumnIndex ci;
         ci.null_pages.reserve(pages_.size());
         ci.min_values.reserve(pages_.size());
@@ -470,8 +475,8 @@ public:
             }
         }
 
-        // Determine boundary order by scanning min_values
-        ci.boundary_order = detect_boundary_order(ci.min_values);
+        // Determine boundary order by scanning min_values (type-aware)
+        ci.boundary_order = detect_boundary_order(ci.min_values, pt);
 
         // Only include null_counts if at least one page has nulls,
         // or if the caller explicitly set null counts. The Parquet spec
@@ -523,29 +528,67 @@ private:
 
     /// Detect boundary order from the min_values sequence.
     ///
-    // TODO: type-aware comparison (signed vs unsigned vs byte) per Parquet spec
-    // Currently uses lexicographic byte comparison which is correct for
-    // BYTE_ARRAY and big-endian encoded numeric types (CWE-843).
+    /// Uses type-aware comparison for numeric types (INT32/INT64/FLOAT/DOUBLE)
+    /// to handle signed values and little-endian byte order correctly (CWE-843).
+    /// Falls back to lexicographic comparison for BYTE_ARRAY and other types.
     [[nodiscard]] static ColumnIndex::BoundaryOrder detect_boundary_order(
-            const std::vector<std::string>& values) {
+            const std::vector<std::string>& values,
+            PhysicalType pt = PhysicalType::BYTE_ARRAY) {
 
         if (values.size() <= 1) {
             return ColumnIndex::BoundaryOrder::ASCENDING;
         }
 
+        // Type-aware comparator: returns <0, 0, >0 like strcmp
+        auto typed_cmp = [pt](const std::string& a, const std::string& b) -> int {
+            switch (pt) {
+                case PhysicalType::INT32:
+                    if (a.size() >= sizeof(int32_t) && b.size() >= sizeof(int32_t)) {
+                        int32_t va, vb;
+                        std::memcpy(&va, a.data(), sizeof(int32_t));
+                        std::memcpy(&vb, b.data(), sizeof(int32_t));
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                case PhysicalType::INT64:
+                    if (a.size() >= sizeof(int64_t) && b.size() >= sizeof(int64_t)) {
+                        int64_t va, vb;
+                        std::memcpy(&va, a.data(), sizeof(int64_t));
+                        std::memcpy(&vb, b.data(), sizeof(int64_t));
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                case PhysicalType::FLOAT:
+                    if (a.size() >= sizeof(float) && b.size() >= sizeof(float)) {
+                        float va, vb;
+                        std::memcpy(&va, a.data(), sizeof(float));
+                        std::memcpy(&vb, b.data(), sizeof(float));
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                case PhysicalType::DOUBLE:
+                    if (a.size() >= sizeof(double) && b.size() >= sizeof(double)) {
+                        double va, vb;
+                        std::memcpy(&va, a.data(), sizeof(double));
+                        std::memcpy(&vb, b.data(), sizeof(double));
+                        return (va < vb) ? -1 : (va > vb) ? 1 : 0;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            // Fallback: lexicographic for BYTE_ARRAY, BOOLEAN, etc.
+            return a.compare(b);
+        };
+
         bool ascending  = true;
         bool descending = true;
 
         for (size_t i = 1; i < values.size(); ++i) {
-            if (values[i] < values[i - 1]) {
-                ascending = false;
-            }
-            if (values[i] > values[i - 1]) {
-                descending = false;
-            }
-            if (!ascending && !descending) {
-                break;
-            }
+            int cmp = typed_cmp(values[i], values[i - 1]);
+            if (cmp < 0) ascending  = false;
+            if (cmp > 0) descending = false;
+            if (!ascending && !descending) break;
         }
 
         if (ascending) return ColumnIndex::BoundaryOrder::ASCENDING;

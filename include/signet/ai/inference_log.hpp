@@ -192,7 +192,7 @@ struct InferenceRecord {
         if (!read_le32_u(data, size, offset, emb_count)) {
             return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: truncated embedding count"};
         }
-        if (emb_count > (size - offset) / sizeof(float)) {
+        if (offset > size || emb_count > (size - offset) / sizeof(float)) {
             return Error{ErrorCode::CORRUPT_PAGE, "InferenceRecord: embedding count exceeds remaining data"};
         }
         rec.input_embedding.resize(emb_count);

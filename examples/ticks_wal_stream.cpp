@@ -682,6 +682,18 @@ int main(int argc, char* argv[]) {
     if (from_file) {
         const std::string path = argv[1];
         bool is_gz = path.size() >= 3 && path.substr(path.size() - 3) == ".gz";
+        // CWE-78: Validate path contains no shell metacharacters before popen()
+        if (is_gz) {
+            for (char c : path) {
+                if (c == '\'' || c == '"' || c == '\\' || c == '`' ||
+                    c == '$'  || c == '|' || c == ';'  || c == '&' ||
+                    c == '('  || c == ')' || c == '<'  || c == '>' ||
+                    c == '\n' || c == '\r' || c == '\0') {
+                    std::cerr << "Error: input path contains unsafe characters\n";
+                    return 1;
+                }
+            }
+        }
         FILE* fp = is_gz ? popen(("gunzip -c '" + path + "'").c_str(), "r")
                          : std::fopen(path.c_str(), "r");
         if (!fp) {

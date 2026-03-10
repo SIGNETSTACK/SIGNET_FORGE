@@ -141,8 +141,10 @@ public:
     void insert(uint64_t hash) {
         const size_t nblocks = num_blocks();
         // Block index: use upper 32 bits to select the block
+        // Invariant: nblocks > 0 (enforced by constructor min 1 block)
         const auto block_idx = static_cast<size_t>(
             (static_cast<uint64_t>(hash >> 32) * nblocks) >> 32);
+        assert(block_idx < nblocks);
 
         const auto key = static_cast<uint32_t>(hash);
 
@@ -163,6 +165,7 @@ public:
         const size_t nblocks = num_blocks();
         const auto block_idx = static_cast<size_t>(
             (static_cast<uint64_t>(hash >> 32) * nblocks) >> 32);
+        assert(block_idx < nblocks);
 
         const auto key = static_cast<uint32_t>(hash);
 

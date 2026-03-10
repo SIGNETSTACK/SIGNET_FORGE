@@ -260,19 +260,28 @@ PYBIND11_MODULE(_bindings, m) {
 
         .def("read_column_int32", [](ParquetReader& r, size_t rg, size_t col) {
             auto v = unwrap(r.read_column<int32_t>(rg, col));
-            return py::array_t<int32_t>(v.size(), v.data());
+            // Allocate Python-owned array and copy data to avoid use-after-free (CWE-416)
+            py::array_t<int32_t> arr(static_cast<py::ssize_t>(v.size()));
+            std::memcpy(arr.mutable_data(), v.data(), v.size() * sizeof(int32_t));
+            return arr;
         }, py::arg("row_group"), py::arg("col_index"))
         .def("read_column_int64", [](ParquetReader& r, size_t rg, size_t col) {
             auto v = unwrap(r.read_column<int64_t>(rg, col));
-            return py::array_t<int64_t>(v.size(), v.data());
+            py::array_t<int64_t> arr(static_cast<py::ssize_t>(v.size()));
+            std::memcpy(arr.mutable_data(), v.data(), v.size() * sizeof(int64_t));
+            return arr;
         }, py::arg("row_group"), py::arg("col_index"))
         .def("read_column_float", [](ParquetReader& r, size_t rg, size_t col) {
             auto v = unwrap(r.read_column<float>(rg, col));
-            return py::array_t<float>(v.size(), v.data());
+            py::array_t<float> arr(static_cast<py::ssize_t>(v.size()));
+            std::memcpy(arr.mutable_data(), v.data(), v.size() * sizeof(float));
+            return arr;
         }, py::arg("row_group"), py::arg("col_index"))
         .def("read_column_double", [](ParquetReader& r, size_t rg, size_t col) {
             auto v = unwrap(r.read_column<double>(rg, col));
-            return py::array_t<double>(v.size(), v.data());
+            py::array_t<double> arr(static_cast<py::ssize_t>(v.size()));
+            std::memcpy(arr.mutable_data(), v.data(), v.size() * sizeof(double));
+            return arr;
         }, py::arg("row_group"), py::arg("col_index"))
         .def("read_column_string", [](ParquetReader& r, size_t rg, size_t col) {
             auto v = unwrap(r.read_column_as_strings(rg, col));

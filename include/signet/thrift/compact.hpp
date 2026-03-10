@@ -10,6 +10,7 @@
 #include <limits>
 #include <optional>
 #include <stack>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -164,7 +165,9 @@ public:
     /// Write a list header. If size <= 14, uses the compact single-byte form.
     /// Otherwise writes (0xF0 | elem_type) followed by a varint size.
     void write_list_header(uint8_t elem_type, int32_t size) {
-        if (size < 0) return; // negative size is invalid
+        if (size < 0) {
+            throw std::invalid_argument("write_list_header: negative list size");
+        }
         if (size <= 14) {
             buf_.push_back(static_cast<uint8_t>((size << 4) | elem_type));
         } else {

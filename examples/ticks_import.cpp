@@ -171,6 +171,16 @@ int main(int argc, char* argv[]) {
         bool is_gz = (input_path.size() >= 3 &&
                       input_path.substr(input_path.size() - 3) == ".gz");
         if (is_gz) {
+            // CWE-78: Validate path contains no shell metacharacters before popen()
+            for (char c : input_path) {
+                if (c == '\'' || c == '"' || c == '\\' || c == '`' ||
+                    c == '$'  || c == '|' || c == ';'  || c == '&' ||
+                    c == '('  || c == ')' || c == '<'  || c == '>' ||
+                    c == '\n' || c == '\r' || c == '\0') {
+                    std::cerr << "Error: input path contains unsafe characters\n";
+                    return 1;
+                }
+            }
             std::string cmd = "gunzip -c '" + input_path + "'";
             fp = popen(cmd.c_str(), "r");
             use_popen = true;
@@ -270,7 +280,13 @@ int main(int argc, char* argv[]) {
             buf_spread.push_back(std::stod(std::string(fields[COL_SPREAD])));
             buf_mid.push_back(std::stod(std::string(fields[COL_MID])));
             ++row_count;
-        } catch (...) {
+        } catch (const std::exception& e) {
+            if (skip_count < 10) {
+                std::cerr << "Warning: skipping row " << (row_count + skip_count + 1)
+                          << ": " << e.what() << "\n";
+            } else if (skip_count == 10) {
+                std::cerr << "Warning: suppressing further row skip messages\n";
+            }
             ++skip_count;
             continue;
         }

@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -100,8 +101,31 @@ public:
 
     /// Default-construct an empty reader (use open() factory instead).
     FeatureReader() = default;
-    FeatureReader(FeatureReader&&) = default;
-    FeatureReader& operator=(FeatureReader&&) = default;
+    FeatureReader(FeatureReader&& o) noexcept
+        : opts_(std::move(o.opts_)),
+          index_(std::move(o.index_)),
+          feature_names_(std::move(o.feature_names_)),
+          total_rows_(o.total_rows_),
+          failed_file_count_(o.failed_file_count_),
+          readers_(std::move(o.readers_)) {
+        // Lock source cache mutex to prevent data race with concurrent ensure_cached()
+        std::lock_guard<std::mutex> lk(o.rg_cache_mutex_);
+        rg_cache_ = std::move(o.rg_cache_);
+    }
+    FeatureReader& operator=(FeatureReader&& o) noexcept {
+        if (this != &o) {
+            opts_             = std::move(o.opts_);
+            index_            = std::move(o.index_);
+            feature_names_    = std::move(o.feature_names_);
+            total_rows_       = o.total_rows_;
+            failed_file_count_= o.failed_file_count_;
+            readers_          = std::move(o.readers_);
+            std::lock_guard<std::mutex> lk(rg_cache_mutex_);
+            std::lock_guard<std::mutex> lk2(o.rg_cache_mutex_);
+            rg_cache_         = std::move(o.rg_cache_);
+        }
+        return *this;
+    }
     FeatureReader(const FeatureReader&) = delete;
     FeatureReader& operator=(const FeatureReader&) = delete;
 
@@ -374,6 +398,7 @@ private:
     /// Populate or reuse the row group cache for the given location.
     [[nodiscard]] expected<const RowGroupCache*> ensure_cached(
             const RowLocation& loc) const {
+        std::lock_guard<std::mutex> cache_lk(rg_cache_mutex_);
 
         // Cache hit — same (file_idx, row_group) as last query
         if (rg_cache_.file_idx == loc.file_idx &&
@@ -492,6 +517,7 @@ private:
 
     // Single-entry row group cache — consecutive point queries hitting the
     // same (file_idx, row_group) reuse decoded columns instead of re-decoding.
+    mutable std::mutex    rg_cache_mutex_;
     mutable RowGroupCache rg_cache_;
 };
 

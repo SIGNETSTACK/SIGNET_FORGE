@@ -242,11 +242,12 @@ inline void fill_random_bytes_tested(CrngtState& state,
         offset += 32;
     }
 
-    // Handle trailing bytes < 32 (compare prefix)
+    // Handle trailing bytes < 32 — FIPS 140-3 §4.9.2 requires failure on
+    // consecutive identical blocks, including partial trailing blocks.
     if (offset < size && state.initialized) {
         size_t remaining = size - offset;
         if (remaining > 0 && std::memcmp(buf + offset, state.prev, remaining) == 0) {
-            // Partial match — not a definitive failure, but update state
+            throw std::runtime_error("CRNGT: consecutive identical output blocks detected (partial)");
         }
     }
 }
