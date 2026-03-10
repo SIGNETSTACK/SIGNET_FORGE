@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **EventBus**: Replace mutex-guarded `shared_ptr<StreamingSink>` with `std::atomic_load/store` — publish() hot path is now lock-free (~53 ns, down from ~94 ns)
 - **FeatureReader**: Add single-entry row group cache — consecutive point queries to the same row group reuse decoded columns instead of re-decoding (get() ~0.14 μs cached, as_of_batch(100) ~19 μs)
 
+### Security — Audit #8: Delta Completeness Audit
+21 findings (3 pre-existing + 18 new), all remediated. Zero known open vulnerabilities.
+
+- **examples/ticks_import.cpp, ticks_wal_stream.cpp**: Shell metacharacter validation before `popen()` — rejects `' " \ \` $ | ; & ( ) < > \n \r \0` in input paths (CWE-78)
+- **python/_bindings.cpp**: Fixed use-after-free in all 4 numeric column readers — `py::array_t` now allocated as Python-owned buffer with `memcpy` from decoded vector (CWE-416)
+- **column_index.hpp**: Type-aware boundary order detection using `PhysicalType` parameter — fixes predicate pushdown for signed INT32/INT64 columns (CWE-843)
+- **ai/feature_reader.hpp**: Added `mutable std::mutex rg_cache_mutex_` protecting row group cache + custom move constructor/assignment locking source mutex (CWE-362)
+- **thrift/types.hpp**: Added `count < 0` guard to 4 list count checks preventing negative-to-massive-size_t allocation (CWE-400)
+- **thrift/compact.hpp**: `write_list_header` throws `std::invalid_argument` on negative size instead of silent return (CWE-754)
+- **column_index.hpp**: `OffsetIndex::deserialize()` sets `valid_ = false` before early return (CWE-754)
+- **ai/inference_log.hpp**: Reordered underflow guard: `offset > size || emb_count > (size - offset) / sizeof(float)` (CWE-191)
+- **wasm/signet_wasm.cpp**: `writeFileToMemfs` returns `bool` (was `void`); JSON `readStr()` handles backslash escapes (CWE-252, CWE-20)
+- **crypto/cipher_interface.hpp**: CRNGT partial-block match now throws instead of silent skip (FIPS 140-3 §4.9.2)
+- **bloom/split_block.hpp**: Block index bounds assertion in `insert()` and `might_contain()` (CWE-125)
+- **writer.hpp**: `build_column_index()` threads `schema_.column(c).physical_type` for type-correct boundary order
+- **examples/ticks_import.cpp**: Replaced `catch(...)` with typed `catch(const std::exception& e)` (CWE-755)
+
 ### Security
 - **error.hpp**: Strengthen `usage_state_path()` with 6-layer validation: absolute-path-only, realpath canonicalization, is_directory parent check, null byte rejection, path traversal rejection, post-canonicalization recheck
 - **wal.hpp**: POSIX `open(0600)` + `fdopen()` for CWE-732 world-writable file prevention (3 locations)
@@ -19,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Updated all benchmark figures across README.md, docs/BENCHMARKS.md, COMPARISON.md, PRODUCT_OVERVIEW.md to reflect measured values
 - WalMmapWriter: corrected from projected ~38 ns to measured ~223 ns
+- **Audit #8 documentation**: Comprehensive internal audit report (docs/internal/AUDIT_8_DOCUMENTATION.md) with CWE references, CVSS scores, risk analysis, and cross-references to NIST/OWASP/CERT/RFC publications
+- Updated 10 documentation files with Audit #8 findings: internal architecture docs (encryption, thread model, AI subsystem, encoding codecs), product-knowledge docs (security hardening, cross-language bindings), and client-facing docs (SECURITY.md, CHANGELOG.md, QUALITY_ASSURANCE.md)
 
 ## [Unreleased]
 
