@@ -1,0 +1,26 @@
+# Mull mutation testing configuration
+# Restrict instrumentation to Signet Forge source — skip third-party deps (Catch2, etc.)
+
+mutators:
+  - cxx_minus_to_noop
+  - cxx_add_to_sub
+  - cxx_mul_to_div
+  - cxx_div_to_mul
+  - cxx_rem_to_div
+  - cxx_eq_to_ne
+  - cxx_ne_to_eq
+  - cxx_gt_to_ge
+  - cxx_gt_to_le
+  - cxx_ge_to_gt
+  - cxx_ge_to_lt
+  - cxx_lt_to_le
+  - cxx_lt_to_ge
+  - cxx_le_to_lt
+  - cxx_le_to_gt
+  - cxx_logical_and_to_or
+  - cxx_logical_or_to_and
+  - cxx_assign_const
+  - cxx_init_const
+
+includePath: "include/signet/.*"
+excludePath: "_deps/.*"

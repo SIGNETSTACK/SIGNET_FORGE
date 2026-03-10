@@ -367,6 +367,13 @@ cmake --preset tsan        # TSan → build-tsan/
 cmake --preset ci          # RelWithDebInfo + all targets → build-ci/
 ```
 
+### Mutation Testing
+
+Signet Forge includes a [`mull.yml`](mull.yml) configuration for [Mull](https://github.com/mull-project/mull) 0.24.0,
+restricting mutation analysis to project source (`include/signet/.*`) and excluding third-party
+dependencies. See [docs/QUALITY_ASSURANCE.md](docs/QUALITY_ASSURANCE.md#mutation-testing) for
+step-by-step local setup instructions. CI runs mutation testing automatically on every push to `main`.
+
 ---
 
 ## Verification & Quality Assurance

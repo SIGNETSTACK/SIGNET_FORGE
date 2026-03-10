@@ -13,7 +13,6 @@ independent third-party test vector suites.
 | **Compliance Gaps** | 92 of 92 enterprise compliance gaps resolved across 12 passes (FIPS, EU AI Act, MiFID II, GDPR, DORA, PME) |
 | **Sanitizer CI** | AddressSanitizer, ThreadSanitizer, UndefinedBehaviorSanitizer on every push |
 | **SAST** | CodeQL with `security-extended` query suite on every push |
-| **SBOM** | CycloneDX via anchore/syft (US EO 14028 / EU CRA compliance) |
 | **Fuzz Testing** | 11 libFuzzer harnesses (reader, Thrift, WAL, RLE, Delta, Arrow, AES-GCM, PME, key metadata, HKDF, X25519) |
 | **Code Coverage** | Clang source-based coverage reported to [Codecov](https://codecov.io/) |
 | **Mutation Testing** | [Mull](https://github.com/mull-project/mull) 0.24.0 mutation analysis on crypto module |
@@ -115,6 +114,68 @@ primitive with randomized inputs, instrumented with AddressSanitizer:
 
 Fuzz testing satisfies [NIST SP 800-53 SA-11(8)](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) "Dynamic Code Analysis"
 and [DORA Art. 25](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) "Threat-Led Penetration Testing" requirements.
+
+### Mutation Testing
+
+[Mull](https://github.com/mull-project/mull) 0.24.0 mutation analysis verifies that
+the test suite detects real code mutations — not just that tests pass, but that they
+*would fail* if logic were broken. The project includes a [`mull.yml`](../mull.yml)
+configuration that restricts mutation to Signet Forge source (`include/signet/.*`) and
+excludes third-party dependencies (`_deps/.*`).
+
+**Running mutation testing locally (Linux, Clang 18 required):**
+
+```bash
+# 1. Install Mull 0.24.0 (Ubuntu 24.04)
+curl -sSfL https://github.com/mull-project/mull/releases/download/0.24.0/Mull-18-0.24.0-LLVM-18.1-ubuntu-24.04.deb -o mull.deb
+sudo dpkg -i mull.deb
+
+# 2. Create a compiler wrapper that applies the Mull plugin only to project source,
+#    skipping third-party deps (Catch2, etc.) which can crash the LLVM pass.
+cat > /tmp/clang++-18-mull <<'WRAPPER'
+#!/bin/bash
+for arg in "$@"; do
+  case "$arg" in
+    *_deps/*|*catch2*|*Catch2*)
+      exec /usr/bin/clang++-18 "$@"
+      ;;
+  esac
+done
+exec /usr/bin/clang++-18 -fpass-plugin=/usr/lib/mull-ir-frontend-18 -g -grecord-command-line "$@"
+WRAPPER
+chmod +x /tmp/clang++-18-mull
+
+# 3. Configure with the Mull wrapper
+cmake -S . -B build-mull -G Ninja \
+    -DCMAKE_C_COMPILER=clang-18 \
+    -DCMAKE_CXX_COMPILER=/tmp/clang++-18-mull \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DSIGNET_BUILD_TESTS=ON
+
+# 4. Build
+cmake --build build-mull --target signet_tests
+
+# 5. Run mutation analysis on the crypto module
+mull-runner-18 build-mull/signet_tests \
+    --reporters=Elements \
+    --report-name=mutation-report \
+    --include-path="include/signet/crypto/*" \
+    -- "[encryption]"
+```
+
+The `mull.yml` file in the project root defines 19 mutation operators covering
+arithmetic (`+`→`-`, `*`→`/`), comparison (`==`→`!=`, `<`→`>=`), logical (`&&`→`||`),
+and constant replacement mutations. CI runs mutation testing automatically on every
+push to `main` via the `mutation-baseline` job.
+
+**Why a compiler wrapper?** Mull instruments code via an LLVM pass plugin applied at
+compile time. Without the wrapper, the plugin processes third-party code (Catch2) and
+can crash on unsupported LLVM IR patterns. The wrapper detects `_deps/`, `catch2`, or
+`Catch2` in compiler arguments and bypasses the plugin for those files.
+
+Mutation testing satisfies [IEEE 1008-2024](https://standards.ieee.org/ieee/1008/11491/)
+test adequacy criteria and supports [NIST SP 800-53 SA-11](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final)
+"Developer Testing" requirements.
 
 ### Property-Based & Regression Testing
 
