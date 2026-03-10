@@ -14,11 +14,17 @@ independent third-party test vector suites.
 | **Sanitizer CI** | AddressSanitizer, ThreadSanitizer, UndefinedBehaviorSanitizer on every push |
 | **SAST** | CodeQL with `security-extended` query suite on every push |
 | **SBOM** | CycloneDX via anchore/syft (US EO 14028 / EU CRA compliance) |
-| **Fuzz Testing** | 9 libFuzzer harnesses (reader, Thrift, RLE, Delta, BSS, Dictionary, AES-GCM, PME, key metadata) |
-| **Code Coverage** | Clang source-based coverage reported to Codecov |
+| **Fuzz Testing** | 11 libFuzzer harnesses (reader, Thrift, WAL, RLE, Delta, Arrow, AES-GCM, PME, key metadata, HKDF, X25519) |
+| **Code Coverage** | Clang source-based coverage reported to [Codecov](https://codecov.io/) |
+| **Mutation Testing** | [Mull](https://github.com/mull-project/mull) 0.24.0 mutation analysis on crypto module |
+| **Property-Based Testing** | 7 randomized identity-property tests via Catch2 GENERATE |
+| **API Stability** | 19 regression tests locking enum values, struct sizes, error codes |
 | **Cross-Platform** | Linux (GCC 13, Clang 18), macOS (Apple Clang 17), Windows (MSVC 2022) |
 | **Cross-Language** | Independent test suites for C++, Python, Rust, and WASM bindings |
-| **Enterprise Benchmarks** | 59 real-world test cases with regression detection (20% alert threshold) |
+| **Enterprise Benchmarks** | 104 benchmark cases (45 core + 59 enterprise) with regression detection (20% alert threshold) |
+| **Secrets Scanning** | [gitleaks](https://github.com/gitleaks/gitleaks) 8.24.3 on full repository history |
+| **License Compliance** | SPDX header verification + GPL/AGPL contamination scan |
+| **SBOM** | CycloneDX + SPDX JSON via [anchore/syft](https://github.com/anchore/sbom-action) ([US EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/) / [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847)) |
 
 ## Security Hardening
 
@@ -72,22 +78,72 @@ auditors and regulators expect.
 - **Training provenance integrity**: `InferenceRecord` training provenance fields (`training_dataset_id`, `training_dataset_size`, `training_data_characteristics`) are included in the SHA-256 hash chain, ensuring training data characteristics cannot be tampered with after the fact — required by EU AI Act [Art. 13(3)(b)(ii)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689)
 - **Regulatory coverage**: GDPR Articles 5(1)(e), 15, 17, 30, 35 | DORA Articles 5-15, 24-30 | EU AI Act Articles 9-13, 15, 17, 61-62 | MiFID II RTS 24/RTS 6
 
+## Dynamic Testing Infrastructure
+
+### Sanitizer Suite
+
+Every push runs the full test suite under three independent sanitizers, catching
+vulnerability classes that conventional testing cannot reach:
+
+| Sanitizer | What It Detects | Standard |
+|-----------|----------------|----------|
+| **AddressSanitizer + LeakSanitizer** | Heap/stack buffer overflows ([CWE-122](https://cwe.mitre.org/data/definitions/122.html)), use-after-free ([CWE-416](https://cwe.mitre.org/data/definitions/416.html)), memory leaks ([CWE-401](https://cwe.mitre.org/data/definitions/401.html)) | [NIST SP 800-53 SI-16](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
+| **ThreadSanitizer** | Data races ([CWE-362](https://cwe.mitre.org/data/definitions/362.html)), lock-order inversions | [CERT C CON00-C](https://wiki.sei.cmu.edu/confluence/display/c/14+Concurrency) |
+| **UndefinedBehaviorSanitizer** | Signed overflow ([CWE-190](https://cwe.mitre.org/data/definitions/190.html)), null dereference, misaligned access | [MISRA C++:2023](https://www.misra.org.uk/product/misra-cpp2023/) |
+
+All sanitizer jobs enable the commercial tier (`SIGNET_ENABLE_COMMERCIAL=ON`) to ensure
+cryptographic code paths receive full runtime verification.
+
+### Fuzz Testing (11 Harnesses)
+
+[libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise every parser and cryptographic
+primitive with randomized inputs, instrumented with AddressSanitizer:
+
+| Harness | Target | Coverage |
+|---------|--------|----------|
+| `fuzz_parquet_reader` | Parquet file parsing | Magic bytes, Thrift footer, page decoding |
+| `fuzz_thrift_decoder` | Compact Thrift format | All field types, varint, MAP, nesting |
+| `fuzz_wal_reader` | WAL entry parsing | CRC-32 validation, 64-bit seek bounds |
+| `fuzz_rle_decoder` | RLE bit-packed hybrid | bit_width 0–64, iterator + batch API |
+| `fuzz_delta_decoder` | Delta binary packed | Varint header, zigzag, block decoding |
+| `fuzz_arrow_import` | Arrow C Data Interface | ArrowArray/ArrowSchema import validation |
+| `fuzz_aes_gcm` | AES-256-GCM | Encrypt→decrypt roundtrip, tag verification |
+| `fuzz_pme` | PME orchestrator | 4-part AAD ordinals, column key cache |
+| `fuzz_key_metadata` | Key metadata TLV | Serialization/deserialization, overflow |
+| `fuzz_hkdf` | HKDF [RFC 5869](https://www.rfc-editor.org/rfc/rfc5869) | Extract/Expand, variable-length IKM |
+| `fuzz_x25519` | X25519 [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748) | Montgomery ladder, scalar clamping, low-order rejection |
+
+Fuzz testing satisfies [NIST SP 800-53 SA-11(8)](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) "Dynamic Code Analysis"
+and [DORA Art. 25](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) "Threat-Led Penetration Testing" requirements.
+
+### Property-Based & Regression Testing
+
+- **7 property-based tests** validate universal invariants (`decode(encode(x)) == x` for all inputs) using randomized generation with deterministic seeding — catching edge cases that hand-picked test vectors miss.
+- **19 API stability tests** lock enum values, struct sizes, and error codes to prevent accidental ABI breakage in downstream systems.
+- **100+ hardening tests** verify safe rejection of malformed, adversarial, and boundary-condition inputs across all 10 security audit passes.
+
 ## Continuous Integration
 
-10 GitHub Actions jobs run on every push:
+16 GitHub Actions jobs run on every push:
 
 | Job | Purpose |
 |-----|---------|
-| build-test | Linux + macOS matrix |
-| asan | AddressSanitizer + UBSan |
-| tsan | ThreadSanitizer |
-| ubsan | UndefinedBehaviorSanitizer (strict) |
-| windows | MSVC 2022 |
+| build-test | Linux (Ubuntu 24.04) + macOS (14) matrix |
+| asan | AddressSanitizer + UBSan (commercial tier) |
+| tsan | ThreadSanitizer (commercial tier) |
+| ubsan | UndefinedBehaviorSanitizer (strict, halt-on-error) |
+| windows | MSVC 2022 + `/analyze` static analysis |
 | server-codecs | ZSTD + LZ4 + Gzip codec validation |
+| commercial-full | Full test suite with commercial tier |
 | post-quantum | Kyber-768 + Dilithium-3 via liboqs |
-| fuzz | libFuzzer, 60 seconds per harness |
-| coverage | Clang coverage to Codecov |
-| benchmarks | Performance regression detection |
+| fuzz | 11 libFuzzer harnesses, 60 seconds each |
+| coverage | Clang source-based coverage to [Codecov](https://codecov.io/) |
+| benchmarks | Performance regression detection (120% threshold) |
+| secrets-scan | [gitleaks](https://github.com/gitleaks/gitleaks) credential detection |
+| python-sast | [bandit](https://bandit.readthedocs.io/) Python security scanning |
+| license-check | SPDX + GPL contamination verification |
+| mutation-baseline | [Mull](https://github.com/mull-project/mull) mutation testing (crypto module) |
+| CodeQL | [CodeQL](https://codeql.github.com/) SAST with `security-extended` queries |
 
 ## Standards & References
 
@@ -109,6 +165,13 @@ The following standards are directly implemented and tested against in Signet Fo
 | [MiFID II RTS 6](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0589) | Pre-trade risk checks (Art. 17) |
 | [DORA (Regulation 2022/2554)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) | ICT risk management, incident reporting, resilience testing |
 | [GDPR (Regulation 2016/679)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679) | Right to erasure, DSAR, ROPA, DPIA, data retention |
+| [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) | SA-11 developer testing, SI-10 input validation, SI-16 memory protection |
+| [NIST SP 800-218 (SSDF)](https://csrc.nist.gov/pubs/sp/800/218/final) | Secure Software Development Framework — SBOM, testing, code review |
+| [US Executive Order 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/) | §4(e): Software Bill of Materials (SBOM) requirements |
+| [EU Cyber Resilience Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847) | Art. 13, Annex I: SBOM, secure development, attack surface reduction |
+| [ISO/IEC 27001:2022](https://www.iso.org/standard/27001) | A.8.25: Secure development lifecycle testing requirements |
+| [SOC 2 Type II (AICPA)](https://www.aicpa-cima.com/topic/system-and-organization-controls) | CC7.1: System operations monitoring and vulnerability management |
+| [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) | Hardening tests directly address 12 of the Top 25 weakness categories |
 
 ## Authorship & Accountability
 

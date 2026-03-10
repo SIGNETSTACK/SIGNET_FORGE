@@ -369,45 +369,61 @@ cmake --preset ci          # RelWithDebInfo + all targets → build-ci/
 
 ---
 
-## Test Coverage
+## Verification & Quality Assurance
 
 ```
-566 unit tests   (100% pass)   cmake --preset server-pq && ctest
- 37 benchmark cases             cmake --preset benchmarks
- 59 enterprise benchmarks       Benchmarking_Protocols/ (real tick data, 9 phases)
+618 unit tests   (100% pass)   cmake --preset server-pq && ctest
+104 benchmark cases             45 core + 59 enterprise (real tick data, 8 phases)
+ 11 fuzz harnesses              libFuzzer + ASan, 60s each in CI
  35 Python tests (100% pass)    PYTHONPATH=python pytest python/tests/
+ 10 Rust tests   (100% pass)    cd rust/signet-forge && cargo test
 ```
 
-Tests span: roundtrip identity, all encodings, all compression codecs, PME encryption,
-post-quantum (Kyber-768, Dilithium-3, X25519 [RFC 7748](https://www.rfc-editor.org/rfc/rfc7748)),
-bloom filters, Arrow/DuckDB interop, vector types, tensor bridge, audit chain integrity,
-WAL crash recovery + mmap ring path, feature store time-travel, MPMC event bus,
-MiFID II and EU AI Act report generation, z-order curve encoding, page index predicate pushdown.
+### Dynamic Testing
 
-**Cryptographic test vectors**: [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final)
+Every push triggers **16 CI jobs** including three sanitizer modes (ASan, TSan, UBSan) with
+commercial crypto enabled, 11 libFuzzer harnesses covering all parsers and cryptographic
+primitives, CodeQL SAST with `security-extended` queries, property-based tests with
+randomized generation, mutation testing on the crypto module, and Clang source-based
+code coverage reported to Codecov.
+
+| Layer | Coverage | Standard |
+|-------|----------|----------|
+| **Sanitizers** | ASan + LSan + UBSan + TSan on every push | [NIST SP 800-53 SI-16](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
+| **Fuzz testing** | 11 harnesses: parsers, crypto, interop | [NIST SP 800-53 SA-11(8)](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
+| **SAST** | CodeQL (`security-extended`) + MSVC `/analyze` | [SOC 2 CC7.1](https://www.aicpa-cima.com/topic/system-and-organization-controls) |
+| **SBOM** | CycloneDX + SPDX JSON on every release | [US EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/), [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847) |
+| **Mutation testing** | Mull 0.24.0 on crypto module | [IEEE 1008-2024](https://standards.ieee.org/ieee/1008/11491/) |
+| **Secrets scan** | gitleaks on full history | [PCI DSS v4.0 §8.6.3](https://www.pcisecuritystandards.org/document_library/) |
+
+### Cryptographic Validation
+
+**Test vectors**: [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final)
 (18 GCM vectors including Test Case 15), [NIST SP 800-38A](https://csrc.nist.gov/pubs/sp/800/38a/final)
-(CTR vectors), and [Google Wycheproof](https://github.com/google/wycheproof) edge-case suites
-for both AES-256-GCM (tag tampering, ciphertext modification, empty plaintext) and X25519
-(low-order points, non-canonical coordinates, twist attacks, scalar clamping).
+(CTR vectors), [FIPS 140-3 §4.9.2](https://csrc.nist.gov/pubs/fips/140-3/final) CRNGT, and
+[Google Wycheproof](https://github.com/google/wycheproof) edge-case suites for AES-256-GCM
+(tag tampering, ciphertext modification, empty plaintext) and X25519 (low-order points,
+non-canonical coordinates, twist attacks, scalar clamping).
 
-**Security hardening tests** (`ctest -L hardening`): six hardening passes plus static audit
-follow-up covering 242 confirmed vulnerabilities — constant-time GHASH, GCM/CTR counter overflow,
-CSPRNG hardening (platform dispatch + hard-fail), secure key zeroing (volatile+barrier), move-only
-ciphers, typed statistics merge, page CRC-32, encoding boundary values (RLE/BSS/Delta/Dictionary),
-Thrift parser DoS (nesting depth, field count, string bomb, negative list count, MAP size),
-interop guards (Arrow offset/length caps, RAII memory management), AI tier hardening (Float16
-shift UB, unaligned cast fixes, feature flush ordering, Z-Order bounds, INT4 sign extension,
-verify_chain early return), compliance (cross-chain verification, error reporting, price precision,
-timestamp granularity, training metadata), WAL fsync checks + empty record rejection, mmap parity
-(negative page size, num_values cap, decompression pre-validation), reader row_group bounds,
-C FFI exception safety, Rust FFI panic safety, WASM bounds checking and key zeroing, Python
-graceful degradation, and getrandom EINTR retry.
+### Security Hardening
 
-**Enterprise compliance** (73 of 92 gaps resolved across 9 passes): FIPS 140-3, [EU AI Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689),
-[MiFID II RTS 24](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0580),
+**458 vulnerabilities** identified and fixed across 10 dedicated audit passes — zero open
+findings. 100+ hardening tests (`ctest -L hardening`) verify safe rejection of malformed,
+adversarial, and boundary-condition inputs across all layers: crypto (constant-time GHASH,
+GCM/CTR counter overflow, secure key zeroing), encoders (RLE/BSS/Delta/Dictionary boundary
+values), parsers (Thrift DoS, decompression bombs), interop (Arrow overflow, RAII), AI tier
+(race conditions, hash chain integrity), and all language bindings (C FFI exception safety,
+Rust panic safety, Python use-after-free, WASM bounds checking).
+
+### Enterprise Compliance
+
+**92 of 92** compliance gaps resolved across 12 passes: [FIPS 140-3](https://csrc.nist.gov/pubs/fips/140-3/final),
+[EU AI Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689),
+[MiFID II RTS 24](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0580)/[RTS 6](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017R0589),
 [GDPR](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679),
-[DORA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554),
-and Parquet PME spec.
+[DORA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554), and Parquet PME spec.
+101 dedicated compliance tests verify report structure, field content, hash-chain integrity,
+and regulatory framework requirements.
 
 ---
 
@@ -417,7 +433,7 @@ and Parquet PME spec.
 |-----------|-------------|
 | **v0.2** | Doxygen/mdBook API reference site |
 | **v0.3** | Rust FFI crate (`signet-forge-sys`) |
-| ~~**v0.4**~~ | ~~libFuzzer fuzz harness on reader~~ — **Done** (6 harnesses in `fuzz/`, CI integrated) |
+| ~~**v0.4**~~ | ~~libFuzzer fuzz harness on reader~~ — **Done** (11 harnesses in `fuzz/`, CI integrated) |
 | ~~**v0.4**~~ | ~~`pip install signet-forge` on PyPI (wheels for Linux/macOS/Windows)~~ — **Done** (cibuildwheel CI, Trusted Publishers) |
 | **v1.0** | Stable ABI, WASM target, columnar streaming over gRPC |
 
