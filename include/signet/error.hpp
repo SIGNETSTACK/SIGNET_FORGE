@@ -609,29 +609,51 @@ parse_claims(const std::string& text) {
 [[nodiscard]] inline std::string usage_state_path() {
     const char* env = std::getenv(kUsageFileEnvVar);
     if (env != nullptr && env[0] != '\0') {
-        std::string dir(env);
+        std::string raw(env);
+
         // CWE-22: Reject path traversal sequences.
-        if (dir.find("..") != std::string::npos) {
-            // Fall through to default path
-        } else {
+        if (raw.find("..") != std::string::npos)
+            return default_usage_state_path();
+
+        // CWE-22: Reject embedded null bytes (truncation attack).
+        if (raw.find('\0') != std::string::npos)
+            return default_usage_state_path();
+
 #ifndef _WIN32
-            // CWE-426: Canonicalize to resolve symlinks and relative components.
-            // realpath() requires the parent directory to exist; the file itself
-            // may not yet exist, so we canonicalize the parent and append the
-            // basename.
-            auto fs_path = std::filesystem::path(dir);
-            auto parent = fs_path.parent_path();
-            if (!parent.empty()) {
-                char resolved[PATH_MAX] = {};
-                if (::realpath(parent.string().c_str(), resolved)) {
-                    dir = std::string(resolved) + "/" + fs_path.filename().string();
-                }
-                // If realpath fails (dir doesn't exist yet), use the original
-                // validated path — it already passed the ".." check.
-            }
+        // CWE-22: Require absolute path — relative paths are ambiguous and
+        // depend on the process cwd, which the env setter may not control.
+        if (raw.empty() || raw[0] != '/')
+            return default_usage_state_path();
+
+        // CWE-426: Canonicalize parent directory via realpath() to resolve
+        // symlinks.  The parent MUST exist and be a real directory.
+        auto fs_path = std::filesystem::path(raw);
+        auto parent  = fs_path.parent_path();
+        if (parent.empty())
+            return default_usage_state_path();
+
+        char resolved[PATH_MAX] = {};
+        if (!::realpath(parent.string().c_str(), resolved))
+            return default_usage_state_path();  // parent doesn't exist
+
+        // Verify the resolved parent is actually a directory (not a file or device).
+        std::error_code ec;
+        if (!std::filesystem::is_directory(resolved, ec))
+            return default_usage_state_path();
+
+        // Build sanitised path from canonicalized parent + original filename.
+        std::string sanitised = std::string(resolved) + "/" +
+                                fs_path.filename().string();
+
+        // Final guard: reject if canonicalization re-introduced ".."
+        if (sanitised.find("..") != std::string::npos)
+            return default_usage_state_path();
+
+        return sanitised;
+#else
+        // Windows: basic validation only (no realpath).
+        return raw;
 #endif
-            return dir;
-        }
     }
     return default_usage_state_path();
 }

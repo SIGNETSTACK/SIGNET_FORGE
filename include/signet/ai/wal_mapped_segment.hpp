@@ -417,7 +417,7 @@ struct WalMmapOptions {
 
 /// High-performance WAL writer using a ring of N memory-mapped segments.
 ///
-/// Achieves sub-microsecond append latency (~38 ns) by writing directly into
+/// Achieves sub-microsecond append latency (~223 ns) by writing directly into
 /// mmap'd memory. A background thread pre-allocates and pre-faults standby
 /// segments so rotation is nearly free.
 ///

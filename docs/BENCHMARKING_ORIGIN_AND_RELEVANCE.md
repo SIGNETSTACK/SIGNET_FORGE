@@ -236,7 +236,7 @@ to avoid dominating the inference cycle.
 **How the benchmarks address this**:
 - `bench_feature_store.cpp` TEST_CASE 4 (`as_of_batch` for 100 entities) establishes the batch cost
 - TEST_CASE 3 (`as_of` for 1 entity × 1000 calls ÷ 1000 = per-call cost) establishes single-entity cost
-- Claimed single-entity `as_of` latency: ~12µs → batch of 100 should be < 1.2ms with parallel implementation
+- Claimed single-entity `as_of` latency: ~1.4 μs → batch of 100 should be < 140µs with parallel implementation
 
 **Point-in-time correctness as a benchmark driver**: The `as_of()` benchmark is not just a speed
 test — it validates that point-in-time semantics are achievable without a separate Redis/
@@ -252,7 +252,7 @@ With:
 Feature Store (Parquet, mmap) → binary search (< 20µs)
 ```
 
-The benchmark proves the mmap+binary-search approach meets the 50µs budget without a network hop.
+The benchmark proves the mmap+binary-search approach meets the 50µs budget at ~1.4 μs without a network hop.
 
 ### 3.3 Event bus for multi-strategy systems (bench_event_bus)
 
@@ -426,8 +426,8 @@ non-deterministic latency.
 | Footer parse | Footer open < 500µs | ~200 µs | Inference startup |
 | DELTA compress | > 2× vs PLAIN | verified | 8.6× storage reduction |
 | BSS transform | Size-preserving | verified | Pre-compressor stage |
-| Feature as_of | < 50µs per entity | ~12 µs | Online ML inference |
-| Feature batch | < 1ms for 100 entities | ~120 µs | Portfolio scoring |
+| Feature as_of | < 50µs per entity | ~1.4 µs | Online ML inference |
+| Feature batch | < 1ms for 100 entities | ~21 µs | Portfolio scoring |
 | MPMC push+pop | Sub-µs per message | 10.4 ns | Event bus routing |
 
 These numbers collectively prove that Signet_Forge can serve as the single data infrastructure

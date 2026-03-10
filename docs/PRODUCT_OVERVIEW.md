@@ -28,8 +28,8 @@ compliance audit trails, sub-microsecond streaming, and a native ML feature stor
 | Parquet Modular Encryption (AES-256-GCM/CTR) | Yes | Yes | | **Yes** |
 | AI decision audit trail (SHA-256 hash chain) | | | | **Yes** |
 | MiFID II / EU AI Act compliance reports | | | | **Yes** |
-| Sub-microsecond WAL (339 ns fwrite, 38 ns mmap) | | | | **Yes** |
-| Parquet-native ML feature store (12 us lookup) | | | | **Yes** |
+| Sub-microsecond WAL (339 ns fwrite, ~223 ns mmap) | | | | **Yes** |
+| Parquet-native ML feature store (sub-μs lookup, cached) | | | | **Yes** |
 | Zero-copy Parquet to ONNX Runtime | | | | **Yes** |
 | Native vector column (FLOAT32 + INT8/INT4 quantized) | | | Yes | **Yes** |
 | Encrypted bloom filters | | | | **Yes** |
@@ -43,10 +43,10 @@ Measured on macOS x86_64, Apple Clang 17, Release build, 100 samples.
 
 | Operation | Latency | Context |
 |-----------|---------|---------|
-| WAL append (mmap ring, 32B) | **38 ns** | Zero-copy, single-writer, HFT colocation |
+| WAL append (mmap ring, 32B) | **~223 ns** | Zero-copy, single-writer, HFT colocation |
 | WAL append (fwrite, 32B) | **339 ns** | Buffered, multi-writer safe |
 | MPMC ring push+pop | **9.6 ns** | Single-threaded, 104M ops/s |
-| Feature store lookup | **12 us** | Point-in-time correct, binary search |
+| Feature store lookup | **sub-μs** (cached) | Point-in-time correct, binary search |
 | Write 10K double rows | **1.25 ms** | BYTE_STREAM_SPLIT encoding |
 | Read 50K double rows | **456 us** | Typed column read |
 | Encryption overhead (PME) | **< 0.5%** | AES-256-GCM, measured on 1M rows |
@@ -139,7 +139,7 @@ Build with `-DSIGNET_BUILD_AI_AUDIT=OFF` to exclude the BSL tier entirely.
 
 ### AI/ML Pipelines
 - Zero-copy Parquet-to-ONNX inference path (no Arrow intermediate)
-- Point-in-time feature store serving at 12 us (replaces Redis)
+- Point-in-time feature store serving at ~1.4 μs (replaces Redis, with row group cache)
 - Native FLOAT32_VECTOR columns with SIMD I/O for embedding storage
 - INT8/INT4 quantized vector storage with automatic dequantization
 

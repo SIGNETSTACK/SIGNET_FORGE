@@ -23,8 +23,8 @@ AI-native capabilities the regulation-era demands. SignetForge fills five white 
 | **No standalone C++ Parquet** | Header-only core — `#include "signet/forge.hpp"`, link nothing |
 | **No post-quantum encryption** | Kyber-768 KEM + Dilithium-3 signatures per [NIST FIPS 203/204](https://csrc.nist.gov/pubs/fips/203/final) — first in any Parquet library |
 | **No AI audit trail** | SHA-256 hash-chained decision logs compliant with MiFID II RTS 24 and EU AI Act Art. 12/19 |
-| **No sub-μs streaming** | Dual-mode WAL: **339 ns** (fwrite, general purpose) and **~38 ns** (mmap ring, HFT colocation) |
-| **No Parquet feature store** | Point-in-time correct feature retrieval at **12 μs** per entity — no Redis needed |
+| **No sub-μs streaming** | Dual-mode WAL: **339 ns** (fwrite, general purpose) and **~223 ns** (mmap ring, measured) |
+| **No Parquet feature store** | Point-in-time correct feature retrieval at **sub-μs** per entity (with row group cache) — no Redis needed |
 
 ---
 
@@ -40,7 +40,7 @@ AI-native capabilities the regulation-era demands. SignetForge fills five white 
 | Encrypted bloom filters | ❌ | ❌ | ❌ | ✅ |
 | AI decision audit trail | ❌ | ❌ | ❌ | ✅ |
 | MiFID II / EU AI Act reports | ❌ | ❌ | ❌ | ✅ |
-| Sub-μs streaming WAL (fwrite 339 ns + mmap ~38 ns) | ❌ | ❌ | ❌ | ✅ |
+| Sub-μs streaming WAL (fwrite 339 ns + mmap ~223 ns) | ❌ | ❌ | ❌ | ✅ |
 | Native vector column type | ❌ | ❌ | ✅ | ✅ |
 | Zero-copy Parquet → ONNX | ❌ | ❌ | ❌ | ✅ |
 | Parquet-native feature store | ❌ | ❌ | ❌ | ✅ |
@@ -140,7 +140,7 @@ wal.append("TICK:BTCUSDT:45123.50:0.100:BUY:1706780400000000000");
 wal.flush();  // fflush only — no kernel syscall
 ```
 
-**HFT colocation (WalMmapWriter, mmap ring, ~38 ns):**
+**HFT colocation (WalMmapWriter, mmap ring, ~223 ns):**
 
 ```cpp
 #include "signet/ai/wal_mapped_segment.hpp"
@@ -153,14 +153,14 @@ opts.segment_size  = 64 * 1024 * 1024;
 opts.sync_on_append = false;       // crash-safe; set sync_on_flush=true for MiFID II
 
 auto writer = *WalMmapWriter::open(opts);
-// ~38 ns per append (mmap ring, no sync, single-writer)
+// ~223 ns per append (mmap ring, no sync, single-writer)
 auto seq = writer->append(tick_data, tick_size);
 // WalReader reads mmap segments identically to WalWriter files — same format
 ```
 
 ### Point-in-Time Feature Store
 
-Serve ML features at **12 μs** per entity lookup without Redis or a separate serving layer.
+Serve ML features at **sub-μs** per entity lookup without Redis or a separate serving layer.
 
 ```cpp
 #include "signet/ai/feature_writer.hpp"
@@ -238,9 +238,9 @@ Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 50–100 sampl
 | `WalWriter` single append (256 B) | ~450 ns | `"append 256B"` (Case 2) | Baseline; larger memcpy + CRC |
 | `WalWriter` append + flush (fflush) | ~600 ns | `"append + flush(no-fsync)"` (Case 4) | fflush only, no kernel sync |
 | `WalManager` append (mutex + roll) | ~400–450 ns | `"manager append 32B"` (Case 5) | +60–110 ns vs WalWriter: mutex lock/unlock + segment roll check + counter |
-| `WalMmapWriter` single append (32 B) | **~38 ns** | `"mmap append 32B"` (Case 7) | 9× vs WalWriter: no stdio buf, no mutex, direct store + release fence (free on x86_64 TSO) |
-| `WalMmapWriter` single append (256 B) | **~42 ns** | `"mmap append 256B"` (Case 8) | Only payload-proportional cost: memcpy(size) + CRC32(size) |
-| `WalMmapWriter` with rotation (amortized) | **~38 ns** | `"mmap append 32B"` (Case 7) | Pre-allocated STANDBY; rotation = atomic CAS, ~5 ns amortized |
+| `WalMmapWriter` single append (32 B) | **~223 ns** | `"mmap append 32B"` (Case 7) | 9× vs WalWriter: no stdio buf, no mutex, direct store + release fence (free on x86_64 TSO) |
+| `WalMmapWriter` single append (256 B) | **~223 ns** | `"mmap append 256B"` (Case 8) | Only payload-proportional cost: memcpy(size) + CRC32(size) |
+| `WalMmapWriter` with rotation (amortized) | **~223 ns** | `"mmap append 32B"` (Case 7) | Pre-allocated STANDBY; rotation = atomic CAS, ~5 ns amortized |
 | fwrite vs mmap side-by-side | see above | Cases 11 & 12 | Catch2 reports all three adjacent; ratio directly visible |
 
 ### Compression Comparison (1M real tick rows, enterprise suite)
@@ -273,8 +273,9 @@ Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 50–100 sampl
 
 | Operation | Mean | Notes |
 |-----------|------|-------|
-| Feature `as_of()` lookup | ~12 μs | Point-in-time, binary search, in-memory index |
-| Feature `as_of_batch()` (100 entities) | ~1.4 ms | Single timestamp, 100 entities |
+| Feature `as_of()` lookup | ~0.14 μs | Per-call with row group cache, warm index |
+| Feature `as_of_batch()` (100 entities) | ~19 μs | Single timestamp, 100 entities, cached row group |
+| EventBus publish+pop, single-thread | ~53 ns | Lock-free atomic shared_ptr (no mutex) |
 | MPMC ring push+pop | **10.4 ns** | Single-threaded, `int64_t`, 96M ops/s |
 | MPMC ring 4P × 4C | ~70 ns/op | 4 producers, 4 consumers, concurrent |
 

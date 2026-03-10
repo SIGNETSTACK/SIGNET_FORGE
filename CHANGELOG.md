@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 2026-03-10
+
+### Performance
+- **EventBus**: Replace mutex-guarded `shared_ptr<StreamingSink>` with `std::atomic_load/store` — publish() hot path is now lock-free (~53 ns, down from ~94 ns)
+- **FeatureReader**: Add single-entry row group cache — consecutive point queries to the same row group reuse decoded columns instead of re-decoding (get() ~0.14 μs cached, as_of_batch(100) ~19 μs)
+
+### Security
+- **error.hpp**: Strengthen `usage_state_path()` with 6-layer validation: absolute-path-only, realpath canonicalization, is_directory parent check, null byte rejection, path traversal rejection, post-canonicalization recheck
+- **wal.hpp**: POSIX `open(0600)` + `fdopen()` for CWE-732 world-writable file prevention (3 locations)
+- **CodeQL**: All 8 code scanning alerts resolved (5 fixed in code, 3 dismissed with documented justification)
+
+### Documentation
+- Updated all benchmark figures across README.md, docs/BENCHMARKS.md, COMPARISON.md, PRODUCT_OVERVIEW.md to reflect measured values
+- WalMmapWriter: corrected from projected ~38 ns to measured ~223 ns
+
 ## [Unreleased]
 
 ### Enterprise Compliance — 73 of 92 Gaps Resolved (2026-03-09)

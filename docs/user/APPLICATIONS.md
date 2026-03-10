@@ -278,7 +278,7 @@ writer.close()
 
 The `as_of()` semantics of Signet's feature store prevent look-ahead bias in training data — a common source of ML models that perform well in backtesting but fail in production.
 
-**Feature store latency: 12 μs per `as_of()` lookup** (10K vectors, local, no network). This is 4–8x faster than Redis GET over a local network (50–100 μs) because Signet is co-located and uses binary search over Parquet row group statistics. See [BENCHMARKS.md](../BENCHMARKS.md) for full comparison vs Feast/Tecton/Vertex AI.
+**Feature store latency: ~1.4 μs per `as_of()` lookup (with row group cache)** (10K vectors, local, no network). This is 35–70× faster than Redis GET over a local network (50–100 μs) because Signet is co-located and uses binary search over Parquet row group statistics. See [BENCHMARKS.md](../BENCHMARKS.md) for full comparison vs Feast/Tecton/Vertex AI.
 
 ```cpp
 #include "signet/ai/feature_writer.hpp"
@@ -935,8 +935,8 @@ All numbers measured on macOS x86_64, Apple Clang 17, Release build:
 | Read throughput (PLAIN) | ~800 MB/s | Typed `read_column<double>` |
 | WAL append (32-byte payload) | ~339 ns | Buffered, no fsync |
 | WAL append + flush | ~600 ns | fflush only, no kernel sync |
-| Feature store `as_of()` | ~12 μs | Binary search, in-memory index |
-| Feature store batch (100 entities) | ~1.4 ms | Single timestamp |
+| Feature store `as_of()` | ~1.4 μs | Binary search, in-memory index |
+| Feature store batch (100 entities) | ~21 μs | Single timestamp |
 | MPMC event bus (single-threaded) | ~10.4 ns | 96M ops/s |
 | MPMC event bus (4P × 4C) | ~70 ns/op | 57M ops/s |
 | DELTA encoding (int64, 10K values) | 29 μs encode, 43 μs decode | <50% of PLAIN size |

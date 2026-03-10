@@ -4,13 +4,13 @@
 // ticks_wal_stream.cpp — Durable tick ingestion: CSV.gz → WAL → Parquet
 //
 // Demonstrates:
-//   - WalMmapWriter (mmap ring, ~38 ns per-append) as the durable write-ahead log
+//   - WalMmapWriter (mmap ring, ~223 ns per-append) as the durable write-ahead log
 //   - Recovery from WAL after a simulated crash: all committed records survive
 //   - Batch compaction: WAL → Parquet using the same column-optimal encodings
 //     as ticks_import (DELTA for timestamps, DICT for symbols, BSS for floats)
 //   - The full durable ingestion pattern for real-time tick data pipelines:
 //
-//       tick arrives → WAL.append() [38 ns, survives crash]
+//       tick arrives → WAL.append() [~223 ns, survives crash]
 //                    → batch compaction → Parquet [columnar, queryable]
 //
 // Build (standalone):

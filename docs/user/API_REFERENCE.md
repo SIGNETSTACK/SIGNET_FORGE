@@ -909,7 +909,7 @@ class FeatureReader {
 };
 ```
 
-Benchmark: ~12 μs per `as_of()` call (binary search, in-memory index).
+Benchmark: ~1.4 μs per `as_of()` call (with row group cache).
 
 ---
 

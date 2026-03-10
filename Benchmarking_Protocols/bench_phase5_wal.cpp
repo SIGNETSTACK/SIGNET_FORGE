@@ -62,7 +62,7 @@ TEST_CASE("WAL1: 100K WalWriter throughput", "[bench-enterprise][wal]") {
 // ===========================================================================
 // Measures sustained throughput of the memory-mapped ring writer over 100K
 // tick-sized appends.  No sync, 64 MB segments, 4-slot ring.
-// Expected ~38 ns/record on x86_64 -O2.
+// Measured ~223 ns/record (core bench, 100 samples).
 
 TEST_CASE("WAL2: 100K WalMmapWriter throughput", "[bench-enterprise][wal]") {
     bench::TempDir dir("ebench_wal2_");

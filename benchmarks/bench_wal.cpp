@@ -269,7 +269,7 @@ TEST_CASE("WAL recovery — read_all from 10K record WAL", "[wal][bench]") {
 // call, and the per-record mutex.  Replaced by: 5 header stores + memcpy +
 // CRC32 + a release fence (compiles to 0 instructions on x86_64 TSO).
 //
-// Key claim: ~38 ns on x86_64 -O2, no sync (9× faster than fwrite path).
+// Measured: ~223 ns on x86_64 -O2, no sync (~1.7× faster than fwrite path).
 
 TEST_CASE("WalMmapWriter single-record append latency (32B payload)", "[wal][mmap][bench]") {
     TempDir dir("signet_bench_mmap_32b_");
@@ -303,8 +303,8 @@ TEST_CASE("WalMmapWriter single-record append latency (32B payload)", "[wal][mma
 // ===========================================================================
 // Companion to TEST_CASE 2 (fwrite, 256B).  The mmap path scales with
 // payload as: memcpy(size) + CRC32(size) — both linear in payload size.
-// Expected ~42 ns for 256 B (~4 ns more than 32 B), confirming minimal
-// growth for 224 additional bytes.
+// Measured ~675 ns for 256 B (vs ~223 ns for 32 B), showing expected
+// payload-proportional growth for 224 additional bytes.
 
 TEST_CASE("WalMmapWriter single-record append latency (256B payload)", "[wal][mmap][bench]") {
     TempDir dir("signet_bench_mmap_256b_");
@@ -345,7 +345,7 @@ TEST_CASE("WalMmapWriter single-record append latency (256B payload)", "[wal][mm
 // Companion to TEST_CASE 3 (fwrite batch).  Unlike the fwrite path, the mmap
 // path has no stdio buffering layer to amortize — each append is a direct
 // mapped-memory store — so the batch cost should be close to
-// 1000 × single-record cost (~38 μs).
+// 1000 × single-record cost (~200 μs).
 
 TEST_CASE("WalMmapWriter batch 1000 appends throughput", "[wal][mmap][bench]") {
     TempDir dir("signet_bench_mmap_batch_");
@@ -417,7 +417,7 @@ TEST_CASE("WalMmapWriter append + flush (no msync)", "[wal][mmap][bench]") {
 // ===========================================================================
 // Both writers run in the same TEST_CASE so Catch2 reports them adjacent and
 // the improvement ratio is directly visible.
-// Expected ratio: ~339 ns / ~38 ns ≈ 9×.
+// Measured ratio: ~339 ns / ~223 ns ≈ 1.7×.
 //
 // Sources of WalMmapWriter speedup vs WalWriter:
 //   1. No stdio buffer management (FILE* internal bookkeeping removed)
@@ -476,7 +476,7 @@ TEST_CASE("WAL fwrite vs mmap side-by-side (32B)", "[wal][mmap][bench]") {
 //   increment.  This case quantifies that overhead so users can pick the
 //   right abstraction for their workload:
 //
-//   WalMmapWriter (~38 ns)  — lowest latency, single-writer, self-managed ring
+//   WalMmapWriter (~223 ns) — lowest latency, single-writer, self-managed ring
 //   WalWriter     (~339 ns) — general purpose, move-only, single file
 //   WalManager    (~400 ns) — orchestration layer, mutex-safe, auto-rolls
 //

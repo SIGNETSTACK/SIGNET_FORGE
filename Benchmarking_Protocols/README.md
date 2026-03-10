@@ -138,7 +138,7 @@ Key findings:
 - **LZ4 > Gzip > ZSTD > uncompressed > Snappy** for financial tick write throughput
 - **PME and PQ encryption add < 0.5% overhead** at any scale (1K–10M rows)
 - **WalMmapWriter is 2.8x faster** than WalWriter at 1M-record bulk throughput
-- **column_view() is sub-nanosecond** (0.54 ns) — true zero-copy
+- **column_view() is sub-nanosecond** (0.47 ns) — true zero-copy
 
 ## Hardware Profile
 

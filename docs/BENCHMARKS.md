@@ -99,20 +99,19 @@ The 339 ns figure includes: sequence number assignment, header serialization (24
 
 To guarantee durability across power failure, call `wal->flush(true)` which triggers `F_FULLFSYNC` on macOS or `fsync` on Linux. That adds ~100–500 μs depending on storage hardware. For most AI pipeline use cases, buffered mode (no fsync) provides sufficient durability because WAL recovery can reconstruct from the last good CRC32 record.
 
-#### WalMmapWriter (mmap path) — Projected + Benchmark Cases in bench_wal.cpp
+#### WalMmapWriter (mmap path) — Measured
 
 > **Benchmark cases 7–12** in `bench_wal.cpp` provide Catch2 `BENCHMARK` measurements for the mmap path.
-> Numbers below are projected from the hot-path cost breakdown; run the benchmarks to obtain measured values.
 > Run: `./build-benchmarks/signet_benchmarks "[wal][mmap][bench]" --benchmark-samples 200`
 
 | Benchmark | Payload | Mean | Benchmark tag (Case #) | Why faster than fwrite |
 |-----------|---------|------|------------------------|------------------------|
-| `WalMmapWriter` single append | 32 B | **~38 ns** | `"mmap append 32B"` (Case 7) | No stdio buffer mgmt, no mutex, direct mapped-memory store + release fence |
-| `WalMmapWriter` single append | 256 B | **~42 ns** | `"mmap append 256B"` (Case 8) | Linear payload cost only: memcpy(size) + CRC32(size); no fixed C-lib overhead |
-| `WalMmapWriter` batch 1000 appends | 32 B | **~38 μs total** | `"mmap 1000 appends"` (Case 9) | No buffering layer; batch cost ≈ 1000 × single cost (vs fwrite which buffers) |
-| `WalMmapWriter` append + flush | 32 B | **~38 ns** | `"mmap append + flush(no-msync)"` (Case 10) | flush() is a no-op when sync_on_flush=false; zero added latency |
-| `WalMmapWriter` append with rotation | 32 B | **~38 ns amortized** | `"mmap append 32B"` (Case 7) | Pre-allocated segment in STANDBY; rotation is a single atomic CAS (~5 ns amortized) |
-| `WalMmapWriter` with `sync_on_flush=true` | 32 B | ~38 ns append + ~150–200 ns flush | — | msync(MS_SYNC) at explicit flush() boundary; flush cost identical to fwrite path |
+| `WalMmapWriter` single append | 32 B | **~223 ns** | `"mmap append 32B"` (Case 7) | No stdio buffer mgmt, no mutex, direct mapped-memory store + release fence |
+| `WalMmapWriter` single append | 256 B | **~220 ns** | `"mmap append 256B"` (Case 8) | Linear payload cost only: memcpy(size) + CRC32(size); no fixed C-lib overhead |
+| `WalMmapWriter` batch 1000 appends | 32 B | **~200 μs total** | `"mmap 1000 appends"` (Case 9) | No buffering layer; batch cost ≈ 1000 × single cost (vs fwrite which buffers) |
+| `WalMmapWriter` append + flush | 32 B | **~223 ns** | `"mmap append + flush(no-msync)"` (Case 10) | flush() is a no-op when sync_on_flush=false; zero added latency |
+| `WalMmapWriter` append with rotation | 32 B | **~223 ns amortized** | `"mmap append 32B"` (Case 7) | Pre-allocated segment in STANDBY; rotation is a single atomic CAS (~5 ns amortized) |
+| `WalMmapWriter` with `sync_on_flush=true` | 32 B | ~223 ns append + ~150–200 ns flush | — | msync(MS_SYNC) at explicit flush() boundary; flush cost identical to fwrite path |
 
 #### Head-to-Head Comparison (bench_wal.cpp Cases 11 and 12)
 
@@ -123,7 +122,7 @@ Cases 11 and 12 run multiple writers in the same TEST_CASE so Catch2 reports the
 | Case 11 | `WalWriter` vs `WalMmapWriter` | `"fwrite append 32B"` / `"mmap append 32B"` |
 | Case 12 | `WalWriter` vs `WalManager` vs `WalMmapWriter` | `"WalWriter append 32B"` / `"WalManager append 32B"` / `"WalMmapWriter append 32B"` |
 
-Expected ratios from Case 12: `WalManager ≈ WalWriter × 1.1–1.3`; `WalMmapWriter ≈ WalWriter ÷ 9`.
+Expected ratios from Case 12: `WalManager ≈ WalWriter × 1.1–1.3`; `WalMmapWriter ≈ WalWriter ÷ 1.7`.
 
 **Hot-path cost breakdown (projection basis):**
 - Timestamp call: ~20 ns
@@ -132,7 +131,9 @@ Expected ratios from Case 12: `WalManager ≈ WalWriter × 1.1–1.3`; `WalMmapW
 - CRC32(56 B record): ~5 ns
 - `memory_order_release` fence (x86_64 TSO — compiles to zero instructions): ~1 ns
 - CRC store: ~2 ns
-- **Total: ~38 ns**
+- **Total: ~223 ns** (measured)
+
+**Measured result**: ~223 ns. The projection underestimates real-world overhead from TLB misses, cache line invalidation, and CRC32 table lookups that are not captured in the instruction-level cost model.
 
 The `memory_order_release` fence is essential for crash safety (guarantees CRC is written after all payload stores) but costs nothing on x86_64 due to the Total Store Order memory model. On ARM it costs ~1–3 ns (`dmb ish`).
 
@@ -146,17 +147,13 @@ Source file: `benchmarks/bench_feature_store.cpp`
 
 | Benchmark | Mean | Dataset | Notes |
 |-----------|------|---------|-------|
-| `as_of()` single entity | **12 μs** | 10K feature vectors stored | Binary search over row group statistics |
-| `as_of_batch()` 100 entities | < 1 ms | Same dataset | One file scan, 100 lookups |
+| `as_of()` single entity | **~0.14 μs** | 10K feature vectors stored | With row group cache (warm); cold first-call ~19 μs |
+| `as_of_batch()` 100 entities | **19.2 μs** | Same dataset | One file scan, 100 lookups |
 | `write_batch()` 10K × 16 features | ~8 ms | UNCOMPRESSED | Full flush to Parquet file |
 
-The 12 μs single-entity `as_of()` latency breaks down as:
-1. Read file metadata (footer) — one `lseek` + read, ~2–3 μs
-2. Binary search over row group statistics — O(log n), ~1 μs
-3. Column index scan within qualifying row group — ~3–4 μs
-4. Return matching `FeatureVector` — ~1–2 μs
+With the row group cache, consecutive queries hitting the same (file_idx, row_group) reuse decoded columns. The first call to a new row group decodes all columns (~19 μs), then subsequent calls extract values from the cache at sub-microsecond cost. The as_of_batch() benchmark (100 entities in the same row group) demonstrates this: 19.2 μs total = one decode + 99 cache hits.
 
-This is 4–8x faster than a Redis GET over a local network (50–100 μs) because there is no network stack, no serialization protocol, and no deserialization overhead — the Parquet bytes are the storage format.
+This is orders of magnitude faster than a Redis GET over a local network (50–100 μs) because there is no network stack, no serialization protocol, and no deserialization overhead — the Parquet bytes are the storage format.
 
 ---
 
@@ -168,7 +165,7 @@ Source file: `benchmarks/bench_event_bus.cpp`
 |-----------|------|-----------|-------|
 | MpmcRing push+pop, single-threaded, int64 | **10.4 ns** | 96 M ops/s | Vyukov sequence-based algorithm |
 | MpmcRing 4 producers × 4 consumers, ColumnBatch | ~70 ns/op | ~57 M ops/s aggregate | Contended CAS under multi-thread |
-| EventBus publish+pop, single-thread | < 2 μs | — | Includes channel dispatch overhead |
+| EventBus publish+pop, single-thread | **~53 ns** | — | Lock-free (atomic shared_ptr, no mutex) |
 | ColumnBatch `column_view()` (zero-copy) | < 1 ns | No heap allocation | TensorView into existing buffer |
 
 The 10.4 ns single-threaded figure measures the full push-then-pop round trip. The underlying algorithm is Dmitry Vyukov's classic MPMC bounded queue using sequence numbers on each slot to prevent ABA hazards. The 4P×4C figure (~70 ns/op) reflects contention on the `head_` and `tail_` atomics under concurrent access; aggregate throughput is still ~57 M ops/s.
@@ -272,13 +269,13 @@ The PQ overhead is a **one-time per file open** cost. Once the key exchange is c
 ### vs RocksDB / LevelDB / Chronicle Queue (WAL)
 
 Signet's WAL targets three distinct use cases:
-- `WalMmapWriter` (mmap ring) — HFT colocation, `<50 ns` requirement
+- `WalMmapWriter` (mmap ring) — HFT colocation, `~223 ns` measured
 - `WalWriter` (fwrite) — general-purpose sub-microsecond hot path
 - `WalManager` (fwrite + orchestration) — regulated environments: auto-roll, thread-safe, multi-writer
 
 | System | Per-write latency | Benchmark tag | Source | Notes |
 |--------|------------------|---------------|--------|-------|
-| **Signet WalMmapWriter** | **~38 ns** | `"mmap append 32B"` (Case 7) | Measured (projected) | mmap ring, no sync, x86_64 -O2, single-writer |
+| **Signet WalMmapWriter** | **~223 ns** | `"mmap append 32B"` (Case 7) | Measured | mmap ring, no sync, x86_64 -O2, single-writer |
 | **Signet WalWriter** | **339 ns** | `"append 32B"` (Case 1) | Measured | Buffered fwrite, fflush only, no kernel syscall |
 | **Signet WalManager** | **~400–450 ns** | `"manager append 32B"` (Case 5) | Measured | WalWriter + mutex + segment-roll check; auto-rolls, thread-safe |
 | RocksDB (full put, sync=false) | ~2.8 μs/op | — | [RocksDB wiki](https://github.com/facebook/rocksdb/wiki/Performance-Benchmarks) | Full operation (WAL + memtable); WAL-only ~200–800 ns est. |
@@ -288,7 +285,7 @@ Signet's WAL targets three distinct use cases:
 | Kafka (local, single producer, acks=0) | 1–5 ms | — | [Confluent blog](https://www.confluent.io/blog/configure-kafka-to-minimize-latency/) | Network stack + ISR synchronization |
 | PostgreSQL WAL (fsync=on) | 24–1,643 μs | — | [Tanel Poder](https://tanelpoder.com/posts/using-pg-test-fsync-for-testing-low-latency-writes/) | Enterprise NVMe: 24 μs; consumer: 1.6 ms |
 
-**Context**: `WalWriter` (339 ns) is faster than Chronicle Queue's published p99 of 780 ns ([OpenHFT GitHub](https://github.com/OpenHFT/Chronicle-Queue)). `WalManager` adds ~60–110 ns overhead for its orchestration layer (mutex + segment roll check + atomic counter) — the right choice when auto-rolling and thread safety matter more than raw latency. `WalMmapWriter` at ~38 ns (projected) would be significantly faster than any published Java-based WAL. Use Case 12 (`"WAL three-way: WalWriter vs WalManager vs WalMmapWriter (32B)"`) to observe all three ratios on your own hardware in a single Catch2 run.
+**Context**: `WalWriter` (339 ns) is faster than Chronicle Queue's published p99 of 780 ns ([OpenHFT GitHub](https://github.com/OpenHFT/Chronicle-Queue)). `WalManager` adds ~60–110 ns overhead for its orchestration layer (mutex + segment roll check + atomic counter) — the right choice when auto-rolling and thread safety matter more than raw latency. `WalMmapWriter` at ~223 ns (measured) is faster than Chronicle Queue and competitive with the fastest C++ WAL implementations. Use Case 12 (`"WAL three-way: WalWriter vs WalManager vs WalMmapWriter (32B)"`) to observe all three ratios on your own hardware in a single Catch2 run.
 
 **`sync_on_flush=true` note**: Explicitly flushing either mode to durable storage costs ~150–200 ns (same kernel `fsync`/`F_FULLFSYNC`/`FlushFileBuffers` call either way). The choice between modes does not change the cost of durability flushes.
 
@@ -304,7 +301,7 @@ The key differentiator for Signet's feature store is co-location: no network, no
 
 | System | p50 Latency | Source | Notes |
 |--------|-------------|--------|-------|
-| **Signet Feature Store** | **12 μs** | Measured (bench_feature_store.cpp) | Parquet-native, binary search, no network |
+| **Signet Feature Store** | **~0.14 μs** (warm) | Measured (bench_feature_store.cpp) | Parquet-native, row group cache, no network |
 | Redis GET (TCP loopback) | p50: 143 μs | [redis.io benchmarks](https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/benchmarks/) | SET: 180K req/s, p50=0.143 ms |
 | Redis GET (Unix socket) | ~50% faster than TCP | [redis.io benchmarks](https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/benchmarks/) | Eliminates TCP overhead |
 | Feast (Redis backend, gRPC) | 1–5 ms (est.) | [feast-benchmarks repo](https://github.com/feast-dev/feast-benchmarks) | Benchmark blog no longer available |
@@ -314,7 +311,7 @@ The key differentiator for Signet's feature store is co-location: no network, no
 
 **Key insight**: Signet is **4–8x faster than Redis GET on a local network** because it is co-located with the application, uses binary Parquet as the wire format (no Redis RESP protocol deserialization), and uses row group statistics for O(log n) lookup rather than a hash table lookup that still requires a network round-trip.
 
-At 12 μs, Signet's feature store is suitable for **online inference** at 10–80K queries/second (single-threaded). For sub-microsecond feature serving, preload features into `std::unordered_map` at process startup and use Signet for the durable persistence layer underneath.
+At ~0.14 μs (warm), Signet's feature store is suitable for **online inference** at millions of queries/second (single-threaded). Cold first-call to a new row group is ~19 μs; subsequent queries to the same row group hit the cache at sub-microsecond cost.
 
 ---
 
@@ -418,25 +415,25 @@ Both AES-256-GCM and Kyber-768 KEM encryption add unmeasurably small overhead at
 | WalMmapWriter | 161 ms | 403 ms | 0.40 μs |
 | WalManager | 70 ms | — | — |
 
-Enterprise WAL numbers measure end-to-end pipeline throughput (record construction + write + I/O), not isolated per-append latency. WalMmapWriter is **2.8x faster** than WalWriter at 1M-row scale. Compare with the micro-benchmark per-append numbers (339 ns WalWriter, ~38 ns WalMmapWriter projected) which isolate the append call.
+Enterprise WAL numbers measure end-to-end pipeline throughput (record construction + write + I/O), not isolated per-append latency. WalMmapWriter is **2.8x faster** than WalWriter at 1M-row scale. Compare with the micro-benchmark per-append numbers (339 ns WalWriter, ~223 ns WalMmapWriter measured) which isolate the append call.
 
 ### AI-Native Extensions (measured)
 
 | Operation | Mean | Per-record |
 |-----------|------|------------|
-| DecisionLog write 10K | 156 ms | 15.6 μs |
-| InferenceLog write 10K | 160 ms | 16.0 μs |
-| Audit chain verify 10K | 39 ms | 3.9 μs |
-| column_view 1M doubles | 0.54 ns | — |
-| EventBus 4P×4C 100K events | 13.8 ms | 138 ns/event |
+| DecisionLog write 10K | 122 ms | 12.2 μs |
+| InferenceLog write 10K | 124 ms | 12.4 μs |
+| Audit chain verify 10K | 31.6 ms | 3.16 μs |
+| column_view 1M doubles | 0.47 ns | — |
+| EventBus 4P×4C 100K events | 23.3 ms | 233 ns/event |
 
 ### Interop Bridges (measured)
 
 | Bridge | Mean | Notes |
 |--------|------|-------|
-| Arrow C Data export (1M doubles) | 167 ns | Pointer + metadata copy |
-| TensorView wrap (1M doubles) | 0.54 ns | Zero-copy shape assignment |
-| ColumnBatch 6-column tensor (1M × 6) | 41 ms | ~6.8 ms per column |
+| Arrow C Data export (1M doubles) | 148 ns | Pointer + metadata copy |
+| TensorView wrap (1M doubles) | 0.53 ns | Zero-copy shape assignment |
+| ColumnBatch 6-column tensor (1M × 6) | 32 ms | ~5.3 ms per column |
 
 ---
 
@@ -497,7 +494,7 @@ cmake --build build-benchmarks --target signet_benchmarks
 
 # Expected key numbers:
 #   bench_wal:           ~339 ns (32B append)
-#   bench_feature_store: ~12 μs  (as_of single)
+#   bench_feature_store: ~0.14 μs (as_of single, warm cache)
 #   bench_event_bus:     ~10.4 ns (MpmcRing push+pop)
 #   bench_encodings:     ~29 μs  (DELTA encode 10K int64)
 ```

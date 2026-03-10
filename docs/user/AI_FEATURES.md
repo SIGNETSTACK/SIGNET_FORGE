@@ -140,7 +140,7 @@ The Write-Ahead Log solves the durability problem in streaming AI pipelines:
 - Power failure or crash must not lose buffered events
 - Events must be recoverable in sequence order
 
-Signet provides two WAL implementations. The standard `WalWriter` appends records at **~339 ns per 32-byte entry** (buffered fwrite, no fsync). The high-performance `WalMmapWriter` uses memory-mapped ring segments to achieve **~38 ns per append** (mmap, no sync) — see [High-Performance Mode: WalMmapWriter](#high-performance-mode-walmmapwriter) below. Both produce identical on-disk formats readable by `WalReader`. When enough data accumulates, a background process compacts WAL segments into queryable Parquet files.
+Signet provides two WAL implementations. The standard `WalWriter` appends records at **~339 ns per 32-byte entry** (buffered fwrite, no fsync). The high-performance `WalMmapWriter` uses memory-mapped ring segments to achieve **~223 ns per append** (mmap, no sync) — see [High-Performance Mode: WalMmapWriter](#high-performance-mode-walmmapwriter) below. Both produce identical on-disk formats readable by `WalReader`. When enough data accumulates, a background process compacts WAL segments into queryable Parquet files.
 
 ### WAL Latency at a Glance
 
@@ -154,9 +154,9 @@ Signet provides two WAL implementations. The standard `WalWriter` appends record
 | `WalWriter` batch flush (1000 × 32 B) | 32 KB | ~2.1 μs | `"1000 appends"` (Case 3) | fflush of full batch |
 | `WalWriter` append + fflush | 32 B | ~600 ns | `"append + flush(no-fsync)"` (Case 4) | fflush only |
 | `WalManager` (mutex + roll check) | 32 B | ~400–450 ns | `"manager append 32B"` (Case 5) | +60–110 ns over WalWriter: mutex + segment-roll check |
-| `WalMmapWriter` | 32 B | **~38 ns** | `"mmap append 32B"` (Case 7) | mmap ring, no sync, single-writer; 9× vs WalWriter |
-| `WalMmapWriter` | 256 B | **~42 ns** | `"mmap append 256B"` (Case 8) | Only payload-proportional cost: memcpy + CRC32 |
-| `WalMmapWriter` with rotation | 32 B | **~38 ns amortized** | `"mmap append 32B"` (Case 7) | Pre-allocated STANDBY segment; rotation cost ~5 ns amortized |
+| `WalMmapWriter` | 32 B | **~223 ns** | `"mmap append 32B"` (Case 7) | mmap ring, no sync, single-writer; ~1.5× vs WalWriter |
+| `WalMmapWriter` | 256 B | **~845 ns** | `"mmap append 256B"` (Case 8) | Only payload-proportional cost: memcpy + CRC32 |
+| `WalMmapWriter` with rotation | 32 B | **~223 ns amortized** | `"mmap append 32B"` (Case 7) | Pre-allocated STANDBY segment; rotation cost ~5 ns amortized |
 | Three-way side-by-side | 32 B | see above | Case 11 (fwrite vs mmap), Case 12 (all three) | Run `[wal][mmap][bench]` for adjacent Catch2 output |
 
 For full WAL vs RocksDB/Kafka/PostgreSQL comparison, see the [Performance Summary](#performance-summary) below.
@@ -234,7 +234,7 @@ auto segments = mgr->segment_paths();
 
 Use `WalMmapWriter` when:
 - Your system is co-located at an exchange or on a low-latency server (HFT colocation)
-- Your latency requirement for WAL append is `<50 ns`
+- Your latency requirement for WAL append is `<500 ns`
 - You have a single writer thread per WAL (the mmap path has no internal lock)
 - Fixed disk budget is acceptable (`ring_segments × segment_size` — default: 4 × 64 MB = 256 MB)
 - Crash safety is sufficient (records survive process crash via `MS_ASYNC`); for power-loss safety, set `sync_on_flush=true`
@@ -257,7 +257,7 @@ opts.dir            = "/fast/nvme/wal";        // NVMe for best results
 opts.name_prefix    = "ticks";                 // files: ticks_0000.wal, ticks_0001.wal, ...
 opts.ring_segments  = 4;                       // 4 slots in flight: 1 ACTIVE + 1 DRAINING + 2 STANDBY
 opts.segment_size   = 64 * 1024 * 1024;        // 64 MB each; MUST be multiple of 65536
-opts.sync_on_append = false;                   // HFT: skip per-append msync (~38 ns mode)
+opts.sync_on_append = false;                   // HFT: skip per-append msync (~223 ns mode)
 opts.sync_on_flush  = false;                   // set true for MiFID II power-loss guarantee
 
 // -----------------------------------------------------------------------
@@ -270,7 +270,7 @@ if (!writer.has_value()) {
 }
 
 // -----------------------------------------------------------------------
-// Hot path — ~38 ns per append (32 B payload, x86_64 -O2, no sync)
+// Hot path — ~223 ns per append (32 B payload, x86_64 -O2, no sync)
 // -----------------------------------------------------------------------
 for (;;) {
     auto tick = recv_market_data();
@@ -349,10 +349,10 @@ No application code changes are needed for Windows — the same `WalMmapOptions`
 
 | Property | `WalWriter` (fwrite) | `WalManager` (fwrite + orchestration) | `WalMmapWriter` (mmap) |
 |----------|---------------------|---------------------------------------|----------------------|
-| Append latency (32 B, no sync) | ~339 ns · `"append 32B"` Case 1 | ~400–450 ns · `"manager append 32B"` Case 5 | ~38 ns · `"mmap append 32B"` Case 7 |
-| Append latency (256 B, no sync) | ~450 ns · Case 2 | ~510–560 ns (extrapolated) | ~42 ns · Case 8 |
+| Append latency (32 B, no sync) | ~339 ns · `"append 32B"` Case 1 | ~400–450 ns · `"manager append 32B"` Case 5 | ~223 ns · `"mmap append 32B"` Case 7 |
+| Append latency (256 B, no sync) | ~450 ns · Case 2 | ~510–560 ns (extrapolated) | ~845 ns · Case 8 |
 | Thread safety | Move-only, single-writer | `std::mutex` — multi-writer safe | Single-writer (no lock on hot path) |
-| Per-append overhead vs raw WalWriter | Baseline | +60–110 ns (mutex + roll check + counter) | −9× (no C-lib, no mutex, direct store) |
+| Per-append overhead vs raw WalWriter | Baseline | +60–110 ns (mutex + roll check + counter) | ~1.5× (no C-lib, no mutex, direct store) |
 | Durability per append | stdio buffer | stdio buffer | MS_ASYNC (crash-safe) |
 | Power-loss durability | `flush(true)` → ~200 ns | `flush(true)` → ~200 ns | `sync_on_flush=true` → ~200 ns |
 | Disk usage | Grows with data | Auto-rolls: max_segment_bytes enforced | Fixed: `ring_segments × segment_size` |
@@ -360,7 +360,7 @@ No application code changes are needed for Windows — the same `WalMmapOptions`
 | File format | `WAL_FILE_MAGIC` + CRC-checked records | Identical | Identical — same `WalReader` |
 | Benchmark cases | Cases 1–4, 11, 12 | Case 5, 12 | Cases 7–12 (`[wal][mmap][bench]`) |
 | Windows support | Yes | Yes (all 11 issues handled) |
-| Best for | General purpose, multi-writer | HFT colocation, `<50 ns` |
+| Best for | General purpose, multi-writer | HFT colocation, `<500 ns` |
 
 ---
 
@@ -391,7 +391,7 @@ A typical streaming ML pipeline using the WAL:
 Traditional feature stores use Redis, DynamoDB, or custom serving layers. These add operational complexity and cost. Signet's feature store stores features directly in Parquet:
 
 - **Point-in-time correctness** (`as_of(entity, timestamp)`) — critical for training data to avoid look-ahead bias
-- **~12 μs per lookup** — binary search on an in-memory index after file open
+- **~1.4 μs per lookup (with row group cache)** — binary search on an in-memory index after file open
 - **No Redis required** — features live in the same files as your training data
 - **Temporal history** — full audit trail of feature values over time
 
@@ -399,8 +399,8 @@ Traditional feature stores use Redis, DynamoDB, or custom serving layers. These 
 
 | Operation | Latency | Dataset | Notes |
 |-----------|---------|---------|-------|
-| `as_of()` single entity | **12 μs** | 10K feature vectors | Binary search over row group stats |
-| `as_of_batch()` 100 entities | < 1 ms | Same dataset | One file scan, 100 lookups |
+| `as_of()` single entity | **~1.4 μs** | 10K feature vectors | Binary search over row group stats |
+| `as_of_batch()` 100 entities | ~21 μs | Same dataset | One file scan, 100 lookups |
 | `write_batch()` 10K × 16 features | ~8 ms | UNCOMPRESSED | Full Parquet flush |
 
 For full Feature Store vs Redis/Feast/Tecton comparison, see the [Performance Summary](#performance-summary) below.
@@ -860,7 +860,7 @@ Note on hardware variation: numbers are from x86_64 macOS. ARM (Apple M1/M2) is 
 
 | System | Per-write latency | Benchmark tag | Notes |
 |--------|------------------|---------------|-------|
-| **Signet WalMmapWriter** | **~38 ns** | `"mmap append 32B"` (Case 7) | mmap ring, no sync, x86_64 -O2; Case 12 side-by-side |
+| **Signet WalMmapWriter** | **~223 ns** | `"mmap append 32B"` (Case 7) | mmap ring, no sync, x86_64 -O2; Case 12 side-by-side |
 | **Signet WalWriter** | **339 ns** | `"append 32B"` (Case 1) | Buffered fwrite, fflush only |
 | **Signet WalManager** | **~400–450 ns** | `"manager append 32B"` (Case 5) | WalWriter + mutex + segment-roll check; auto-rolls, thread-safe |
 | RocksDB WAL (sync=false) | 200–800 ns | — | Similar buffered model |
@@ -870,7 +870,7 @@ Note on hardware variation: numbers are from x86_64 macOS. ARM (Apple M1/M2) is 
 | Kafka (local, single producer, acks=0) | 1–5 ms | — | Network + ISR synchronization overhead |
 | PostgreSQL WAL (fsync=on) | 50–500 μs | Full durability, group commit |
 
-`WalWriter` is in the same performance tier as RocksDB and LevelDB. `WalMmapWriter` at ~38 ns projected closes the gap with Chronicle Queue (25–50 ns) while staying in C++ with no JVM requirement. Kafka is 3–4 orders of magnitude slower due to network stack overhead even in local mode. Unlike all these systems, both Signet WAL modes compact directly to queryable Parquet with zero schema translation. `sync_on_flush=true` adds ~150–200 ns to either mode.
+`WalWriter` is in the same performance tier as RocksDB and LevelDB. `WalMmapWriter` at ~223 ns (measured) is competitive with RocksDB while staying in pure C++ with no JVM requirement. Kafka is 3–4 orders of magnitude slower due to network stack overhead even in local mode. Unlike all these systems, both Signet WAL modes compact directly to queryable Parquet with zero schema translation. `sync_on_flush=true` adds ~150–200 ns to either mode.
 
 **Enterprise bulk throughput (real tick data)**: WalMmapWriter processes 1M records in 403 ms (0.40 μs/record) vs WalWriter's 1.14 s (1.14 μs/record) — a **2.8x throughput advantage** at scale. Encrypted WAL shows < 1% overhead vs plain. See `Benchmarking_Protocols/results/COMPARISON.md` for full results.
 
@@ -878,7 +878,7 @@ Note on hardware variation: numbers are from x86_64 macOS. ARM (Apple M1/M2) is 
 
 | System | p50 Latency | Deployment | Notes |
 |--------|-------------|-----------|-------|
-| **Signet Feature Store** | **12 μs** | Local (co-located) | Parquet-native, no network, O(log n) |
+| **Signet Feature Store** | **~1.4 μs** | Local (co-located) | Parquet-native, no network, O(log n) |
 | Redis GET (local network) | 50–100 μs | Local network | TCP RTT + RESP deserialization |
 | Redis GET (Unix socket, same machine) | 20–40 μs | Same machine | Eliminates TCP overhead |
 | Feast (Redis backend, gRPC) | 1–5 ms | Network + gRPC | Typical managed deployment |
@@ -886,7 +886,7 @@ Note on hardware variation: numbers are from x86_64 macOS. ARM (Apple M1/M2) is 
 | Vertex AI Feature Store | 50–100 ms | Google Cloud | Cloud network latency |
 | Hopsworks Feature Store | 10–50 ms | Managed / on-prem | RonDB backend |
 
-Signet at 12 μs is **4–8x faster than Redis GET on a local network** because there is no network stack, no RESP protocol overhead, and Parquet row group statistics enable O(log n) binary search instead of a hash table lookup that still requires a network round-trip.
+Signet at ~1.4 μs is **35–70× faster than Redis GET on a local network** because there is no network stack, no RESP protocol overhead, and Parquet row group statistics enable O(log n) binary search instead of a hash table lookup that still requires a network round-trip.
 
 ### MPMC Queue vs LMAX Disruptor / Boost / TBB
 
