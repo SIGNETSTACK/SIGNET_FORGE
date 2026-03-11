@@ -22,7 +22,11 @@ namespace {
 struct TempFile {
     fs::path path;
     explicit TempFile(const std::string& name)
-        : path(fs::temp_directory_path() / name) {}
+        : path(fs::temp_directory_path() / name) {
+        // Remove any leftover file from a previous run
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
     ~TempFile() {
         std::error_code ec;
         fs::remove(path, ec);
@@ -184,10 +188,13 @@ TEST_CASE("Reader handles nonexistent file gracefully", "[resilience]") {
 
 TEST_CASE("WalReader handles truncated WAL file", "[resilience][wal]") {
     TempFile tmp("signet_trunc_wal.wal");
+    std::string wal_path = tmp.path.string();
 
     // Write some WAL entries
     {
-        auto w = *WalWriter::open(tmp.path);
+        auto w_res = WalWriter::open(wal_path);
+        REQUIRE(w_res.has_value());
+        auto& w = *w_res;
         for (int i = 0; i < 50; ++i) {
             (void)w.append("entry-" + std::to_string(i));
         }
@@ -195,16 +202,21 @@ TEST_CASE("WalReader handles truncated WAL file", "[resilience][wal]") {
     }
 
     auto fsize = fs::file_size(tmp.path);
+    REQUIRE(fsize > 0);
     // Truncate mid-entry
     truncate_file(tmp.path, fsize / 2);
 
     // Reader should recover as many entries as possible without crashing
-    auto r = WalReader::open(tmp.path);
+    auto r = WalReader::open(wal_path);
     REQUIRE(r.has_value());
     size_t count = 0;
-    while (true) {
+    constexpr size_t kMaxIter = 1000; // safety guard
+    for (size_t iter = 0; iter < kMaxIter; ++iter) {
         auto entry = r->next();
-        if (!entry.has_value()) break;
+        // next() returns expected<optional<WalEntry>>:
+        //   - !entry.has_value() => hard I/O error (expected failed)
+        //   - entry->has_value() == false => EOF/truncation/corruption (optional is nullopt)
+        if (!entry.has_value() || !entry->has_value()) break;
         ++count;
     }
     // Should have recovered at least some entries
@@ -214,9 +226,12 @@ TEST_CASE("WalReader handles truncated WAL file", "[resilience][wal]") {
 
 TEST_CASE("WalReader handles corrupted CRC in WAL entry", "[resilience][wal]") {
     TempFile tmp("signet_crc_wal.wal");
+    std::string wal_path = tmp.path.string();
 
     {
-        auto w = *WalWriter::open(tmp.path);
+        auto w_res = WalWriter::open(wal_path);
+        REQUIRE(w_res.has_value());
+        auto& w = *w_res;
         for (int i = 0; i < 10; ++i) {
             (void)w.append("test-data-" + std::to_string(i));
         }
@@ -230,11 +245,15 @@ TEST_CASE("WalReader handles corrupted CRC in WAL entry", "[resilience][wal]") {
     }
 
     // Reader should stop or skip corrupted entries, not crash
-    auto r = WalReader::open(tmp.path);
+    auto r = WalReader::open(wal_path);
     REQUIRE(r.has_value());
-    while (true) {
+    constexpr size_t kMaxIter = 1000; // safety guard
+    for (size_t iter = 0; iter < kMaxIter; ++iter) {
         auto entry = r->next();
-        if (!entry.has_value()) break;
+        // next() returns expected<optional<WalEntry>>:
+        //   - !entry.has_value() => hard I/O error
+        //   - entry->has_value() == false => corruption/EOF (optional is nullopt)
+        if (!entry.has_value() || !entry->has_value()) break;
     }
     // Some entries read, corruption detected — no crash
     SUCCEED("No crash on corrupted WAL CRC");

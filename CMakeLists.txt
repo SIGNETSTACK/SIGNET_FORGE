@@ -316,6 +316,7 @@ if(SIGNET_BUILD_TESTS)
             tests/test_audit_chain.cpp
             tests/test_compliance_reports.cpp
             tests/test_gap_pass12.cpp
+            tests/test_crypto_vectors.cpp
         )
     endif()
     add_executable(signet_tests ${SIGNET_TEST_SOURCES})
@@ -328,7 +329,8 @@ if(SIGNET_BUILD_TESTS)
     if(SIGNET_ENABLE_PQ)
         target_compile_definitions(signet_tests PRIVATE SIGNET_HAS_LIBOQS=1)
     endif()
-    catch_discover_tests(signet_tests)
+    catch_discover_tests(signet_tests
+        PROPERTIES TIMEOUT 120)  # 2 min per test — prevents CI hangs
 endif()
 
 # ---------------------------------------------------------------------------
@@ -442,6 +444,16 @@ if(SIGNET_BUILD_TOOLS)
         target_compile_options(signet_cli PRIVATE /W4)
     else()
         target_compile_options(signet_cli PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    if(SIGNET_ENABLE_COMMERCIAL)
+        add_executable(signet_license_gen tools/signet_license_gen.cpp)
+        target_link_libraries(signet_license_gen PRIVATE signet::forge)
+        if(MSVC)
+            target_compile_options(signet_license_gen PRIVATE /W4)
+        else()
+            target_compile_options(signet_license_gen PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
     endif()
 endif()
 
