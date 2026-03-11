@@ -232,11 +232,9 @@ TEST_CASE("WalReader handles corrupted CRC in WAL entry", "[resilience][wal]") {
     // Reader should stop or skip corrupted entries, not crash
     auto r = WalReader::open(tmp.path);
     REQUIRE(r.has_value());
-    size_t count = 0;
     while (true) {
         auto entry = r->next();
         if (!entry.has_value()) break;
-        ++count;
     }
     // Some entries read, corruption detected — no crash
     SUCCEED("No crash on corrupted WAL CRC");

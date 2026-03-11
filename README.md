@@ -393,7 +393,7 @@ commercial crypto enabled, 11 libFuzzer harnesses with persistent corpus caching
 SAST with `security-extended` queries, property-based tests (C++ + Python Hypothesis),
 mutation testing on the crypto module, 13 fault injection resilience tests, 32-thread
 concurrency stress tests, and Clang source-based code coverage reported to Codecov.
-Benchmark regressions >50% **fail the build**.
+Benchmark regressions >100% **fail the build**.
 
 | Layer | Coverage | Standard |
 |-------|----------|----------|

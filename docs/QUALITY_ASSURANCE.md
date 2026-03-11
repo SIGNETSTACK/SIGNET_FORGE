@@ -22,7 +22,7 @@ independent third-party test vector suites.
 | **API Stability** | 19 regression tests locking enum values, struct sizes, error codes |
 | **Cross-Platform** | Linux (GCC 13, Clang 18), macOS (Apple Clang 17), Windows (MSVC 2022) |
 | **Cross-Language** | Independent test suites for C++, Python, Rust, and WASM bindings |
-| **Enterprise Benchmarks** | 104 benchmark cases (45 core + 59 enterprise) with regression gate (50% threshold, build fails on regression) |
+| **Enterprise Benchmarks** | 104 benchmark cases (45 core + 59 enterprise) with regression gate (100% threshold, build fails on regression) |
 | **Fuzz Corpus Persistence** | GitHub Actions cache preserves libFuzzer corpus across runs — each session builds on prior discoveries |
 | **Secrets Scanning** | [gitleaks](https://github.com/gitleaks/gitleaks) 8.24.3 on full repository history |
 | **License Compliance** | SPDX header verification + GPL/AGPL contamination scan |
@@ -241,7 +241,7 @@ Run: `ctest -R stress`
 | post-quantum | Kyber-768 + Dilithium-3 via liboqs |
 | fuzz | 11 libFuzzer harnesses, 60 seconds each |
 | coverage | Clang source-based coverage to [Codecov](https://codecov.io/) |
-| benchmarks | Performance regression detection (150% threshold) |
+| benchmarks | Performance regression detection (200% threshold) |
 | secrets-scan | [gitleaks](https://github.com/gitleaks/gitleaks) credential detection |
 | python-sast | [bandit](https://bandit.readthedocs.io/) Python security scanning |
 | license-check | SPDX + GPL contamination verification |

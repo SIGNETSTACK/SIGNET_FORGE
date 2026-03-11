@@ -205,7 +205,7 @@ auto prices = *reader.read_column<double>(0, 1);
 | post-quantum | Kyber-768 + Dilithium-3 (liboqs) |
 | fuzz | libFuzzer, 60s per harness |
 | coverage | Clang coverage to Codecov |
-| benchmarks | Regression detection (50% alert threshold) |
+| benchmarks | Regression detection (100% alert threshold) |
 
 ---
 
