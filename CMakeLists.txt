@@ -308,6 +308,7 @@ if(SIGNET_BUILD_TESTS)
         tests/test_page_index.cpp
         tests/test_property_based.cpp
         tests/test_api_compatibility.cpp
+        tests/test_resilience.cpp
     )
     if(SIGNET_ENABLE_COMMERCIAL)
         list(APPEND SIGNET_TEST_SOURCES

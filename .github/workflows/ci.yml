@@ -302,6 +302,14 @@ jobs:
       - name: Build
         run: cmake --build build-fuzz --parallel
 
+      - name: Restore fuzz corpus cache
+        uses: actions/cache@v4
+        with:
+          path: fuzz-corpus
+          key: fuzz-corpus-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-
+
       - name: Run fuzzers (60s each)
         env:
           ASAN_OPTIONS: allocator_may_return_null=1:detect_leaks=0
@@ -312,8 +320,9 @@ jobs:
                         fuzz_aes_gcm fuzz_pme fuzz_key_metadata \
                         fuzz_hkdf fuzz_x25519; do
             echo "=== Fuzzing $target for 60s ==="
-            mkdir -p fuzz-artifacts/$target
+            mkdir -p fuzz-artifacts/$target fuzz-corpus/$target
             ./build-fuzz/$target \
+              fuzz-corpus/$target \
               -max_total_time=60 \
               -rss_limit_mb=2048 \
               -malloc_limit_mb=2048 \
@@ -446,7 +455,7 @@ jobs:
           auto-push: true
           alert-threshold: "120%"
           comment-on-alert: true
-          fail-on-alert: false
+          fail-on-alert: true
 
   # ---------------------------------------------------------------------------
   # Gap T-15d: Secrets scanning (gitleaks) — detect accidental key commits

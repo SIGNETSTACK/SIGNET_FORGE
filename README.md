@@ -389,10 +389,11 @@ step-by-step local setup instructions. CI runs mutation testing automatically on
 ### Dynamic Testing
 
 Every push triggers **16 CI jobs** including three sanitizer modes (ASan, TSan, UBSan) with
-commercial crypto enabled, 11 libFuzzer harnesses covering all parsers and cryptographic
-primitives, CodeQL SAST with `security-extended` queries, property-based tests with
-randomized generation, mutation testing on the crypto module, and Clang source-based
-code coverage reported to Codecov.
+commercial crypto enabled, 11 libFuzzer harnesses with persistent corpus caching, CodeQL
+SAST with `security-extended` queries, property-based tests (C++ + Python Hypothesis),
+mutation testing on the crypto module, 13 fault injection resilience tests, 32-thread
+concurrency stress tests, and Clang source-based code coverage reported to Codecov.
+Benchmark regressions >20% **fail the build**.
 
 | Layer | Coverage | Standard |
 |-------|----------|----------|
@@ -401,6 +402,8 @@ code coverage reported to Codecov.
 | **SAST** | CodeQL (`security-extended`) + MSVC `/analyze` | [SOC 2 CC7.1](https://www.aicpa-cima.com/topic/system-and-organization-controls) |
 | **SBOM** | CycloneDX + SPDX JSON on every release | [US EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/), [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847) |
 | **Mutation testing** | Mull 0.24.0 on crypto module | [IEEE 1008-2024](https://standards.ieee.org/ieee/1008/11491/) |
+| **Resilience testing** | 13 fault injection tests (corruption, truncation, garbage) | [NIST SP 800-53 SI-10](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
+| **Concurrency stress** | 32-thread MPMC + EventBus (16P×16C, 100K items) | [DORA Art. 9](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) |
 | **Secrets scan** | gitleaks on full history | [PCI DSS v4.0 §8.6.3](https://www.pcisecuritystandards.org/document_library/) |
 
 ### Cryptographic Validation

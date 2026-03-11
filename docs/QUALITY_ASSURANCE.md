@@ -16,11 +16,14 @@ independent third-party test vector suites.
 | **Fuzz Testing** | 11 libFuzzer harnesses (reader, Thrift, WAL, RLE, Delta, Arrow, AES-GCM, PME, key metadata, HKDF, X25519) |
 | **Code Coverage** | Clang source-based coverage reported to [Codecov](https://codecov.io/) |
 | **Mutation Testing** | [Mull](https://github.com/mull-project/mull) 0.24.0 mutation analysis on crypto module |
-| **Property-Based Testing** | 7 randomized identity-property tests via Catch2 GENERATE |
+| **Property-Based Testing** | 7 C++ tests (Catch2 GENERATE) + 9 Python tests ([Hypothesis](https://hypothesis.readthedocs.io/)) |
+| **Resilience Testing** | 13 fault injection tests: file corruption, truncation, garbage input, WAL CRC corruption |
+| **Concurrency Stress** | 32-thread MPMC ring + EventBus stress tests (16P×16C, 100K items) |
 | **API Stability** | 19 regression tests locking enum values, struct sizes, error codes |
 | **Cross-Platform** | Linux (GCC 13, Clang 18), macOS (Apple Clang 17), Windows (MSVC 2022) |
 | **Cross-Language** | Independent test suites for C++, Python, Rust, and WASM bindings |
-| **Enterprise Benchmarks** | 104 benchmark cases (45 core + 59 enterprise) with regression detection (20% alert threshold) |
+| **Enterprise Benchmarks** | 104 benchmark cases (45 core + 59 enterprise) with regression gate (20% threshold, build fails on regression) |
+| **Fuzz Corpus Persistence** | GitHub Actions cache preserves libFuzzer corpus across runs — each session builds on prior discoveries |
 | **Secrets Scanning** | [gitleaks](https://github.com/gitleaks/gitleaks) 8.24.3 on full repository history |
 | **License Compliance** | SPDX header verification + GPL/AGPL contamination scan |
 | **SBOM** | CycloneDX + SPDX JSON via [anchore/syft](https://github.com/anchore/sbom-action) ([US EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/) / [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847)) |
@@ -179,9 +182,48 @@ test adequacy criteria and supports [NIST SP 800-53 SA-11](https://csrc.nist.gov
 
 ### Property-Based & Regression Testing
 
-- **7 property-based tests** validate universal invariants (`decode(encode(x)) == x` for all inputs) using randomized generation with deterministic seeding — catching edge cases that hand-picked test vectors miss.
+- **7 C++ property-based tests** validate universal invariants (`decode(encode(x)) == x` for all inputs) using randomized generation with deterministic seeding — catching edge cases that hand-picked test vectors miss.
+- **9 Python property-based tests** using [Hypothesis](https://hypothesis.readthedocs.io/) with automatic shrinking: int64/double/string roundtrip identity, length preservation, constant-value arrays, empty strings, and multi-column roundtrips. Run with `pip install hypothesis && pytest python/tests/test_property_based.py`.
 - **19 API stability tests** lock enum values, struct sizes, and error codes to prevent accidental ABI breakage in downstream systems.
 - **100+ hardening tests** verify safe rejection of malformed, adversarial, and boundary-condition inputs across all 10 security audit passes.
+
+### Resilience & Fault Injection Testing
+
+13 fault injection tests (`[resilience]` tag) verify graceful handling of adversarial
+I/O conditions — no crashes, no undefined behavior, no silent data corruption:
+
+| Test | What It Injects | Validates |
+|------|----------------|-----------|
+| Corrupted magic bytes | Overwrites PAR1 header/footer | Reader rejects with error, not crash |
+| Truncated file (header only) | Resize to 8 bytes | Reader returns error |
+| Truncated file (mid-footer) | Resize to 50% of file | Reader returns error |
+| Zero-byte file | Empty file | Reader returns error |
+| Corrupted Thrift footer | Overwrites footer metadata | No segfault on malformed Thrift |
+| Random garbage content | 4KB of random data | Reader rejects non-Parquet input |
+| Corrupted page data | Overwrites column data pages | No crash; error or silent (data layer) |
+| Nonexistent directory | Write to `/nonexistent/path/` | Writer returns IO error |
+| Nonexistent file | Read from missing path | Reader returns IO error |
+| Truncated WAL | Resize WAL mid-entry | Reader recovers partial entries |
+| Corrupted WAL CRC | Overwrites CRC bytes | Reader stops at corruption, no crash |
+
+Resilience testing satisfies [NIST SP 800-53 SI-10](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) "Information Input Validation" and [DORA Art. 9](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) "ICT Risk Management" requirements.
+
+### Concurrency Stress Testing
+
+High-thread-count stress tests verify lock-free data structures under contention
+levels exceeding typical production deployments:
+
+| Test | Threads | Items | Ring Size | Validates |
+|------|---------|-------|-----------|-----------|
+| MpmcRing 16P×16C | 32 | 100K | 4096 | Checksum integrity under high contention |
+| EventBus 16P×16C | 32 | 50K | 8192 | Full publish/pop path with ColumnBatch allocation |
+| MpmcRing sustained 32-thread | 32 | 100K | 8192 | Throughput + completion within 10s deadline |
+
+These tests exercise the Vyukov MPMC bounded queue under 4× the concurrency of the
+standard test suite (4P×4C → 16P×16C), catching ABA problems, false sharing, and
+memory ordering bugs that only manifest under heavy contention.
+
+Run: `ctest -R stress`
 
 ## Continuous Integration
 
