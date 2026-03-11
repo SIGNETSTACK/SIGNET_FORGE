@@ -2,6 +2,10 @@
 
 **C++20 Parquet library with AI-native extensions — zero mandatory dependencies.**
 
+<a href="https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE">
+  <img src="https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE/graph/badge.svg?token=DD96FBRV95"/>
+</a>
+
 [GitHub Repository](https://github.com/SIGNETSTACK/SIGNET_FORGE) | [Browser Parquet Demo](demo/index.html)
 
 ---
