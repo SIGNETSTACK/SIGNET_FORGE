@@ -24,7 +24,7 @@
 // row-granularity lineage suitable for Iceberg V3 style data governance.
 // ---------------------------------------------------------------------------
 
-#include "signet/crypto/post_quantum.hpp"  // crypto::detail::sha256::sha256
+#include "signet/crypto/sha256.hpp"  // crypto::detail::sha256::sha256
 #include "signet/error.hpp"                // commercial::require_feature
 
 #include <array>

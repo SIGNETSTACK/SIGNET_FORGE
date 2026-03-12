@@ -61,8 +61,10 @@
 #include "signet/compression/gzip.hpp"
 /// @}
 
-/// @name Crypto: AES-GCM/CTR, Parquet Modular Encryption, post-quantum (Kyber/Dilithium)
+/// @name Crypto: AES-GCM/CTR, SHA-256/SHA-512, PME, post-quantum (Kyber/Dilithium)
 /// @{
+#include "signet/crypto/sha256.hpp"
+#include "signet/crypto/sha512.hpp"
 #include "signet/crypto/aes_core.hpp"
 #include "signet/crypto/aes_gcm.hpp"
 #include "signet/crypto/aes_ctr.hpp"

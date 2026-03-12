@@ -173,12 +173,23 @@ TEST_CASE("Reader handles file with valid magic but corrupted page data", "[resi
 
 TEST_CASE("Writer handles nonexistent directory gracefully", "[resilience]") {
     auto schema = Schema::builder("test").column<int64_t>("v").build();
+    // Use a path that is reliably nonexistent on both Unix and Windows.
+    // On Windows, "/nonexistent/..." can be interpreted as a relative path
+    // under the current drive, so use a deeply nested impossible path instead.
+#ifdef _WIN32
+    auto result = ParquetWriter::open("Z:\\__signet_no_such_dir__\\no\\file.parquet", schema);
+#else
     auto result = ParquetWriter::open("/nonexistent/path/file.parquet", schema);
+#endif
     REQUIRE(!result.has_value());
 }
 
 TEST_CASE("Reader handles nonexistent file gracefully", "[resilience]") {
+#ifdef _WIN32
+    auto result = ParquetReader::open("Z:\\__signet_no_such_dir__\\no\\file.parquet");
+#else
     auto result = ParquetReader::open("/nonexistent/path/file.parquet");
+#endif
     REQUIRE(!result.has_value());
 }
 

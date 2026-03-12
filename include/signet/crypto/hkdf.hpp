@@ -22,7 +22,7 @@
 // Reference: https://www.rfc-editor.org/rfc/rfc5869
 // ---------------------------------------------------------------------------
 
-#include "signet/crypto/post_quantum.hpp"  // for detail::sha256
+#include "signet/crypto/sha256.hpp"  // for detail::sha256
 
 #include <algorithm>
 #include <array>

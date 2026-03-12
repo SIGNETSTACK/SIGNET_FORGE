@@ -309,6 +309,9 @@ if(SIGNET_BUILD_TESTS)
         tests/test_property_based.cpp
         tests/test_api_compatibility.cpp
         tests/test_resilience.cpp
+        tests/test_encoding_vectors.cpp
+        tests/test_thrift_snappy_vectors.cpp
+        tests/test_bloom_vectors.cpp
     )
     if(SIGNET_ENABLE_COMMERCIAL)
         list(APPEND SIGNET_TEST_SOURCES
@@ -446,7 +449,7 @@ if(SIGNET_BUILD_TOOLS)
         target_compile_options(signet_cli PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
-    if(SIGNET_ENABLE_COMMERCIAL)
+    if(SIGNET_ENABLE_COMMERCIAL AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/signet_license_gen.cpp")
         add_executable(signet_license_gen tools/signet_license_gen.cpp)
         target_link_libraries(signet_license_gen PRIVATE signet::forge)
         if(MSVC)

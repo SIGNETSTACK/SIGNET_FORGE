@@ -57,7 +57,7 @@
 // Part of SignetStack Signet Forge -- Phase 7: AI Decision Audit Trail.
 // ---------------------------------------------------------------------------
 
-#include "signet/crypto/post_quantum.hpp"
+#include "signet/crypto/sha256.hpp"
 #include "signet/error.hpp"
 #include "signet/types.hpp"
 

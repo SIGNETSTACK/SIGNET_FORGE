@@ -200,13 +200,30 @@ inline uint64_t ct_reduce4(uint8_t index) {
     return result;
 }
 
+/// Bit-reverse a 4-bit nibble value.
+///
+/// GCM uses a reflected bit ordering where bit 0 of a byte is the MSB
+/// (coefficient of x^0). When extracting nibbles from a byte or from
+/// the low 4 bits of Z.lo, the bit positions within the nibble are
+/// reversed relative to the GF(2^128) polynomial basis used by the
+/// precomputed tables (both the H-multiple table and the reduction table).
+/// This function maps the nibble back to the correct table index.
+inline uint8_t rev4(uint8_t n) {
+    return static_cast<uint8_t>(
+        ((n & 1) << 3) | ((n & 2) << 1) | ((n & 4) >> 1) | ((n & 8) >> 3));
+}
+
 /// Constant-time GF(2^128) multiplication using the 4-bit precomputed table.
 ///
-/// Processes X nibble-by-nibble from MSB to LSB (Horner evaluation).
+/// Processes X nibble-by-nibble using reversed Horner evaluation:
+/// bytes are iterated from LAST to FIRST (byte 15 → byte 0), and within
+/// each byte the low nibble (higher polynomial degrees) is processed
+/// before the high nibble. Both nibble values AND the 4-bit reduction
+/// remainder are bit-reversed before table lookup to account for GCM's
+/// reflected bit ordering (NIST SP 800-38D §6.2).
+///
 /// All table lookups and shifts are data-independent — no branches or
 /// variable-time memory accesses on secret data.
-///
-/// Replaces the schoolbook bit-serial gf128_mul which branched on X.
 ///
 /// Ref: NIST SP 800-38D §6.3, CWE-208.
 inline Block128 gf128_mul_ct(const GHashTable& table, const Block128& X) {
@@ -214,26 +231,27 @@ inline Block128 gf128_mul_ct(const GHashTable& table, const Block128& X) {
     uint8_t x_bytes[16];
     store_block(x_bytes, X);
 
-    for (int byte_idx = 0; byte_idx < 16; ++byte_idx) {
+    // Process from last byte to first (reversed Horner for correct GCM ordering)
+    for (int byte_idx = 15; byte_idx >= 0; --byte_idx) {
         uint8_t b = x_bytes[byte_idx];
 
-        // Process high nibble (MSB first in GCM bit ordering)
+        // Process low nibble first (higher polynomial degrees, innermost Horner)
         {
             uint8_t rem = static_cast<uint8_t>(Z.lo & 0x0F);
             Z.lo = (Z.lo >> 4) | (Z.hi << 60);
-            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rem);
+            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rev4(rem));
             Block128 entry = ct_table_lookup(table.entries,
-                                             static_cast<uint8_t>((b >> 4) & 0x0F));
+                                             rev4(static_cast<uint8_t>(b & 0x0F)));
             Z = xor_blocks(Z, entry);
         }
 
-        // Process low nibble
+        // Process high nibble (lower polynomial degrees)
         {
             uint8_t rem = static_cast<uint8_t>(Z.lo & 0x0F);
             Z.lo = (Z.lo >> 4) | (Z.hi << 60);
-            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rem);
+            Z.hi = (Z.hi >> 4) ^ ct_reduce4(rev4(rem));
             Block128 entry = ct_table_lookup(table.entries,
-                                             static_cast<uint8_t>(b & 0x0F));
+                                             rev4(static_cast<uint8_t>((b >> 4) & 0x0F)));
             Z = xor_blocks(Z, entry);
         }
     }

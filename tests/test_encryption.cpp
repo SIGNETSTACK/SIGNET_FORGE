@@ -1286,16 +1286,12 @@ TEST_CASE("NIST SP 800-38D Test Case 13: AES-256 empty PT/AAD", "[crypto][gcm][n
 // AAD:   (empty)
 // CT:    cea7403d4d606b6e074ec5d3baf39d18
 // Tag:   d0d1c8a799996bf0265b98b5d48ab919
-//
-// Note: The bundled GCM implementation produces correct CTR ciphertext and
-// provides authentic encryption (tamper detection works), but the GHASH
-// tag computation uses a different GF(2^128) bit ordering than the NIST
-// reference. Ciphertext is verified; tag is checked for round-trip only.
 TEST_CASE("NIST SP 800-38D Test Case 14: AES-256, 16B PT, no AAD", "[crypto][gcm][nist]") {
     auto key = hex_to_bytes("0000000000000000000000000000000000000000000000000000000000000000");
     auto iv  = hex_to_bytes("000000000000000000000000");
     auto pt  = hex_to_bytes("00000000000000000000000000000000");
     auto expected_ct  = hex_to_bytes("cea7403d4d606b6e074ec5d3baf39d18");
+    auto expected_tag = hex_to_bytes("d0d1c8a799996bf0265b98b5d48ab919");
 
     crypto::AesGcm gcm(key.data());
 
@@ -1305,6 +1301,9 @@ TEST_CASE("NIST SP 800-38D Test Case 14: AES-256, 16B PT, no AAD", "[crypto][gcm
 
     // CTR ciphertext matches NIST vector
     REQUIRE(bytes_to_hex(result->data(), 16) == bytes_to_hex(expected_ct.data(), 16));
+
+    // Authentication tag matches NIST vector
+    REQUIRE(bytes_to_hex(result->data() + 16, 16) == bytes_to_hex(expected_tag.data(), 16));
 
     // Round-trip: decrypt recovers original plaintext
     auto dec = gcm.decrypt(result->data(), result->size(), iv.data(), nullptr, 0);
@@ -1322,10 +1321,6 @@ TEST_CASE("NIST SP 800-38D Test Case 14: AES-256, 16B PT, no AAD", "[crypto][gcm
 // CT:    522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa
 //        8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662
 // Tag:   76fc6ece0f4e1768cddf8853bb2d551b
-//
-// Note: CTR ciphertext matches. GHASH tag differs due to GF(2^128) bit
-// ordering in the bundled implementation (see GHASH deviation note above).
-// Round-trip and tamper-detection are verified separately.
 TEST_CASE("NIST SP 800-38D Test Case 16: AES-256, 60B PT, 20B AAD", "[crypto][gcm][nist]") {
     auto key = hex_to_bytes("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
     auto iv  = hex_to_bytes("cafebabefacedbaddecaf888");
@@ -1336,6 +1331,7 @@ TEST_CASE("NIST SP 800-38D Test Case 16: AES-256, 60B PT, 20B AAD", "[crypto][gc
     auto expected_ct = hex_to_bytes(
         "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa"
         "8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662");
+    auto expected_tag = hex_to_bytes("76fc6ece0f4e1768cddf8853bb2d551b");
 
     crypto::AesGcm gcm(key.data());
 
@@ -1347,11 +1343,25 @@ TEST_CASE("NIST SP 800-38D Test Case 16: AES-256, 60B PT, 20B AAD", "[crypto][gc
     REQUIRE(bytes_to_hex(result->data(), pt.size())
             == bytes_to_hex(expected_ct.data(), expected_ct.size()));
 
+    // Authentication tag matches NIST vector
+    REQUIRE(bytes_to_hex(result->data() + pt.size(), 16)
+            == bytes_to_hex(expected_tag.data(), 16));
+
     // Round-trip: decrypt recovers original plaintext
     auto dec = gcm.decrypt(result->data(), result->size(), iv.data(), aad.data(), aad.size());
     REQUIRE(dec.has_value());
     REQUIRE(dec->size() == pt.size());
     REQUIRE(bytes_to_hex(dec->data(), dec->size()) == bytes_to_hex(pt.data(), pt.size()));
+
+    // Cross-verify: decrypt NIST reference ciphertext+tag directly
+    std::vector<uint8_t> nist_ct_tag;
+    nist_ct_tag.insert(nist_ct_tag.end(), expected_ct.begin(), expected_ct.end());
+    nist_ct_tag.insert(nist_ct_tag.end(), expected_tag.begin(), expected_tag.end());
+    auto nist_dec = gcm.decrypt(nist_ct_tag.data(), nist_ct_tag.size(),
+                                iv.data(), aad.data(), aad.size());
+    REQUIRE(nist_dec.has_value());
+    REQUIRE(bytes_to_hex(nist_dec->data(), nist_dec->size())
+            == bytes_to_hex(pt.data(), pt.size()));
 }
 
 // NIST SP 800-38D: Authentication tag verification — tampered ciphertext must fail
@@ -1974,10 +1984,7 @@ TEST_CASE("AES-256 KAT: NIST FIPS 197 Appendix C.3", "[crypto][kat][nist]") {
 }
 
 TEST_CASE("AES-GCM KAT: NIST SP 800-38D Test Case 16", "[crypto][kat][nist]") {
-    // Full GCM KAT with AAD — validates GCTR ciphertext + encrypt/decrypt roundtrip.
-    // Note: GHASH tag uses implementation-specific GF(2^128) bit ordering
-    // (see deviation note at the existing Test Case 16 test above).
-    // The CTR ciphertext matches NIST exactly; roundtrip verifies tag consistency.
+    // Full GCM KAT with AAD — validates GCTR ciphertext, GHASH tag, and roundtrip.
     auto key = hex_to_bytes("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
     auto iv  = hex_to_bytes("cafebabefacedbaddecaf888");
     auto aad = hex_to_bytes("feedfacedeadbeeffeedfacedeadbeefabaddad2");
