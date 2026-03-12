@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <stdexcept>
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -173,29 +174,29 @@ public:
     /// @pre `has_value() == true`. Asserts in debug builds.
     /// @return Const reference to the stored value.
     [[nodiscard]] const T& value() const& {
-        assert(has_value());
+        if (!has_value()) throw std::logic_error("expected::value() called on error");
         return std::get<T>(storage_);
     }
     /// Access the success value (mutable lvalue reference).
-    /// @pre `has_value() == true`. Asserts in debug builds.
+    /// @pre `has_value() == true`.
     /// @return Mutable reference to the stored value.
     [[nodiscard]] T& value() & {
-        assert(has_value());
+        if (!has_value()) throw std::logic_error("expected::value() called on error");
         return std::get<T>(storage_);
     }
     /// Move-access the success value (rvalue reference).
-    /// @pre `has_value() == true`. Asserts in debug builds.
+    /// @pre `has_value() == true`.
     /// @return Rvalue reference to the stored value.
     [[nodiscard]] T&& value() && {
-        assert(has_value());
+        if (!has_value()) throw std::logic_error("expected::value() called on error");
         return std::get<T>(std::move(storage_));
     }
 
     /// Access the error payload.
-    /// @pre `has_value() == false`. Asserts in debug builds.
+    /// @pre `has_value() == false`.
     /// @return Const reference to the stored Error.
     [[nodiscard]] const Error& error() const {
-        assert(!has_value());
+        if (has_value()) throw std::logic_error("expected::error() called on value");
         return std::get<Error>(storage_);
     }
 

@@ -3,11 +3,11 @@
 **Standalone C++20 Parquet library with AI-native extensions.**
 Zero mandatory dependencies. Header-mostly. Interoperable with Arrow, DuckDB, Spark, and Polars.
 
-[![CI](https://github.com/SIGNETSTACK/signet-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGNETSTACK/signet-forge/actions)
+[![CI](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](python/)
-[![codecov](https://codecov.io/gh/SIGNETSTACK/signet-forge/graph/badge.svg)](https://codecov.io/gh/SIGNETSTACK/signet-forge)
+[![codecov](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE/graph/badge.svg)](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE)
 
 [**Try it in your browser — drag & drop any .parquet file**](https://signetstack.github.io/SIGNET_FORGE/demo/) | [**API Reference**](https://signetstack.github.io/SIGNET_FORGE/)
 

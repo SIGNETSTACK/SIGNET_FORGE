@@ -40,6 +40,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -1087,11 +1088,11 @@ public:
                     }
                 }
 
-                // Try DOUBLE
+                // Try DOUBLE (locale-independent)
                 if (all_double) {
-                    char* end = nullptr;
-                    (void)std::strtod(val.c_str(), &end);
-                    if (end == val.c_str() || end != val.c_str() + val.size()) {
+                    double tmp = 0;
+                    auto [p, ec] = std::from_chars(val.data(), val.data() + val.size(), tmp);
+                    if (ec != std::errc{} || p != val.data() + val.size()) {
                         all_double = false;
                     }
                 }
@@ -1252,6 +1253,11 @@ private:
 
     void write_raw(const uint8_t* data, size_t len) {
         file_.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(len));
+        if (!file_.good()) {
+            throw std::runtime_error("ParquetWriter::write_raw: I/O error after writing "
+                                     + std::to_string(len) + " bytes at offset "
+                                     + std::to_string(file_offset_));
+        }
         file_offset_ += static_cast<int64_t>(len);
     }
 
@@ -1292,9 +1298,9 @@ private:
                                                       val.data() + val.size(),
                                                       parsed);
                     if (ec != std::errc{}) {
-                        // Fallback: try parsing as double and truncating
-                        char* end = nullptr;
-                        double d = std::strtod(val.c_str(), &end);
+                        // Fallback: parse as double and truncate (locale-independent)
+                        double d = 0;
+                        std::from_chars(val.data(), val.data() + val.size(), d);
                         parsed = static_cast<int32_t>(d);
                     }
                     cw.write_int32(parsed);
@@ -1307,9 +1313,9 @@ private:
                                                       val.data() + val.size(),
                                                       parsed);
                     if (ec != std::errc{}) {
-                        // Fallback: try parsing as double and truncating
-                        char* end = nullptr;
-                        double d = std::strtod(val.c_str(), &end);
+                        // Fallback: parse as double and truncate (locale-independent)
+                        double d = 0;
+                        std::from_chars(val.data(), val.data() + val.size(), d);
                         parsed = static_cast<int64_t>(d);
                     }
                     cw.write_int64(parsed);
@@ -1317,15 +1323,15 @@ private:
                     break;
                 }
                 case PhysicalType::FLOAT: {
-                    char* end = nullptr;
-                    float f = std::strtof(val.c_str(), &end);
+                    float f = 0;
+                    std::from_chars(val.data(), val.data() + val.size(), f);
                     cw.write_float(f);
                     if (bf_active) bloom_filters_[c]->insert_value(f);
                     break;
                 }
                 case PhysicalType::DOUBLE: {
-                    char* end = nullptr;
-                    double d = std::strtod(val.c_str(), &end);
+                    double d = 0;
+                    std::from_chars(val.data(), val.data() + val.size(), d);
                     cw.write_double(d);
                     if (bf_active) bloom_filters_[c]->insert_value(d);
                     break;
@@ -1358,11 +1364,8 @@ private:
     // -- Snappy auto-registration ---------------------------------------------
 
     static void ensure_snappy_registered() {
-        static bool registered = false;
-        if (!registered) {
-            register_snappy_codec();
-            registered = true;
-        }
+        static std::once_flag flag;
+        std::call_once(flag, [] { register_snappy_codec(); });
     }
 
     // -- Encoding selection ---------------------------------------------------

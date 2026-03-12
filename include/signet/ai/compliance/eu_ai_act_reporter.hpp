@@ -107,6 +107,7 @@ public:
         std::vector<InferenceRecord> records;
         bool        chain_ok = true;
         std::string chain_id;
+        int         read_errors = 0;
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
@@ -124,7 +125,7 @@ public:
                 if (meta) chain_id = meta->chain_id;
             }
             auto all = rdr.read_all();
-            if (!all) continue;
+            if (!all) { ++read_errors; continue; }
             for (auto& rec : *all)
                 if (rec.timestamp_ns >= opts.start_ns &&
                     rec.timestamp_ns <= opts.end_ns)
@@ -142,6 +143,11 @@ public:
         ComplianceReport report = make_report_skeleton(
             ComplianceStandard::EU_AI_ACT_ART12, opts,
             static_cast<int64_t>(records.size()), chain_ok, chain_id);
+        if (read_errors > 0) {
+            report.incomplete_data = true;
+            report.read_errors.push_back("Art.12: failed to read " + std::to_string(read_errors)
+                + " of " + std::to_string(inference_log_files.size()) + " inference log files");
+        }
 
         report.content = format_article12_json(records, opts, report);
         return report;
@@ -171,6 +177,7 @@ public:
         std::vector<InferenceRecord> records;
         bool        chain_ok = true;
         std::string chain_id;
+        int         read_errors = 0;
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
@@ -187,7 +194,7 @@ public:
                 if (meta) chain_id = meta->chain_id;
             }
             auto all = rdr.read_all();
-            if (!all) continue;
+            if (!all) { ++read_errors; continue; }
             for (auto& rec : *all)
                 if (rec.timestamp_ns >= opts.start_ns &&
                     rec.timestamp_ns <= opts.end_ns)
@@ -201,6 +208,11 @@ public:
         ComplianceReport report = make_report_skeleton(
             ComplianceStandard::EU_AI_ACT_ART13, opts,
             static_cast<int64_t>(records.size()), chain_ok, chain_id);
+        if (read_errors > 0) {
+            report.incomplete_data = true;
+            report.read_errors.push_back("Art.13: failed to read " + std::to_string(read_errors)
+                + " of " + std::to_string(inference_log_files.size()) + " inference log files");
+        }
 
         report.content = format_article13_json(records, opts, report);
         return report;
@@ -234,6 +246,7 @@ public:
         std::vector<DecisionRecord> dec_records;
         bool dec_chain_ok = true;
         std::string dec_chain_id;
+        int dec_read_errors = 0;
 
         for (const auto& path : decision_log_files) {
             auto rdr_result = DecisionLogReader::open(path);
@@ -250,7 +263,7 @@ public:
                 if (meta) dec_chain_id = meta->chain_id;
             }
             auto all = rdr.read_all();
-            if (!all) continue;
+            if (!all) { ++dec_read_errors; continue; }
             for (auto& rec : *all)
                 if (rec.timestamp_ns >= opts.start_ns &&
                     rec.timestamp_ns <= opts.end_ns)
@@ -261,6 +274,7 @@ public:
         std::vector<InferenceRecord> inf_records;
         bool inf_chain_ok = true;
         std::string inf_chain_id;
+        int inf_read_errors = 0;
 
         for (const auto& path : inference_log_files) {
             auto rdr_result = InferenceLogReader::open(path);
@@ -277,7 +291,7 @@ public:
                 if (meta) inf_chain_id = meta->chain_id;
             }
             auto all = rdr.read_all();
-            if (!all) continue;
+            if (!all) { ++inf_read_errors; continue; }
             for (auto& rec : *all)
                 if (rec.timestamp_ns >= opts.start_ns &&
                     rec.timestamp_ns <= opts.end_ns)
@@ -309,6 +323,16 @@ public:
         ComplianceReport report = make_report_skeleton(
             ComplianceStandard::EU_AI_ACT_ART19, opts, total, chain_ok,
             dec_chain_id.empty() ? inf_chain_id : dec_chain_id);
+        if (dec_read_errors > 0) {
+            report.incomplete_data = true;
+            report.read_errors.push_back("Art.19: failed to read " + std::to_string(dec_read_errors)
+                + " of " + std::to_string(decision_log_files.size()) + " decision log files");
+        }
+        if (inf_read_errors > 0) {
+            report.incomplete_data = true;
+            report.read_errors.push_back("Art.19: failed to read " + std::to_string(inf_read_errors)
+                + " of " + std::to_string(inference_log_files.size()) + " inference log files");
+        }
 
         report.content = format_article19_json(
             dec_records, inf_records, opts, report,
@@ -553,7 +577,7 @@ private:
             o += ind2 + "\"level\":" + sp + std::to_string(opts.risk_level) + "," + nl;
             const char* risk_labels[] = {"","minimal","limited","high","unacceptable"};
             o += ind2 + "\"label\":" + sp + "\""
-               + std::string(opts.risk_level <= 4 ? risk_labels[opts.risk_level] : "unknown")
+               + std::string((opts.risk_level >= 0 && opts.risk_level <= 4) ? risk_labels[opts.risk_level] : "unknown")
                + "\"" + nl;
             o += ind + "}," + nl;
         }

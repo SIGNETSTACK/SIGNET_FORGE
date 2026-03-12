@@ -764,11 +764,11 @@ public:
     /// @see read_row_group(), read_columns()
     expected<std::vector<std::vector<std::string>>> read_all() {
         size_t num_cols = schema_.num_columns();
-        if (metadata_.num_rows < 0) metadata_.num_rows = 0;
-        if (static_cast<uint64_t>(metadata_.num_rows) > 1024ULL * 1024 * 1024)
+        int64_t safe_rows = (metadata_.num_rows < 0) ? 0 : metadata_.num_rows;
+        if (static_cast<uint64_t>(safe_rows) > 1024ULL * 1024 * 1024)
             return Error{ErrorCode::INVALID_ARGUMENT, "num_rows exceeds 1 billion limit"};
         std::vector<std::vector<std::string>> rows;
-        rows.reserve(static_cast<size_t>(metadata_.num_rows));
+        rows.reserve(static_cast<size_t>(safe_rows));
 
         for (size_t rg = 0; rg < metadata_.row_groups.size(); ++rg) {
             auto cols_result = read_row_group(rg);
@@ -1155,9 +1155,18 @@ private:
             uint32_t expected_crc = static_cast<uint32_t>(*page_header.crc);
             uint32_t computed_crc = detail_reader::crc32(page_data, page_data_size);
             if (computed_crc != expected_crc) {
-                fprintf(stderr, "[SIGNET WARNING] Page CRC-32 mismatch at offset %lld: "
-                        "expected 0x%08X, computed 0x%08X — data may be corrupt\n",
-                        static_cast<long long>(offset), expected_crc, computed_crc);
+                return Error{ErrorCode::CORRUPT_PAGE,
+                             "Page CRC-32 mismatch at offset "
+                             + std::to_string(offset) + ": expected 0x"
+                             + ([&]{
+                                    char buf[9]; std::snprintf(buf, sizeof(buf), "%08X", expected_crc);
+                                    return std::string(buf);
+                                })()
+                             + ", computed 0x"
+                             + ([&]{
+                                    char buf[9]; std::snprintf(buf, sizeof(buf), "%08X", computed_crc);
+                                    return std::string(buf);
+                                })()};
             }
         }
 
@@ -1306,9 +1315,18 @@ private:
             uint32_t expected_crc = static_cast<uint32_t>(*ph.crc);
             uint32_t computed_crc = detail_reader::crc32(pdata, pdata_size);
             if (computed_crc != expected_crc) {
-                fprintf(stderr, "[SIGNET WARNING] Page CRC-32 mismatch at offset %lld: "
-                        "expected 0x%08X, computed 0x%08X — data may be corrupt\n",
-                        static_cast<long long>(offset), expected_crc, computed_crc);
+                return Error{ErrorCode::CORRUPT_PAGE,
+                             "Page CRC-32 mismatch at offset "
+                             + std::to_string(offset) + ": expected 0x"
+                             + ([&]{
+                                    char buf[9]; std::snprintf(buf, sizeof(buf), "%08X", expected_crc);
+                                    return std::string(buf);
+                                })()
+                             + ", computed 0x"
+                             + ([&]{
+                                    char buf[9]; std::snprintf(buf, sizeof(buf), "%08X", computed_crc);
+                                    return std::string(buf);
+                                })()};
             }
         }
 

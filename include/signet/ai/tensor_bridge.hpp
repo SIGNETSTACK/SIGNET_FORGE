@@ -238,8 +238,11 @@ public:
     }
 
     /// Total byte size of the tensor data (num_elements * element_size).
+    /// Returns 0 if num_elements() is non-positive (empty or error shape).
     [[nodiscard]] size_t byte_size() const noexcept {
-        return static_cast<size_t>(num_elements()) * element_size();
+        const int64_t n = num_elements();
+        if (n <= 0) return 0;
+        return static_cast<size_t>(n) * element_size();
     }
 
     /// Effective stride in bytes along the first dimension.

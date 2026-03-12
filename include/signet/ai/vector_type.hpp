@@ -260,13 +260,15 @@ public:
     }
 
     /// Add a batch of vectors (num_vectors vectors, each `dimension` elements, row-major).
-    inline void add_batch(const float* data, size_t num_vectors) {
+    /// @return true on success, false on overflow (batch rejected entirely).
+    inline bool add_batch(const float* data, size_t num_vectors) {
         const size_t dim = spec_.dimension;
-        // Overflow check: num_vectors * dim must not overflow size_t
-        if (num_vectors > 0 && dim > 0 && num_vectors > SIZE_MAX / dim) return;
+        if (dim == 0 || num_vectors == 0) return true;
+        if (num_vectors > SIZE_MAX / dim) return false;
         for (size_t i = 0; i < num_vectors; ++i) {
             add(data + i * dim);
         }
+        return true;
     }
 
     /// Flush the buffered vectors and return the encoded page bytes.

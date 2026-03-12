@@ -221,6 +221,10 @@ public:
     ///
     /// @param other  The statistics to merge into this instance.
     void merge(const ColumnStatistics& other) {
+        // Guard: merging statistics of different physical types is a logic error
+        if (has_min_max_ && other.has_min_max_ && type_ != other.type_) {
+            return; // silently skip — caller must ensure same type
+        }
         null_count_ += other.null_count_;
         num_values_ += other.num_values_;
 

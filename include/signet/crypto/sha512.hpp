@@ -108,7 +108,8 @@ inline std::array<uint8_t, 64> sha512(const uint8_t* data, size_t size) {
     // Padding
     uint8_t last[256] = {};
     size_t rem = size % 128;
-    std::memcpy(last, data + full_blocks * 128, rem);
+    if (rem > 0)
+        std::memcpy(last, data + full_blocks * 128, rem);
     last[rem] = 0x80;
 
     size_t pad_blocks = (rem < 112) ? 1 : 2;

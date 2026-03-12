@@ -676,8 +676,8 @@ TEST_CASE("BSS float preserves NaN/Inf/-0.0 (bit-exact)", "[encoding][bss][vecto
     float neg_inf  = -std::numeric_limits<float>::infinity();
     float nan_val  = std::numeric_limits<float>::quiet_NaN();
     float denorm   = std::numeric_limits<float>::denorm_min();
-    float max_val  = std::numeric_limits<float>::max();
-    float min_val  = std::numeric_limits<float>::min();
+    float max_val  = (std::numeric_limits<float>::max)();
+    float min_val  = (std::numeric_limits<float>::min)();
 
     std::vector<float> values = {pos_zero, neg_zero, pos_inf, neg_inf,
                                   nan_val, denorm, max_val, min_val};
@@ -704,8 +704,8 @@ TEST_CASE("BSS double preserves NaN/Inf/-0.0 (bit-exact)", "[encoding][bss][vect
     double neg_inf  = -std::numeric_limits<double>::infinity();
     double nan_val  = std::numeric_limits<double>::quiet_NaN();
     double denorm   = std::numeric_limits<double>::denorm_min();
-    double max_val  = std::numeric_limits<double>::max();
-    double min_val  = std::numeric_limits<double>::min();
+    double max_val  = (std::numeric_limits<double>::max)();
+    double min_val  = (std::numeric_limits<double>::min)();
 
     std::vector<double> values = {pos_zero, neg_zero, pos_inf, neg_inf,
                                    nan_val, denorm, max_val, min_val};

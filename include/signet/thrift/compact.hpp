@@ -71,6 +71,9 @@ struct ListHeader {
 /// @see signet::forge::thrift (types.hpp) for Parquet-specific struct types
 class CompactEncoder {
 public:
+    /// Maximum string/binary field size (matches CompactDecoder::MAX_STRING_BYTES).
+    static constexpr size_t MAX_STRING_BYTES = 64u * 1024u * 1024u;  ///< 64 MB
+
     /// Default constructor. Initializes field-ID stack with a single zero entry.
     CompactEncoder() { last_field_ids_.push(0); }
 
@@ -151,13 +154,23 @@ public:
     }
 
     /// Write a string as varint-length-prefixed UTF-8 bytes.
+    /// @throws std::overflow_error if val.size() > MAX_STRING_BYTES.
     void write_string(const std::string& val) {
+        if (val.size() > MAX_STRING_BYTES) {
+            throw std::overflow_error("CompactEncoder::write_string: length "
+                + std::to_string(val.size()) + " exceeds MAX_STRING_BYTES");
+        }
         write_varint32(static_cast<uint32_t>(val.size()));
         buf_.insert(buf_.end(), val.begin(), val.end());
     }
 
     /// Write raw binary data as varint-length-prefixed bytes.
+    /// @throws std::overflow_error if len > MAX_STRING_BYTES.
     void write_binary(const uint8_t* data, size_t len) {
+        if (len > MAX_STRING_BYTES) {
+            throw std::overflow_error("CompactEncoder::write_binary: length "
+                + std::to_string(len) + " exceeds MAX_STRING_BYTES");
+        }
         write_varint32(static_cast<uint32_t>(len));
         buf_.insert(buf_.end(), data, data + len);
     }

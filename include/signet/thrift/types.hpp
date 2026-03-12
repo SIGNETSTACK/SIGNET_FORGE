@@ -811,6 +811,9 @@ struct FileMetaData {
                 }
                 case 5: {
                     auto [elem_type, count] = dec.read_list_header();
+                    if (count < 0 || static_cast<uint32_t>(count) > 1'000'000u) {
+                        break; // reject unreasonable metadata list size
+                    }
                     key_value_metadata.emplace();
                     key_value_metadata->resize(static_cast<size_t>(count));
                     for (int32_t i = 0; i < count; ++i) {

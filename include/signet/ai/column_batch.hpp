@@ -177,7 +177,8 @@ public:
     [[nodiscard]] std::span<const double> column_span(size_t col_idx) const {
         if (col_idx >= columns_.size())
             return {};
-        return {columns_[col_idx].data(), num_rows_};
+        return {columns_[col_idx].data(),
+                std::min(num_rows_, columns_[col_idx].size())};
     }
 
     // -------------------------------------------------------------------------
@@ -236,8 +237,11 @@ public:
 
         // CWE-190: Integer Overflow or Wraparound — check row count fits in
         // uint32_t before narrowing cast into the serialization header.
-        if (num_rows_ > static_cast<size_t>(UINT32_MAX))
-            return StreamRecord{}; // silently return empty record for oversized batch
+        if (num_rows_ > static_cast<size_t>(UINT32_MAX)) {
+            throw std::overflow_error(
+                "ColumnBatch::to_stream_record: num_rows exceeds UINT32_MAX ("
+                + std::to_string(num_rows_) + ") — batch too large for WAL serialization");
+        }
         const auto ncols = static_cast<uint32_t>(schema_.size());
         const auto nrows = static_cast<uint32_t>(num_rows_);
 
@@ -250,11 +254,15 @@ public:
         {
             const size_t ncols_sz = static_cast<size_t>(ncols);
             const size_t nrows_sz = static_cast<size_t>(nrows);
-            if (ncols_sz > 0 && nrows_sz > SIZE_MAX / ncols_sz)
-                return StreamRecord{}; // overflow
+            if (ncols_sz > 0 && nrows_sz > SIZE_MAX / ncols_sz) {
+                throw std::overflow_error(
+                    "ColumnBatch::to_stream_record: ncols*nrows overflows size_t");
+            }
             const size_t cells = ncols_sz * nrows_sz;
-            if (cells > SIZE_MAX / sizeof(double))
-                return StreamRecord{}; // overflow
+            if (cells > SIZE_MAX / sizeof(double)) {
+                throw std::overflow_error(
+                    "ColumnBatch::to_stream_record: payload size overflows size_t");
+            }
             payload_bytes += sizeof(double) * cells;
         }
 

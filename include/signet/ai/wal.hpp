@@ -242,12 +242,17 @@ public:
     WalWriter(const WalWriter&)            = delete;
     WalWriter& operator=(const WalWriter&) = delete;
     WalWriter(WalWriter&& o) noexcept
-        : file_(o.file_), path_(std::move(o.path_)),
-          next_seq_(o.next_seq_), bytes_written_(o.bytes_written_),
-          opts_(o.opts_), closed_(o.closed_)
+        : file_(nullptr), closed_(true)
     {
-        o.file_   = nullptr;
-        o.closed_ = true;
+        std::lock_guard<std::mutex> lk(o.mu_);
+        file_          = o.file_;
+        path_          = std::move(o.path_);
+        next_seq_      = o.next_seq_;
+        bytes_written_ = o.bytes_written_;
+        opts_          = o.opts_;
+        closed_        = o.closed_;
+        o.file_        = nullptr;
+        o.closed_      = true;
     }
     WalWriter& operator=(WalWriter&&) = delete;
 

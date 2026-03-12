@@ -498,15 +498,29 @@ public:
         }
 
         TensorShape shape;
-        shape.dims.assign(dl.shape, dl.shape + dl.ndim);
+        shape.dims.reserve(static_cast<size_t>(dl.ndim));
 
         // CWE-190: Integer Overflow — validate byte_offset is within tensor data bounds
         const size_t elem_size = tensor_element_size(*dtype_result);
         size_t total_elements = 1;
         for (int32_t d = 0; d < dl.ndim; ++d) {
-            total_elements *= static_cast<size_t>(dl.shape[d]);
+            if (dl.shape[d] <= 0) {
+                return Error{ErrorCode::INVALID_ARGUMENT,
+                             "DLTensor shape dimension must be positive"};
+            }
+            const size_t dim_val = static_cast<size_t>(dl.shape[d]);
+            if (total_elements > SIZE_MAX / dim_val) {
+                return Error{ErrorCode::INVALID_ARGUMENT,
+                             "DLTensor shape product overflows size_t"};
+            }
+            total_elements *= dim_val;
+            shape.dims.push_back(dl.shape[d]);
         }
-        // CWE-190: Integer Overflow — num_elements*elem_size checked below
+        // CWE-190: Integer Overflow — num_elements*elem_size overflow check
+        if (elem_size > 0 && total_elements > SIZE_MAX / elem_size) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "DLTensor total byte size overflows size_t"};
+        }
         const size_t total_size = total_elements * elem_size;
         if (dl.byte_offset > total_size) {
             return Error{ErrorCode::INVALID_ARGUMENT,

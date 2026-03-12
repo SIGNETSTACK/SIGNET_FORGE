@@ -120,8 +120,7 @@ public:
             total_rows_       = o.total_rows_;
             failed_file_count_= o.failed_file_count_;
             readers_          = std::move(o.readers_);
-            std::lock_guard<std::mutex> lk(rg_cache_mutex_);
-            std::lock_guard<std::mutex> lk2(o.rg_cache_mutex_);
+            std::scoped_lock lk(rg_cache_mutex_, o.rg_cache_mutex_);
             rg_cache_         = std::move(o.rg_cache_);
         }
         return *this;

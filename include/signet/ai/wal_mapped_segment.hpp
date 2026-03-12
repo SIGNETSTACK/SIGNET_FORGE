@@ -366,14 +366,17 @@ public:
         size_ = 0;
     }
 
-    /// Pre-fault every 4 KB page in the mapping by touching one byte per page.
+    /// Pre-fault every 4 KB page in the mapping by reading one byte per page.
     ///
+    /// Uses read-only touch to avoid corrupting data on re-opened segments.
     /// Call from a background thread only -- this can be expensive for large segments.
     void prefault() noexcept {
         if (!ptr_) return;
-        volatile uint8_t* p = ptr_;
+        volatile const uint8_t* p = ptr_;
+        volatile uint8_t sink = 0;
         for (size_t i = 0; i < size_; i += 4096)
-            p[i] = 0;
+            sink = p[i];
+        (void)sink;
         std::atomic_thread_fence(std::memory_order_release);
     }
 
@@ -880,9 +883,9 @@ private:
         RingSlot& new_slot    = *ring_[static_cast<size_t>(standby_idx)];
         new_slot.first_seq    = static_cast<uint64_t>(next_seq_.load(std::memory_order_acquire));
         new_slot.write_offset = 0;
+        init_slot_header(new_slot);
         new_slot.state.store(SlotState::ACTIVE, std::memory_order_release);
         active_idx_.store(static_cast<size_t>(standby_idx), std::memory_order_release);
-        init_slot_header(new_slot);
 
         bg_cv_.notify_one();
         return {};
@@ -966,9 +969,12 @@ private:
                             expected_s, SlotState::ALLOCATING,
                             std::memory_order_acq_rel,
                             std::memory_order_relaxed)) {
-                        (void)allocate_slot(slot, new_id, /*skip_prefault=*/false);
-                        // If allocation fails (e.g. disk full), slot stays FREE
-                        // and rotate() fallback will handle it
+                        auto alloc_result = allocate_slot(slot, new_id, /*skip_prefault=*/false);
+                        if (!alloc_result) {
+                            fprintf(stderr, "[SIGNET ERROR] WalMmapWriter bg: allocate_slot failed: %s\n",
+                                    alloc_result.error().message.c_str());
+                            // Slot transitions back to FREE so rotate() can retry
+                        }
                     }
                 }
 

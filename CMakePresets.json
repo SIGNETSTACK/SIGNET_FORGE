@@ -176,6 +176,11 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
                 "SIGNET_BUILD_TESTS": "ON",
+                "SIGNET_ENABLE_COMMERCIAL": "ON",
+                "SIGNET_ENABLE_CRYPTO": "ON",
+                "SIGNET_ENABLE_ZSTD": "ON",
+                "SIGNET_ENABLE_LZ4": "ON",
+                "SIGNET_ENABLE_GZIP": "ON",
                 "CMAKE_CXX_FLAGS": "-fprofile-instr-generate -fcoverage-mapping",
                 "CMAKE_EXE_LINKER_FLAGS": "-fprofile-instr-generate"
             }

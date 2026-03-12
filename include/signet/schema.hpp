@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <vector>
 
 // Windows <sal.h> defines OPTIONAL as a SAL annotation macro — undefine.
@@ -300,6 +301,15 @@ private:
 // SchemaBuilder::build() — defined after Schema is complete
 // ---------------------------------------------------------------------------
 inline Schema SchemaBuilder::build() {
+    // Detect duplicate column names at build time
+    std::unordered_set<std::string> seen;
+    seen.reserve(columns_.size());
+    for (const auto& cd : columns_) {
+        if (!seen.insert(cd.name).second) {
+            throw std::invalid_argument(
+                "Schema::build: duplicate column name '" + cd.name + "'");
+        }
+    }
     return Schema(std::move(name_), std::move(columns_));
 }
 

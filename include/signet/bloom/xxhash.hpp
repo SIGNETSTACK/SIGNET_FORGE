@@ -50,7 +50,8 @@ static constexpr uint64_t PRIME5 = 0x27D4EB2F165667C5ULL; ///< Prime constant 5.
 /// @param r  Number of bit positions to rotate (0-63).
 /// @return Rotated value.
 inline constexpr uint64_t rotl64(uint64_t v, int r) {
-    return (v << r) | (v >> (64 - r));
+    r &= 63; // guard against UB when r==0 or r>=64
+    return (v << r) | (v >> ((64 - r) & 63));
 }
 
 /// Read a little-endian uint64_t from potentially unaligned memory.

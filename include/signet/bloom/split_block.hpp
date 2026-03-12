@@ -379,14 +379,14 @@ private:
         std::memcpy(data_.data() + block_idx * kBytesPerBlock + word_idx * sizeof(uint32_t), &val, sizeof(uint32_t));
     }
 
-    /// Get a mutable pointer to the 8 uint32_t words of block @p idx.
-    /// @note Provided for backward compatibility; prefer block_read/block_write.
+    /// @deprecated Use block_read/block_write instead — strict aliasing safe.
+    [[deprecated("use block_read/block_write")]]
     uint32_t* block_ptr(size_t idx) {
         return reinterpret_cast<uint32_t*>(data_.data() + idx * kBytesPerBlock);
     }
 
-    /// Get a const pointer to the 8 uint32_t words of block @p idx.
-    /// @note Provided for backward compatibility; prefer block_read/block_write.
+    /// @deprecated Use block_read/block_write instead — strict aliasing safe.
+    [[deprecated("use block_read/block_write")]]
     const uint32_t* block_ptr(size_t idx) const {
         return reinterpret_cast<const uint32_t*>(
             data_.data() + idx * kBytesPerBlock);

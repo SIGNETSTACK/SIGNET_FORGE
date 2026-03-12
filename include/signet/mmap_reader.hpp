@@ -634,7 +634,14 @@ public:
     ///
     /// @return A 2D vector [row][column] of string values, or an Error.
     expected<std::vector<std::vector<std::string>>> read_all() {
+        static constexpr size_t MAX_READ_ALL_ROWS = 100'000'000; // 100M row safety cap
         size_t num_cols = schema_.num_columns();
+        if (metadata_.num_rows < 0 ||
+            static_cast<size_t>(metadata_.num_rows) > MAX_READ_ALL_ROWS) {
+            return Error{ErrorCode::INVALID_ARGUMENT,
+                         "read_all: num_rows exceeds safety cap ("
+                         + std::to_string(MAX_READ_ALL_ROWS) + ")"};
+        }
         std::vector<std::vector<std::string>> rows;
         rows.reserve(static_cast<size_t>(metadata_.num_rows));
 

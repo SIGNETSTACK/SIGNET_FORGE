@@ -337,9 +337,12 @@ private:
         return true;
     }
 
+    static constexpr uint32_t MAX_STRING_LEN = 16u * 1024u * 1024u; // 16 MB
+
     static inline bool read_string(const uint8_t* data, size_t size, size_t& offset, std::string& out) {
         uint32_t len = 0;
         if (!read_le32_u(data, size, offset, len)) return false;
+        if (len > MAX_STRING_LEN) return false;
         if (offset + len > size) return false;
         out.assign(reinterpret_cast<const char*>(data + offset), len);
         offset += len;

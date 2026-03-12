@@ -115,9 +115,10 @@ inline int64_t now_ns() {
     // R-5: system_clock provides UTC traceability per MiFID II RTS 25 Art.2.
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                   std::chrono::system_clock::now().time_since_epoch()).count();
-    int64_t expected = last_ns.load(std::memory_order_relaxed);
+    int64_t expected = last_ns.load(std::memory_order_acquire);
     while (ns <= expected) { ns = expected + 1; }
-    while (!last_ns.compare_exchange_weak(expected, ns, std::memory_order_relaxed)) {
+    while (!last_ns.compare_exchange_weak(expected, ns,
+                std::memory_order_release, std::memory_order_acquire)) {
         if (ns <= expected) ns = expected + 1;
     }
     return ns;

@@ -179,7 +179,8 @@ inline std::array<uint8_t, 32> sha256(const uint8_t* data, size_t size) {
     uint8_t final_block[128] = {}; // At most 2 blocks needed
 
     // Copy remaining bytes
-    std::memcpy(final_block, data + full_blocks * 64, remainder);
+    if (remainder > 0)
+        std::memcpy(final_block, data + full_blocks * 64, remainder);
 
     // Append the 1-bit (0x80 byte)
     final_block[remainder] = 0x80;

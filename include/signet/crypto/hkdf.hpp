@@ -80,7 +80,17 @@ inline std::array<uint8_t, 32> hmac_sha256(
     outer_msg.reserve(SHA256_BLOCK_SIZE + SHA256_HASH_SIZE);
     outer_msg.insert(outer_msg.end(), outer_buf, outer_buf + SHA256_BLOCK_SIZE);
     outer_msg.insert(outer_msg.end(), inner_hash.begin(), inner_hash.end());
-    return detail::sha256::sha256(outer_msg.data(), outer_msg.size());
+    auto result = detail::sha256::sha256(outer_msg.data(), outer_msg.size());
+
+    // Zero intermediate key material (CWE-316: cleartext storage in memory)
+    volatile uint8_t* vp = k_pad;
+    for (size_t i = 0; i < SHA256_BLOCK_SIZE; ++i) vp[i] = 0;
+    vp = inner_buf;
+    for (size_t i = 0; i < SHA256_BLOCK_SIZE; ++i) vp[i] = 0;
+    vp = outer_buf;
+    for (size_t i = 0; i < SHA256_BLOCK_SIZE; ++i) vp[i] = 0;
+
+    return result;
 }
 
 } // namespace detail::hkdf
