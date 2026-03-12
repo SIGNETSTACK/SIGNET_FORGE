@@ -530,6 +530,72 @@ class FileDecryptor {
 
 ---
 
+## SHA-256 / SHA-512 (FIPS 180-4)
+
+**Headers:** `include/signet/crypto/sha256.hpp`, `include/signet/crypto/sha512.hpp`
+
+**License:** Apache 2.0 (Tier 1) — NIST public standard, no proprietary content. Always available, no build flags required.
+
+Standalone implementations of FIPS 180-4 hash functions, extracted into their own headers for clean tier separation. Tier 1 consumers (`hkdf.hpp`, `audit_chain.hpp`, `row_lineage.hpp`) use SHA-256 without depending on any commercial or proprietary header.
+
+### SHA-256
+
+```cpp
+namespace signet::forge::crypto::detail::sha256 {
+    // Hash arbitrary-length input
+    std::array<uint8_t, 32> sha256(const uint8_t* data, size_t len);
+    std::array<uint8_t, 32> sha256(const std::vector<uint8_t>& data);
+
+    // Domain-separated concatenation (NIST SP 800-227)
+    std::array<uint8_t, 32> sha256_concat(
+        const uint8_t* a, size_t a_len,
+        const uint8_t* b, size_t b_len);
+}
+```
+
+### SHA-512
+
+```cpp
+namespace signet::forge::crypto::detail::sha512 {
+    // Hash arbitrary-length input
+    std::array<uint8_t, 64> sha512(const uint8_t* data, size_t len);
+
+    // Concatenated hashes: SHA-512(a || b), SHA-512(a || b || c)
+    std::array<uint8_t, 64> sha512_two(
+        const uint8_t* a, size_t a_len,
+        const uint8_t* b, size_t b_len);
+    std::array<uint8_t, 64> sha512_three(
+        const uint8_t* a, size_t a_len,
+        const uint8_t* b, size_t b_len,
+        const uint8_t* c, size_t c_len);
+}
+```
+
+**Consumers:** `hkdf.hpp` (HMAC-SHA256 for key derivation), `audit_chain.hpp` (tamper-evident hash chain), `row_lineage.hpp` (row lineage tracking), `post_quantum.hpp` and `ed25519.hpp` (backward-compatible `using` declarations).
+
+### HKDF (RFC 5869)
+
+**Header:** `include/signet/crypto/hkdf.hpp`
+
+HMAC-based Extract-and-Expand Key Derivation Function. Uses SHA-256 via `sha256.hpp` (Tier 1 dependency — no commercial header required).
+
+```cpp
+namespace signet::forge::crypto {
+    // Extract: derive a pseudorandom key from input keying material
+    std::array<uint8_t, 32> hkdf_extract(
+        const uint8_t* salt, size_t salt_len,
+        const uint8_t* ikm, size_t ikm_len);
+
+    // Expand: derive output keying material from a PRK
+    std::vector<uint8_t> hkdf_expand(
+        const uint8_t* prk, size_t prk_len,
+        const uint8_t* info, size_t info_len,
+        size_t output_len);
+}
+```
+
+---
+
 ## Post-Quantum Cryptography
 
 **Header:** `include/signet/crypto/post_quantum.hpp`

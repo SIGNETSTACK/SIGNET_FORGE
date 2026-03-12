@@ -47,7 +47,7 @@ We follow a **90-day coordinated disclosure** policy. If we are unable to produc
 - WASM module (`wasm/signet_wasm.cpp`)
 - CLI tool (`tools/signet_cli.cpp`)
 - Build system (CMakeLists.txt, CMakePresets.json) — supply-chain concerns
-- Encryption implementation (`crypto/aes_core.hpp`, `aes_gcm.hpp`, `aes_ctr.hpp`, `pme.hpp`, `post_quantum.hpp`)
+- Encryption implementation (`crypto/sha256.hpp`, `sha512.hpp`, `aes_core.hpp`, `aes_gcm.hpp`, `aes_ctr.hpp`, `hkdf.hpp`, `pme.hpp`, `post_quantum.hpp`)
 - WAL data integrity (`ai/wal.hpp`, `ai/wal_mapped_segment.hpp`)
 - Audit chain integrity (`ai/audit_chain.hpp`, `ai/decision_log.hpp`, `ai/inference_log.hpp`)
 
@@ -94,7 +94,7 @@ The following hard caps are enforced to prevent resource exhaustion from malform
 
 ## Security Hardening
 
-Ten security audit passes have been completed, covering **458 confirmed vulnerabilities** — all remediated, zero open findings:
+Eleven security audit passes have been completed, covering **479 confirmed vulnerabilities** — all remediated, zero open findings:
 
 **Pass #1** (6 vulnerabilities):
 - BYTE_STREAM_SPLIT decode out-of-bounds reads
@@ -157,7 +157,7 @@ Final verification pass: OS command injection in examples (CWE-78), Python use-a
 **Enterprise Compliance Gaps** (92 gaps — all resolved):
 12 gap-fix passes covering FIPS 140-3, EU AI Act, MiFID II RTS 24/RTS 6, GDPR, DORA.
 
-Run hardening tests: `ctest -L hardening` — covers all passes. Full test suite: 618 unit tests (100% passing) across 12 enterprise compliance gap-fix passes + 10 security audit passes.
+Run hardening tests: `ctest -L hardening` — covers all passes. Full test suite: 779 unit tests (100% passing) across 12 enterprise compliance gap-fix passes + 11 security audit passes.
 
 ## Credit
 

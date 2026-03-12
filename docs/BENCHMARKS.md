@@ -340,7 +340,7 @@ Signet's I/O profile differs from Arrow and DuckDB because Signet is a write-fir
 |--------|-----------------|----------------|--------|-------|
 | **Signet** (raw encoding, in-memory) | ~2–3 GB/s | ~2–3 GB/s | Measured (bench_encodings.cpp) | Encoding only, no I/O |
 | **Signet** (full file write, 10K rows) | ~59–67 MB/s | ~100 MB/s | Measured (bench_write/read.cpp) | Includes file I/O + Thrift framing |
-| **Signet** (enterprise, 10M rows) | ~1.27M rows/s | ~624K rows/s | Measured (enterprise W4/R9) | Real tick data, 9-column schema |
+| **Signet** (enterprise, 10M rows) | ~1.13M rows/s | ~597K rows/s | Measured (enterprise W4/R9, 100s) | Real tick data, 9-column schema |
 | Apache Arrow C++ (PyArrow) | — | ~4 GB/s (4 threads, NVMe) | [Wes McKinney blog](https://wesmckinney.com/blog/python-parquet-multithreading/) | SIMD-vectorized; IPC format faster |
 | DuckDB Parquet reader | — | Competitive with Arrow | [DuckDB blog](https://duckdb.org/2024/06/26/benchmarks-over-time) | No absolute MB/s published |
 | Apache Spark (cluster, CERN) | — | ~1.2–2.4 GB/s | [CERN/Canali blog](https://db-blog.web.cern.ch/blog/luca-canali/2017-06-diving-spark-and-parquet-workloads-example) | 185 GB scan; cluster, not local |
@@ -356,84 +356,84 @@ Signet is not competing with Arrow for bulk analytical read throughput. Arrow's 
 
 ## Enterprise Benchmark Results (Real Tick Data)
 
-All numbers below are from the enterprise benchmark suite (`signet_enterprise_bench`) running against real financial tick data (9-column schema: timestamp, symbol, exchange, bid/ask price/qty, spread, mid). Three configurations were tested: Base (37 cases), Commercial+Compression (56 cases), and Full with PQ (59 cases). Full per-case tables: `Benchmarking_Protocols/results/COMPARISON.md`.
+All numbers below are from the enterprise benchmark suite (`signet_enterprise_bench`, 100 samples, 100ms warmup) running against real financial tick data (9-column schema: timestamp, symbol, exchange, bid/ask price/qty, spread, mid). Three configurations were tested: Base (37 cases), Commercial+Compression (56 cases), and Full with PQ (59 cases). Full per-case tables: `Benchmarking_Protocols/results/COMPARISON.md` and `Benchmarking_Protocols/results/BENCHMARK_COMPARISON_SHA_EXTRACTION.md`.
 
 ### Write Throughput at Scale
 
 | Scale | Rows | Mean | Per-row | Rows/s |
 |-------|------|------|---------|--------|
-| W1 | 1K | 1.34 ms | 1.34 μs | 747K |
-| W2 | 100K | 98.5 ms | 0.99 μs | 1.02M |
-| W3 | 1M | 857 ms | 0.86 μs | 1.17M |
-| W4 | 10M | 7.89 s | 0.79 μs | 1.27M |
+| W1 | 1K | 1.609 ms | 1.61 μs | 621K |
+| W2 | 100K | 102.3 ms | 1.02 μs | 977K |
+| W3 | 1M | 966 ms | 0.97 μs | 1.04M |
+| W4 | 10M | 8.83 s | 0.88 μs | 1.13M |
 
 Throughput improves with scale as per-file metadata overhead amortizes.
 
-### Compression Codec Comparison (1M rows, measured)
+### Compression Codec Comparison (1M rows, 100 samples)
 
 | Codec | Write Time | vs Uncompressed | Dependency |
 |-------|-----------|-----------------|------------|
-| **LZ4** | **695 ms** | **19% faster** | liblz4 |
-| Gzip L6 | 698 ms | 18% faster | zlib |
-| ZSTD L3 | 710 ms | 17% faster | libzstd |
-| Uncompressed | 857 ms | baseline | None |
-| Snappy | 931 ms | 9% slower | None (bundled) |
+| **ZSTD L3** | **662 ms** | **31% faster** | libzstd |
+| **LZ4** | **705 ms** | **27% faster** | liblz4 |
+| Gzip L6 | 706 ms | 27% faster | zlib |
+| Snappy | 898 ms | 7% faster | None (bundled) |
+| Uncompressed | 966 ms | baseline | None |
 
-LZ4, ZSTD, and Gzip all **beat uncompressed** writes for financial tick data — the reduced I/O volume more than compensates for CPU time. Snappy is the only codec slower than uncompressed, reflecting its priority on decompression speed over compression ratio.
+All codecs **beat uncompressed** writes for financial tick data — the reduced I/O volume more than compensates for CPU time. ZSTD provides the best write-time improvement at 31% faster than uncompressed, with superior compression ratio.
 
-### Encryption and Post-Quantum Overhead (measured)
+### Encryption and Post-Quantum Overhead (100 samples)
 
 | Comparison | Metric | Overhead |
 |------------|--------|----------|
-| W11 (PME) vs W9 (plain) | 1M write | < 0.2% |
-| W12 (PQ) vs W9 (plain) | 1M write | < 0.1% |
-| W14 (PME) vs W13 (plain) | 10M write | < 0.4% |
-| R7 (PME) vs R3 (plain) | 1M read | < 0.2% |
-| R8 (PQ) vs R3 (plain) | 1M read | < 0.2% |
-| RT3 (PME) vs RT2 (plain) | 1M roundtrip | < 0.5% |
-| RT4 (PQ) vs RT2 (plain) | 1M roundtrip | < 0.5% |
-| WAL7 (enc) vs WAL1 (plain) | 100K WAL | < 1% |
+| W11 (PME) vs W9 (plain) | 1M write | < 0.7% |
+| W12 (PQ) vs W9 (plain) | 1M write | < 1.0% |
+| W14 (PME) vs W13 (plain) | 10M write | < 1.1% |
+| R7 (PME) vs R3 (plain) | 1M read | < 3.0% |
+| R8 (PQ) vs R3 (plain) | 1M read | < 2.7% |
+| RT3 (PME) vs RT2 (plain) | 1M roundtrip | < 0.4% |
+| RT4 (PQ) vs RT2 (plain) | 1M roundtrip | < 0.6% |
 
-Both AES-256-GCM and Kyber-768 KEM encryption add unmeasurably small overhead at any scale tested (1K–10M rows). The one-time key exchange cost (~80 μs PQ, ~10 μs PME) amortizes to near-zero.
+Both AES-256-GCM and Kyber-768 KEM encryption add negligible overhead at any scale tested (1K–10M rows). The one-time key exchange cost (~80 μs PQ, ~10 μs PME) amortizes to near-zero.
 
-### Compliance Reporting (measured, 10K decision records)
+### Compliance Reporting (100 samples, 10K decision records)
 
 | Report | Format | Mean |
 |--------|--------|------|
-| MiFID II RTS 24 | JSON | 100 ms |
-| MiFID II RTS 24 | NDJSON | 96 ms |
-| MiFID II RTS 24 | CSV | 81 ms |
-| EU AI Act Art.12 | JSON | 99 ms |
-| EU AI Act Art.13 | JSON | 56 ms |
-| EU AI Act Art.19 | JSON | 115 ms |
+| MiFID II RTS 24 | JSON | 109 ms |
+| MiFID II RTS 24 | NDJSON | 86 ms |
+| MiFID II RTS 24 | CSV | 76 ms |
+| EU AI Act Art.12 | JSON | 87 ms |
+| EU AI Act Art.13 | JSON | 55 ms |
+| EU AI Act Art.19 | JSON | 48 ms |
 
-### WAL Bulk Throughput (enterprise)
+### WAL Bulk Throughput (enterprise, 100 samples)
 
 | Writer | 100K records | 1M records | Per-record (1M) |
 |--------|-------------|------------|-----------------|
-| WalWriter | 168 ms | 1.14 s | 1.14 μs |
-| WalMmapWriter | 161 ms | 403 ms | 0.40 μs |
-| WalManager | 70 ms | — | — |
+| WalMmapWriter | 124 ms | 361 ms | 0.36 μs |
+| WalManager | 73 ms | — | — |
 
-Enterprise WAL numbers measure end-to-end pipeline throughput (record construction + write + I/O), not isolated per-append latency. WalMmapWriter is **2.8x faster** than WalWriter at 1M-row scale. Compare with the micro-benchmark per-append numbers (339 ns WalWriter, ~223 ns WalMmapWriter measured) which isolate the append call.
+Enterprise WAL numbers measure end-to-end pipeline throughput (record construction + write + I/O), not isolated per-append latency. Compare with the micro-benchmark per-append numbers (339 ns WalWriter, ~223 ns WalMmapWriter measured) which isolate the append call.
 
-### AI-Native Extensions (measured)
+**Note:** WalWriter (fwrite-based) enterprise results are omitted from this table. At 100 samples, fwrite-based WAL benchmarks exhibited filesystem pressure anomalies (I/O contention from accumulated temp files across extended runs). The micro-benchmark per-append latency (339 ns) remains the authoritative WalWriter figure. See `Benchmarking_Protocols/results/BENCHMARK_COMPARISON_SHA_EXTRACTION.md` for full anomaly analysis.
+
+### AI-Native Extensions (100 samples)
 
 | Operation | Mean | Per-record |
 |-----------|------|------------|
-| DecisionLog write 10K | 122 ms | 12.2 μs |
-| InferenceLog write 10K | 124 ms | 12.4 μs |
-| Audit chain verify 10K | 31.6 ms | 3.16 μs |
-| column_view 1M doubles | 0.47 ns | — |
-| EventBus 4P×4C 100K events | 23.3 ms | 233 ns/event |
+| DecisionLog write 10K | 134 ms | 13.4 μs |
+| InferenceLog write 10K | 138 ms | 13.8 μs |
+| Audit chain verify 10K | 34.7 ms | 3.47 μs |
+| column_view 1M doubles | 0.45 ns | — |
+| EventBus 4P×4C 100K events | 23.4 ms | 234 ns/event |
 
-### Interop Bridges (measured)
+### Interop Bridges (100 samples)
 
 | Bridge | Mean | Notes |
 |--------|------|-------|
-| Arrow C Data export (1M doubles) | 148 ns | Pointer + metadata copy |
-| TensorView wrap (1M doubles) | 0.53 ns | Zero-copy shape assignment |
-| ColumnBatch 6-column tensor (1M × 6) | 32 ms | ~5.3 ms per column |
+| Arrow C Data export (1M doubles) | 197 ns | Pointer + metadata copy |
+| TensorView wrap (1M doubles) | 0.93 ns | Zero-copy shape assignment |
+| ColumnBatch 6-column tensor (1M × 6) | 35 ms | ~5.8 ms per column |
 
 ---
 

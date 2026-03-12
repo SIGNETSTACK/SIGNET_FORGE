@@ -218,7 +218,7 @@ auto conformity = *EUAIActReporter::generate_article19({log.current_file_path()}
 
 ## Performance
 
-Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 50–100 samples).
+Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 100 samples).
 
 ### Write / Read Throughput
 
@@ -243,23 +243,23 @@ Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 50–100 sampl
 | `WalMmapWriter` with rotation (amortized) | **~223 ns** | `"mmap append 32B"` (Case 7) | Pre-allocated STANDBY; rotation = atomic CAS, ~5 ns amortized |
 | fwrite vs mmap side-by-side | see above | Cases 11 & 12 | Catch2 reports all three adjacent; ratio directly visible |
 
-### Compression Comparison (1M real tick rows, enterprise suite)
+### Compression Comparison (1M real tick rows, enterprise suite, 100 samples)
 
 | Codec | Write Time | vs Uncompressed | Notes |
 |-------|-----------|-----------------|-------|
-| **LZ4** | **695 ms** | **19% faster** | Fastest codec |
-| Gzip | 698 ms | 18% faster | — |
-| ZSTD L3 | 710 ms | 17% faster | Best ratio |
-| Uncompressed | 857 ms | baseline | — |
-| Snappy | 931 ms | 9% slower | Bundled, zero-dep |
+| **ZSTD L3** | **662 ms** | **31% faster** | Best ratio |
+| **LZ4** | **705 ms** | **27% faster** | Fastest decompressor |
+| Gzip | 706 ms | 27% faster | — |
+| Snappy | 898 ms | 7% faster | Bundled, zero-dep |
+| Uncompressed | 966 ms | baseline | — |
 
-### Encryption Overhead (1M rows, measured)
+### Encryption Overhead (1M rows, 100 samples)
 
 | Mode | Write | Read | Roundtrip | Overhead |
 |------|-------|------|-----------|----------|
-| Plain (Snappy) | 1.459 s | 1.757 s | 1.717 s | — |
-| AES-256-GCM (PME) | 1.457 s | 1.748 s | 1.735 s | < 0.5% |
-| Kyber-768 KEM (PQ) | 1.459 s | 1.740 s | 1.725 s | < 0.5% |
+| Plain (Snappy) | 1.625 s | 1.862 s | 1.572 s | — |
+| AES-256-GCM (PME) | 1.614 s | 1.806 s | 1.578 s | < 0.5% |
+| Kyber-768 KEM (PQ) | 1.610 s | 1.812 s | 1.581 s | < 0.5% |
 
 ### Encoding Speed (10K values)
 
@@ -303,8 +303,10 @@ Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 50–100 sampl
        ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Encryption layer                                                     │
+│  crypto/sha256.hpp (FIPS 180-4)  crypto/sha512.hpp (FIPS 180-4)     │
 │  crypto/aes_gcm.hpp (footer)  crypto/aes_ctr.hpp (columns)           │
-│  crypto/pme.hpp (orchestrator)  crypto/post_quantum.hpp (Kyber-768)  │
+│  crypto/hkdf.hpp (RFC 5869)  crypto/pme.hpp (orchestrator)           │
+│  crypto/post_quantum.hpp (Kyber-768, X25519)                         │
 │  bloom/split_block.hpp + xxhash.hpp (encrypted bloom filters)        │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │
@@ -379,7 +381,7 @@ step-by-step local setup instructions. CI runs mutation testing automatically on
 ## Verification & Quality Assurance
 
 ```
-618 unit tests   (100% pass)   cmake --preset server-pq && ctest
+779 unit tests   (100% pass)   cmake --preset server-pq && ctest
 104 benchmark cases             45 core + 59 enterprise (real tick data, 8 phases)
  11 fuzz harnesses              libFuzzer + ASan, 60s each in CI
  35 Python tests (100% pass)    PYTHONPATH=python pytest python/tests/
@@ -417,7 +419,7 @@ non-canonical coordinates, twist attacks, scalar clamping).
 
 ### Security Hardening
 
-**458 vulnerabilities** identified and fixed across 10 dedicated audit passes — zero open
+**479 vulnerabilities** identified and fixed across 11 dedicated audit passes — zero open
 findings. 100+ hardening tests (`ctest -L hardening`) verify safe rejection of malformed,
 adversarial, and boundary-condition inputs across all layers: crypto (constant-time GHASH,
 GCM/CTR counter overflow, secure key zeroing), encoders (RLE/BSS/Delta/Dictionary boundary
@@ -473,7 +475,7 @@ Signet Forge uses a **dual-license model**:
 | Module | License | Files |
 |--------|---------|-------|
 | Core Parquet engine | [Apache 2.0](LICENSE) | `include/signet/` (all except AI audit tier) |
-| Encodings, compression, crypto, bloom, thrift, interop | [Apache 2.0](LICENSE) | Same |
+| Encodings, compression, crypto (SHA-256/512, AES, HKDF), bloom, thrift, interop | [Apache 2.0](LICENSE) | Same |
 | AI vector types, feature store, streaming WAL | [Apache 2.0](LICENSE) | `include/signet/ai/` (wal, feature_writer, feature_reader, vector_type, etc.) |
 | **AI Audit & Compliance tier** | [BSL 1.1](LICENSE_COMMERCIAL) | `include/signet/ai/audit_chain.hpp`, `decision_log.hpp`, `inference_log.hpp`, `ai/compliance/` |
 
