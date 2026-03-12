@@ -178,7 +178,7 @@ public:
         if (col_idx >= columns_.size())
             return {};
         return {columns_[col_idx].data(),
-                std::min(num_rows_, columns_[col_idx].size())};
+                (std::min)(num_rows_, columns_[col_idx].size())};
     }
 
     // -------------------------------------------------------------------------

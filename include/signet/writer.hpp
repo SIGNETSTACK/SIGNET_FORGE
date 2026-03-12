@@ -47,7 +47,94 @@
 #include <unordered_set>
 #include <vector>
 
+// ---------------------------------------------------------------------------
+// Floating-point from_chars availability detection
+//
+// Apple Clang's libc++ (Xcode ≤ 16) does not implement std::from_chars for
+// float/double.  GCC ≥ 11 (libstdc++) and MSVC ≥ 19.24 do.
+//
+// On Apple we fall back to strtod_l / strtof_l with an explicit "C" locale
+// to preserve locale-independence — critical for MiFID II financial data
+// where decimal separators must always be '.' regardless of LC_NUMERIC.
+// ---------------------------------------------------------------------------
+#if (defined(__GNUC__) && !defined(__clang__)) || defined(_MSC_VER)
+#  define SIGNET_HAS_FLOAT_FROM_CHARS 1
+#else
+#  define SIGNET_HAS_FLOAT_FROM_CHARS 0
+#  if defined(__APPLE__)
+#    include <xlocale.h>    // strtod_l, strtof_l, newlocale on macOS
+#  elif defined(__linux__) || defined(__FreeBSD__)
+#    include <locale.h>     // strtod_l, strtof_l, newlocale on Linux/BSD
+#  endif
+#endif
+
 namespace signet::forge {
+
+// ---------------------------------------------------------------------------
+// detail::parse_double / detail::parse_float
+//
+// Locale-independent floating-point parsing for CSV-to-Parquet conversion.
+// Uses std::from_chars where available (GCC, MSVC); falls back to
+// strtod_l/strtof_l with C locale on platforms without float from_chars
+// (Apple Clang).  Never uses bare strtod — that is locale-dependent and
+// would silently corrupt financial data in EU locales (CWE-1286).
+// ---------------------------------------------------------------------------
+namespace detail {
+
+inline double parse_double(std::string_view sv) noexcept {
+    double value = 0.0;
+#if SIGNET_HAS_FLOAT_FROM_CHARS
+    std::from_chars(sv.data(), sv.data() + sv.size(), value);
+#elif defined(__APPLE__) || defined(__linux__) || defined(__FreeBSD__)
+    // Thread-safe: newlocale returns a per-call handle; static ensures
+    // one-time creation (singleton, never freed — intentional).
+    static locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    std::string tmp(sv);
+    value = strtod_l(tmp.c_str(), nullptr, c_locale);
+#else
+    // Last resort for exotic platforms — document locale dependency risk
+    std::string tmp(sv);
+    value = std::strtod(tmp.c_str(), nullptr);
+#endif
+    return value;
+}
+
+inline float parse_float(std::string_view sv) noexcept {
+    float value = 0.0f;
+#if SIGNET_HAS_FLOAT_FROM_CHARS
+    std::from_chars(sv.data(), sv.data() + sv.size(), value);
+#elif defined(__APPLE__) || defined(__linux__) || defined(__FreeBSD__)
+    static locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    std::string tmp(sv);
+    value = strtof_l(tmp.c_str(), nullptr, c_locale);
+#else
+    std::string tmp(sv);
+    value = std::strtof(tmp.c_str(), nullptr);
+#endif
+    return value;
+}
+
+/// Try parsing a string_view as double; returns true on full parse success.
+/// Used for CSV type-detection (auto-detect DOUBLE columns).
+inline bool try_parse_double(std::string_view sv, double& out) noexcept {
+#if SIGNET_HAS_FLOAT_FROM_CHARS
+    auto [p, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), out);
+    return ec == std::errc{} && p == sv.data() + sv.size();
+#elif defined(__APPLE__) || defined(__linux__) || defined(__FreeBSD__)
+    static locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    std::string tmp(sv);
+    char* end = nullptr;
+    out = strtod_l(tmp.c_str(), &end, c_locale);
+    return end == tmp.c_str() + tmp.size();
+#else
+    std::string tmp(sv);
+    char* end = nullptr;
+    out = std::strtod(tmp.c_str(), &end);
+    return end == tmp.c_str() + tmp.size();
+#endif
+}
+
+} // namespace detail
 
 namespace detail::writer {
 
@@ -1088,11 +1175,10 @@ public:
                     }
                 }
 
-                // Try DOUBLE (locale-independent)
+                // Try DOUBLE (locale-independent on all platforms)
                 if (all_double) {
                     double tmp = 0;
-                    auto [p, ec] = std::from_chars(val.data(), val.data() + val.size(), tmp);
-                    if (ec != std::errc{} || p != val.data() + val.size()) {
+                    if (!detail::try_parse_double(val, tmp)) {
                         all_double = false;
                     }
                 }
@@ -1299,9 +1385,7 @@ private:
                                                       parsed);
                     if (ec != std::errc{}) {
                         // Fallback: parse as double and truncate (locale-independent)
-                        double d = 0;
-                        std::from_chars(val.data(), val.data() + val.size(), d);
-                        parsed = static_cast<int32_t>(d);
+                        parsed = static_cast<int32_t>(detail::parse_double(val));
                     }
                     cw.write_int32(parsed);
                     if (bf_active) bloom_filters_[c]->insert_value(parsed);
@@ -1314,24 +1398,20 @@ private:
                                                       parsed);
                     if (ec != std::errc{}) {
                         // Fallback: parse as double and truncate (locale-independent)
-                        double d = 0;
-                        std::from_chars(val.data(), val.data() + val.size(), d);
-                        parsed = static_cast<int64_t>(d);
+                        parsed = static_cast<int64_t>(detail::parse_double(val));
                     }
                     cw.write_int64(parsed);
                     if (bf_active) bloom_filters_[c]->insert_value(parsed);
                     break;
                 }
                 case PhysicalType::FLOAT: {
-                    float f = 0;
-                    std::from_chars(val.data(), val.data() + val.size(), f);
+                    float f = detail::parse_float(val);
                     cw.write_float(f);
                     if (bf_active) bloom_filters_[c]->insert_value(f);
                     break;
                 }
                 case PhysicalType::DOUBLE: {
-                    double d = 0;
-                    std::from_chars(val.data(), val.data() + val.size(), d);
+                    double d = detail::parse_double(val);
                     cw.write_double(d);
                     if (bf_active) bloom_filters_[c]->insert_value(d);
                     break;
