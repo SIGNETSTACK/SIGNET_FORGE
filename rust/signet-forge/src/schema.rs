@@ -1,4 +1,4 @@
-use crate::enums::PhysicalType;
+use crate::enums::{LogicalType, PhysicalType};
 use crate::error::{check_error, Result};
 use signet_forge_sys as ffi;
 use std::ffi::{CStr, CString};
@@ -47,6 +47,15 @@ impl Schema {
         }
         let raw = unsafe { ffi::signet_schema_column_physical_type(self.ptr, index) };
         PhysicalType::from_raw(raw)
+    }
+
+    /// Get the logical type of a column by index.
+    pub fn column_logical_type(&self, index: usize) -> Option<LogicalType> {
+        if index >= self.num_columns() {
+            return None;
+        }
+        let raw = unsafe { ffi::signet_schema_column_logical_type(self.ptr, index) };
+        LogicalType::from_raw(raw)
     }
 }
 

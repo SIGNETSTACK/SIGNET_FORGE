@@ -204,6 +204,11 @@ signet_string_t signet_schema_column_name(
 int32_t signet_schema_column_physical_type(
     const signet_schema_t* schema, size_t index);
 
+/// Return the logical type of column at `index` (signet_logical_type_t).
+/// Returns -1 if schema is NULL or index is out of range.
+int32_t signet_schema_column_logical_type(
+    const signet_schema_t* schema, size_t index);
+
 // ---------------------------------------------------------------------------
 // WriterOptions
 // ---------------------------------------------------------------------------

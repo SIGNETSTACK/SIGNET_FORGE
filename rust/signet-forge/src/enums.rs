@@ -52,6 +52,30 @@ pub enum LogicalType {
     Float32Vector = ffi::SIGNET_LOGICAL_FLOAT32_VECTOR,
 }
 
+impl LogicalType {
+    pub fn from_raw(v: i32) -> Option<Self> {
+        match v {
+            ffi::SIGNET_LOGICAL_NONE => Some(Self::None),
+            ffi::SIGNET_LOGICAL_STRING => Some(Self::String),
+            ffi::SIGNET_LOGICAL_ENUM => Some(Self::Enum),
+            ffi::SIGNET_LOGICAL_UUID => Some(Self::Uuid),
+            ffi::SIGNET_LOGICAL_DATE => Some(Self::Date),
+            ffi::SIGNET_LOGICAL_TIME_MS => Some(Self::TimeMs),
+            ffi::SIGNET_LOGICAL_TIME_US => Some(Self::TimeUs),
+            ffi::SIGNET_LOGICAL_TIME_NS => Some(Self::TimeNs),
+            ffi::SIGNET_LOGICAL_TIMESTAMP_MS => Some(Self::TimestampMs),
+            ffi::SIGNET_LOGICAL_TIMESTAMP_US => Some(Self::TimestampUs),
+            ffi::SIGNET_LOGICAL_TIMESTAMP_NS => Some(Self::TimestampNs),
+            ffi::SIGNET_LOGICAL_DECIMAL => Some(Self::Decimal),
+            ffi::SIGNET_LOGICAL_JSON => Some(Self::Json),
+            ffi::SIGNET_LOGICAL_BSON => Some(Self::Bson),
+            ffi::SIGNET_LOGICAL_FLOAT16 => Some(Self::Float16),
+            ffi::SIGNET_LOGICAL_FLOAT32_VECTOR => Some(Self::Float32Vector),
+            _ => None,
+        }
+    }
+}
+
 /// Parquet encoding types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]

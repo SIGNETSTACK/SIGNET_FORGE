@@ -282,6 +282,14 @@ int32_t signet_schema_column_physical_type(
     return static_cast<int32_t>(schema->schema.column(index).physical_type);
 }
 
+extern "C"
+int32_t signet_schema_column_logical_type(
+    const signet_schema_t* schema, size_t index)
+{
+    if (!schema || index >= schema->schema.num_columns()) return -1;
+    return static_cast<int32_t>(schema->schema.column(index).logical_type);
+}
+
 // ---------------------------------------------------------------------------
 // WriterOptions
 // ---------------------------------------------------------------------------

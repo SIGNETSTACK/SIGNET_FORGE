@@ -226,6 +226,38 @@ static std::string physicalTypeName(int pt) {
     }
 }
 
+/// Map an integer LogicalType to its human-readable name.
+///
+/// @param lt  Integer value of a LogicalType enum member.
+/// @return    Name string (e.g. "DECIMAL"), or "UNKNOWN" for unrecognised values.
+static std::string logicalTypeName(int lt) {
+    switch (static_cast<LogicalType>(lt)) {
+        case LogicalType::NONE:          return "NONE";
+        case LogicalType::STRING:        return "STRING";
+        case LogicalType::ENUM:          return "ENUM";
+        case LogicalType::UUID:          return "UUID";
+        case LogicalType::DATE:          return "DATE";
+        case LogicalType::TIME_MS:       return "TIME_MS";
+        case LogicalType::TIME_US:       return "TIME_US";
+        case LogicalType::TIME_NS:       return "TIME_NS";
+        case LogicalType::TIMESTAMP_MS:  return "TIMESTAMP_MS";
+        case LogicalType::TIMESTAMP_US:  return "TIMESTAMP_US";
+        case LogicalType::TIMESTAMP_NS:  return "TIMESTAMP_NS";
+        case LogicalType::DECIMAL:       return "DECIMAL";
+        case LogicalType::JSON:          return "JSON";
+        case LogicalType::BSON:          return "BSON";
+        case LogicalType::FLOAT16:       return "FLOAT16";
+        case LogicalType::FLOAT32_VECTOR: return "FLOAT32_VECTOR";
+        default:                          return "UNKNOWN";
+    }
+}
+
+/// Return the integer-cast LogicalType of column @p i, or -1 if out of range.
+static int schemaColumnLogicalType(const Schema& s, size_t i) {
+    if (i >= s.num_columns()) return -1;
+    return static_cast<int>(s.column(i).logical_type);
+}
+
 // ---------------------------------------------------------------------------
 // WriterOptions wrapper
 // ---------------------------------------------------------------------------
@@ -578,14 +610,15 @@ public:
 /// @brief Emscripten embind registration block.
 ///
 /// Exports the following to JavaScript under `Module.*`:
-/// - Free functions: version(), physicalTypeName(), writeFileToMemfs(),
-///   readFileFromMemfs()
+/// - Free functions: version(), physicalTypeName(), logicalTypeName(),
+///   writeFileToMemfs(), readFileFromMemfs()
 /// - Classes: Schema, SchemaBuilder, WriterOptions, ParquetWriter,
 ///   ParquetReader (with openEncrypted() when SIGNET_ENABLE_COMMERCIAL)
 EMSCRIPTEN_BINDINGS(signet_forge) {
     // Free functions
     em::function("version", &version);
     em::function("physicalTypeName", &physicalTypeName);
+    em::function("logicalTypeName", &logicalTypeName);
     em::function("writeFileToMemfs", &writeFileToMemfs);
     em::function("readFileFromMemfs", &readFileFromMemfs);
 
@@ -595,6 +628,7 @@ EMSCRIPTEN_BINDINGS(signet_forge) {
         .function("numColumns", &schemaNumColumns)
         .function("columnName", &schemaColumnName)
         .function("columnPhysicalType", &schemaColumnPhysicalType)
+        .function("columnLogicalType", &schemaColumnLogicalType)
         .function("name", &schemaName)
         ;
 

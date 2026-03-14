@@ -194,6 +194,10 @@ extern "C" {
         schema: *const signet_schema_t,
         index: usize,
     ) -> i32;
+    pub fn signet_schema_column_logical_type(
+        schema: *const signet_schema_t,
+        index: usize,
+    ) -> i32;
 
     // WriterOptions
     pub fn signet_writer_options_new() -> *mut signet_writer_options_t;

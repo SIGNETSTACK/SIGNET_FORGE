@@ -51,14 +51,22 @@ PYBIND11_MODULE(_bindings, m) {
         .export_values();
 
     py::enum_<LogicalType>(m, "LogicalType")
-        .value("NONE",         LogicalType::NONE)
-        .value("STRING",       LogicalType::STRING)
-        .value("DATE",         LogicalType::DATE)
-        .value("TIMESTAMP_MS", LogicalType::TIMESTAMP_MS)
-        .value("TIMESTAMP_US", LogicalType::TIMESTAMP_US)
-        .value("TIMESTAMP_NS", LogicalType::TIMESTAMP_NS)
-        .value("DECIMAL",      LogicalType::DECIMAL)
-        .value("JSON",         LogicalType::JSON)
+        .value("NONE",           LogicalType::NONE)
+        .value("STRING",         LogicalType::STRING)
+        .value("ENUM",           LogicalType::ENUM)
+        .value("UUID",           LogicalType::UUID)
+        .value("DATE",           LogicalType::DATE)
+        .value("TIME_MS",        LogicalType::TIME_MS)
+        .value("TIME_US",        LogicalType::TIME_US)
+        .value("TIME_NS",        LogicalType::TIME_NS)
+        .value("TIMESTAMP_MS",   LogicalType::TIMESTAMP_MS)
+        .value("TIMESTAMP_US",   LogicalType::TIMESTAMP_US)
+        .value("TIMESTAMP_NS",   LogicalType::TIMESTAMP_NS)
+        .value("DECIMAL",        LogicalType::DECIMAL)
+        .value("JSON",           LogicalType::JSON)
+        .value("BSON",           LogicalType::BSON)
+        .value("FLOAT16",        LogicalType::FLOAT16)
+        .value("FLOAT32_VECTOR", LogicalType::FLOAT32_VECTOR)
         .export_values();
 
     py::enum_<Encoding>(m, "Encoding")
@@ -120,6 +128,27 @@ PYBIND11_MODULE(_bindings, m) {
         }, py::arg("name"), py::return_value_policy::reference_internal)
         .def("int64_ts",[](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
             return b.column<int64_t>(std::move(n), LogicalType::TIMESTAMP_NS);
+        }, py::arg("name"), py::return_value_policy::reference_internal)
+        // Compliance-critical logical type helpers
+        .def("int64_ts_us", [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
+            // TIMESTAMP_US — MiFID II RTS 25 microsecond UTC timestamp
+            return b.column<int64_t>(std::move(n), LogicalType::TIMESTAMP_US);
+        }, py::arg("name"), py::return_value_policy::reference_internal)
+        .def("int64_ts_ms", [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
+            // TIMESTAMP_MS — millisecond timestamp
+            return b.column<int64_t>(std::move(n), LogicalType::TIMESTAMP_MS);
+        }, py::arg("name"), py::return_value_policy::reference_internal)
+        .def("uuid",    [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
+            // UUID — RFC 4122, stored as BYTE_ARRAY with UUID annotation
+            return b.column<std::string>(std::move(n), LogicalType::UUID);
+        }, py::arg("name"), py::return_value_policy::reference_internal)
+        .def("decimal", [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
+            // DECIMAL — financial prices/quantities, stored as INT64 with DECIMAL annotation
+            return b.column<int64_t>(std::move(n), LogicalType::DECIMAL);
+        }, py::arg("name"), py::return_value_policy::reference_internal)
+        .def("time_us", [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
+            // TIME_US — time of day, microseconds since midnight
+            return b.column<int64_t>(std::move(n), LogicalType::TIME_US);
         }, py::arg("name"), py::return_value_policy::reference_internal)
         .def("float_",  [](SchemaBuilder& b, std::string n) -> SchemaBuilder& {
             return b.column<float>(std::move(n));
