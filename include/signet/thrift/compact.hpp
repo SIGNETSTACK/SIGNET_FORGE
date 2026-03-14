@@ -109,6 +109,11 @@ public:
         buf_.push_back(val ? 0x01 : 0x00);
     }
 
+    /// Write an 8-bit signed integer as a single raw byte (I8 wire type).
+    void write_i8(int8_t val) {
+        buf_.push_back(static_cast<uint8_t>(val));
+    }
+
     /// Write a bool field where the value is embedded in the field header's
     /// type nibble (1 = true, 2 = false). This is the standard compact
     /// protocol encoding for bool fields.
@@ -234,8 +239,9 @@ private:
 
     // -- zigzag encoding ------------------------------------------------------
 
+    // CWE-190, C++ [expr.shift] p7.6.7 — left shift on unsigned to avoid UB on signed overflow
     static uint32_t zigzag_encode_i32(int32_t val) {
-        return static_cast<uint32_t>((val << 1) ^ (val >> 31));
+        return (static_cast<uint32_t>(val) << 1) ^ static_cast<uint32_t>(val >> 31);
     }
 
     // CWE-190, C++ [expr.shift] p7.6.7 — left shift on unsigned to avoid UB
@@ -330,6 +336,12 @@ public:
         }
         if (!ensure(1)) return false;
         return data_[pos_++] != 0;
+    }
+
+    /// Read an 8-bit signed integer (single raw byte, I8 wire type).
+    [[nodiscard]] int8_t read_i8() {
+        if (!ensure(1)) return 0;
+        return static_cast<int8_t>(data_[pos_++]);
     }
 
     /// Read a 32-bit integer (zigzag + varint decode).

@@ -264,11 +264,8 @@ public:
         thrift::CompactDecoder dec(footer_ptr, footer_size);
 
         thrift::FileMetaData metadata;
-        metadata.deserialize(dec);
-
-        if (!dec.good()) {
-            return Error{ErrorCode::CORRUPT_FOOTER,
-                         "thrift deserialization of FileMetaData failed"};
+        if (auto r = metadata.deserialize(dec); !r.has_value()) {
+            return r.error();
         }
 
         // --- Build Schema from FileMetaData.schema ---
@@ -1129,11 +1126,8 @@ private:
         // the PageHeader consumed.
         thrift::CompactDecoder page_dec(page_start, remaining);
         thrift::PageHeader page_header;
-        page_header.deserialize(page_dec);
-
-        if (!page_dec.good()) {
-            return Error{ErrorCode::CORRUPT_PAGE,
-                         "failed to deserialize PageHeader"};
+        if (auto r = page_header.deserialize(page_dec); !r.has_value()) {
+            return r.error();
         }
 
         size_t header_size = page_dec.position();
@@ -1287,11 +1281,8 @@ private:
 
         thrift::CompactDecoder page_dec(page_start, remaining);
         thrift::PageHeader ph;
-        ph.deserialize(page_dec);
-
-        if (!page_dec.good()) {
-            return Error{ErrorCode::CORRUPT_PAGE,
-                         "failed to deserialize PageHeader"};
+        if (auto r = ph.deserialize(page_dec); !r.has_value()) {
+            return r.error();
         }
 
         size_t hdr_size = page_dec.position();
@@ -1417,7 +1408,9 @@ private:
 
             thrift::CompactDecoder hdr_dec(dict_start, dict_remaining);
             thrift::PageHeader tmp_hdr;
-            tmp_hdr.deserialize(hdr_dec);
+            if (auto r = tmp_hdr.deserialize(hdr_dec); !r.has_value()) {
+                return r.error();
+            }
             size_t dict_hdr_size = hdr_dec.position();
             if (tmp_hdr.compressed_page_size < 0) {
                 return Error{ErrorCode::CORRUPT_PAGE,
