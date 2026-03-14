@@ -1442,4 +1442,135 @@ A hardening pass added 11 new negative/boundary tests covering 6 confirmed vulne
 
 All 6 vulnerabilities confirmed fixed prior to first public commit. Total test count after pass #1: **317/317**.
 
+---
+
+## Thrift Correctness Phase Tests — `tests/test_thrift_types.cpp` (47 tests, added Mar 2026)
+
+**Total count after phase: 826/826.**
+
+This test file covers the complete Thrift Correctness Phase: protocol primitives, field-type validation, required-field bitmask enforcement, all new LogicalType and struct types, encryption types, bloom filter header, ordering types, and structured error propagation. It is the CI gate for the parquet-format 2.9.0 Thrift schema layer.
+
+### § Protocol Correctness (3 tests, `[thrift][protocol]`)
+
+| Test | What it verifies |
+|------|-----------------|
+| `zigzag_encode_i32: no signed-shift UB` | Round-trips 0, -1, 1, INT32_MIN, INT32_MAX through write_i32/read_i32; verifies the fixed unsigned-space ZigZag (CWE-190 fix) |
+| `zigzag_encode_i64: round-trip boundary values` | INT64_MIN and INT64_MAX round-trip exactly |
+| `write_i8/read_i8: raw byte round-trip` | All boundary values (-128, -1, 0, 1, 127) encode as exactly 1 byte and decode correctly |
+
+**Why written this way**: ZigZag correctness at boundary values is the canonical regression test for the signed-shift UB fix. INT32_MIN and INT64_MIN produce the maximum ZigZag value; encoding these confirms the fix produces the right bit pattern rather than UB.
+
+### § Field-Type Validation (5 tests, `[thrift][ftype]`)
+
+| Test | Type error injected | CWE |
+|------|--------------------|----|
+| `KeyValue: wrong wire type for key field` | Field 1 encoded as I32 instead of BINARY | CWE-843 |
+| `Statistics: wrong wire type for null_count` | Field 3 encoded as I32 instead of I64 | CWE-843 |
+| `DataPageHeader: wrong wire type for num_values` | Field 1 encoded as BINARY instead of I32 | CWE-843 |
+| `IntType: wrong wire type for bit_width` | Field 1 encoded as I32 instead of I8 | CWE-843 |
+| `DecimalType: wrong wire type for scale` | Field 1 encoded as I64 instead of I32 | CWE-843 |
+
+**Why written this way**: Each test hand-encodes a struct with the correct field ID but the wrong wire type. This is the exact attack vector for CWE-843 (type confusion) — a malformed file where a BINARY blob is interpreted as an integer. The tests confirm that all deserializers return `expected<void>` error (not silently read garbage) on wire-type mismatch.
+
+### § Required-Field Bitmask (5 tests, `[thrift][required]`)
+
+| Test | Required field(s) absent | Expected result |
+|------|--------------------------|----------------|
+| `KeyValue: missing required key field` | Field 1 (key) | Error |
+| `KeyValue: all required fields present` | — | Success, values preserved |
+| `DataPageHeader: missing required fields` | Fields 2-4 absent | Error |
+| `DataPageHeader: all required fields present` | — | Success, round-trip |
+| `ColumnMetaData: missing required fields` | Fields 2-7,9 absent | Error |
+
+**Why written this way**: Required-field absence produces silently defaulted objects without the bitmask, which would write semantically corrupt Parquet files (e.g., ColumnMetaData with encoding=0 even if the actual encoding is RLE). These tests confirm the `uint32_t seen` bitmask detects missing required fields.
+
+### § TimeUnit Round-Trip (3 tests, `[thrift][logical_type]`)
+
+All three TimeUnit variants (MILLIS, MICROS, NANOS) round-trip through serialize/deserialize, verifying the empty-struct union encoding (each variant is a zero-byte nested struct at its field ID).
+
+### § LogicalTypeUnion Round-Trip (8 tests, `[thrift][logical_type]`)
+
+| Test | Variant | Payload verified |
+|------|---------|-----------------|
+| STRING | Kind::STRING | No payload; kind preserved |
+| DECIMAL | Kind::DECIMAL | scale=4, precision=18 |
+| TIMESTAMP (MICROS, UTC) | Kind::TIMESTAMP | is_adjusted_to_utc=true, unit.kind=MICROS |
+| TIMESTAMP (MILLIS, non-UTC) | Kind::TIMESTAMP | is_adjusted_to_utc=false, unit.kind=MILLIS |
+| INT(32, signed) | Kind::INT | bit_width=32, is_signed=true |
+| INT(8, unsigned) | Kind::INT | bit_width=8, is_signed=false |
+| UUID | Kind::UUID | No payload; kind preserved |
+| STRING type validation | Wrong wire type (BINARY) | Returns error |
+
+**Why written this way**: Each of the 5 Sub-phase A types is exercised with representative financial/AI values (Decimal precision=18 covers 18-digit financial amounts; Timestamp MICROS UTC covers market data; INT(32,signed) covers order IDs; INT(8,unsigned) covers flags). The type-validation test confirms that the union's STRUCT requirement is enforced.
+
+### § SchemaElement with logicalType (2 tests, `[thrift][schema]`)
+
+Round-trips `SchemaElement` with `field_id` (field 9) and `logical_type` (field 10) for STRING and DECIMAL variants. Verifies that the two new fields survive serialize/deserialize alongside the existing fields 1-8.
+
+### § DataPageHeader with statistics (1 test, `[thrift][page_header]`)
+
+Round-trips `DataPageHeader` with a `Statistics` struct in field 5 (null_count=3, min_value="aaa", max_value="zzz"). Verifies nested struct propagation and ftype validation on the statistics field.
+
+### § DictionaryPageHeader with is_sorted (3 tests, `[thrift][page_header]`)
+
+Round-trips with is_sorted=true, is_sorted=false, and without is_sorted (verifying absent optional round-trips correctly).
+
+### § Ordering Types (3 tests, `[thrift][ordering]`)
+
+| Test | Type | Values verified |
+|------|------|----------------|
+| `ColumnOrder: TYPE_ORDER` | `ColumnOrder` | kind=TYPE_ORDER preserved |
+| `SortingColumn: descending, nulls_first=false` | `SortingColumn` | column_idx=3, descending=true, nulls_first=false |
+| `SortingColumn: ascending, nulls_first=true` | `SortingColumn` | column_idx=0, descending=false, nulls_first=true |
+
+### § Bloom Filter Header Types (4 tests, `[thrift][bloom]`)
+
+Each of `BloomFilterAlgorithm` (BLOCK), `BloomFilterHash` (XXHASH), `BloomFilterCompression` (UNCOMPRESSED) is individually round-tripped to verify the empty-struct union encoding. `BloomFilterHeader` is round-tripped with num_bytes=1024 and all three sub-structs set.
+
+### § Encryption Types (6 tests, `[thrift][encryption]`)
+
+| Test | Type | Key assertion |
+|------|------|--------------|
+| `AesGcmV1: with all fields` | `AesGcmV1` | aad_prefix=[1,2,3], aad_file_unique=true, supply_aad_prefix=false |
+| `AesGcmV1: without optional fields` | `AesGcmV1` | All optionals absent after round-trip |
+| `EncryptionAlgorithm: AES_GCM_V1` | `EncryptionAlgorithm` | Kind=AES_GCM_V1, payload preserved |
+| `EncryptionAlgorithm: AES_GCM_CTR_V1` | `EncryptionAlgorithm` | Kind=AES_GCM_CTR_V1, supply_aad_prefix=false |
+| `FileCryptoMetaData: with key_metadata` | `FileCryptoMetaData` | algorithm kind + key_metadata=[0xAA,0xBB,0xCC] |
+| `ColumnCryptoMetaData: COLUMN_KEY` | `ColumnCryptoMetaData` | path_in_schema=["a","b","c"], key_metadata=[0x11,0x22] |
+
+### § Error Propagation (2 tests, `[thrift][error_propagation]`)
+
+| Test | Scenario | Assertion |
+|------|----------|-----------|
+| `expected<void>: nested Statistics failure` | DataPageHeader with Statistics having I32 for null_count (expects I64) | Outer `DataPageHeader::deserialize()` returns error — not just inner |
+| `expected<void>: error code is THRIFT_DECODE_ERROR` | Missing required key field in KeyValue | `r.error().code == ErrorCode::THRIFT_DECODE_ERROR` |
+
+**Why written this way**: The first test confirms that the error propagation chain `DataPageHeader::deserialize → Statistics::deserialize → field type mismatch` returns an error to the outermost caller rather than silently continuing. The second confirms the error code is specifically `THRIFT_DECODE_ERROR`, not a generic code, so callers can distinguish Thrift parse failures from I/O or corruption errors.
+
+### § RowGroup with sorting_columns (1 test, `[thrift][rowgroup]`)
+
+Round-trips a `RowGroup` with two `SortingColumn` entries (column 0 ascending nulls-first, column 1 descending nulls-last). Verifies that LIST-encoded structs in field 4 survive the full serialize/deserialize cycle with all three fields of each `SortingColumn` preserved.
+
+### § FileMetaData with column_orders (1 test, `[thrift][filemetadata]`)
+
+Round-trips a `FileMetaData` with two `ColumnOrder` entries in field 7. Verifies that the `optional<vector<ColumnOrder>>` field is correctly emitted and recovered.
+
+### How to Run
+
+```bash
+# All Thrift Correctness Phase tests:
+cd build-server-pq && ./signet_tests "[thrift]"
+
+# Specific tag groups:
+./signet_tests "[thrift][protocol]"
+./signet_tests "[thrift][ftype]"
+./signet_tests "[thrift][required]"
+./signet_tests "[thrift][logical_type]"
+./signet_tests "[thrift][encryption]"
+./signet_tests "[thrift][error_propagation]"
+
+# CTest filter:
+ctest -R test_thrift_types --output-on-failure
+```
+
 > Hardening pass #2 added 6 more guards + 6 tests (334 total). Hardening pass #3 added 23 more guards + 22 tests (390 total). Hardening pass #4 added 29 more guards + 4 tests (394 total). Hardening pass #5 added 53 more guards + 29 tests (423 total). Static audit follow-up completed 11 additional fixes (no new tests — existing 423 cover all paths). See CHANGELOG.md for full details.

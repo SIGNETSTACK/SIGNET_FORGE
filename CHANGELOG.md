@@ -122,13 +122,13 @@ Nine compliance gap-fix passes resolving 73 of 92 enterprise regulatory gaps. 56
 - Source file manifest in reports (R-18b)
 
 #### Gap Fix Pass 8 (3 gaps — Crypto infrastructure)
-- Algorithm deprecation framework per [NIST SP 800-131A](https://csrc.nist.gov/pubs/sp/800/131a/r2/final) (C-4)
+- Algorithm deprecation framework per [NIST SP 800-131A](https://csrc.nist.gov/pubs/sp/800/131/a/r2/final) (C-4)
 - `INTERNAL` key mode production gate per FIPS 140-3 §7.7 (C-15)
 - Key rotation request/result API per PCI-DSS/HIPAA/SOX (T-7)
 
 #### Gap Fix Pass 9 (6 gaps — Cryptographic validation & test vectors)
-- AES-256-only design decision documented per [NIST SP 800-131A Rev.2 §4](https://csrc.nist.gov/pubs/sp/800/131a/r2/final): post-quantum safety (Grover's algorithm), single key size eliminates [CWE-326](https://cwe.mitre.org/data/definitions/326.html) (C-14)
-- [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final) Test Case 15: AES-256-GCM with 64-byte plaintext and independent ciphertext + tag verification (C-16)
+- AES-256-only design decision documented per [NIST SP 800-131A Rev.2 §4](https://csrc.nist.gov/pubs/sp/800/131/a/r2/final): post-quantum safety (Grover's algorithm), single key size eliminates [CWE-326](https://cwe.mitre.org/data/definitions/326.html) (C-14)
+- [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final) Test Case 15: AES-256-GCM with 64-byte plaintext and independent ciphertext + tag verification (C-16)
 - 7 [Wycheproof](https://github.com/google/wycheproof) X25519 edge-case tests: valid exchange, [RFC 7748 §6.1](https://www.rfc-editor.org/rfc/rfc7748#section-6.1) vector, RFC 8037 with manual scalar clamping, low-order point rejection, non-canonical u-coordinates, twist points (C-18)
 - [NIST SP 800-227](https://csrc.nist.gov/pubs/sp/800/227/final) updated from draft to Final (Sep 2025) across all source files and documentation (C-19)
 - 4 Wycheproof AES-256-GCM edge-case tests: empty plaintext + AAD (tcId 92), ciphertext verification (tcId 97), modified tag rejection (16 flips + boundary values), tampered ciphertext detection (T-5)

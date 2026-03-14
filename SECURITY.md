@@ -157,7 +157,7 @@ Final verification pass: OS command injection in examples (CWE-78), Python use-a
 **Enterprise Compliance Gaps** (92 gaps — all resolved):
 12 gap-fix passes covering FIPS 140-3, EU AI Act, MiFID II RTS 24/RTS 6, GDPR, DORA.
 
-Run hardening tests: `ctest -L hardening` — covers all passes. Full test suite: 779 unit tests (100% passing) across 12 enterprise compliance gap-fix passes + 11 security audit passes.
+Run hardening tests: `ctest -L hardening` — covers all passes. Full test suite: 826 unit tests (100% passing) across 12 enterprise compliance gap-fix passes + 11 security audit passes + Thrift Correctness Phase.
 
 ## Credit
 

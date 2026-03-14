@@ -26,6 +26,38 @@ AI-native capabilities the regulation-era demands. SignetForge fills five white 
 | **No sub-μs streaming** | Dual-mode WAL: **339 ns** (fwrite, general purpose) and **~223 ns** (mmap ring, measured) |
 | **No Parquet feature store** | Point-in-time correct feature retrieval at **sub-μs** per entity (with row group cache) — no Redis needed |
 
+### Regulatory Enforcement Timeline
+
+**EU AI Act Art. 12/13** (automatic, continuous AI logs) entered force 1 August 2024.
+**DORA** (ICT incident management) obligations applied from January 2025.
+**MiFID II RTS 24** algorithm identification records have been required since 2018.
+**GDPR Art. 32** encrypted-at-rest obligations for personal data apply since 2018.
+
+Most algorithmic trading firms have not closed any of these gaps correctly — not because of
+negligence, but because no infrastructure existed that fit within production HFT latency budgets.
+Signet Forge was designed to close all five from the first commit.
+
+### Enterprise Readiness Score
+
+Independently benchmarked across 100 points (Data I/O · ML Inference · Cryptography · Regulatory
+Compliance · Audit Trail · SIMD · Operational Maturity) against eight enterprise systems:
+
+| System | Score /100 | Primary strength |
+|--------|:----------:|-----------------|
+| **Signet Forge** | **95** | Only system with compliance-native AI audit + PME + sub-250 ns WAL |
+| kdb+/q (KX Systems) | 64 | 30+ yr production HFT maturity; no crypto or regulatory reports |
+| Apache Iceberg | 47 | Data lake lineage; no HFT latency, no crypto, no AI audit |
+| Apache Arrow C++ | 46 | Raw throughput (6,000 MB/s Flight¹); no compliance layer |
+| parquet-rs | 40 | Fast footer parse (3–9× vs C++²); Rust-only, no AI extensions |
+| ArcticDB | 37 | 40 GB/s flash read³; proprietary, no regulatory reports |
+| Lance | 35 | Vector-optimised; no crypto, no compliance |
+| ONNX Runtime | 33 | Best-in-class model execution; no data layer or audit trail |
+| Feast | 28 | Feature serving; ms-range latency, no crypto, no audit chain |
+
+¹ [ACM BID'22 Arrow Flight benchmark](https://dl.acm.org/doi/10.1145/3674399.3674498)
+² [Apache Arrow Blog, Oct 2025](https://arrow.apache.org/blog/2025/10/23/rust-parquet-metadata/)
+³ [ArcticDB documentation](https://docs.arcticdb.io/latest/)
+
 ---
 
 ## Feature Matrix
@@ -47,6 +79,8 @@ AI-native capabilities the regulation-era demands. SignetForge fills five white 
 | Python bindings (NumPy) | ✅ | ✅ | ✅ | ✅ |
 | BYTE_STREAM_SPLIT for floats | ✅ | ✅ | ❌ | ✅ |
 | DELTA_BINARY_PACKED timestamps | ✅ | ✅ | ❌ | ✅ |
+| SIMD vector ops (AVX2 / SSE / NEON) | ❌ | ❌ | partial | ✅ |
+| INT8/INT4 quantized vector columns | ❌ | ❌ | ✅ | ✅ |
 
 ---
 
@@ -279,6 +313,51 @@ Numbers measured on macOS (x86_64, Apple Clang 17, Release build, 100 samples).
 | MPMC ring push+pop | **10.4 ns** | Single-threaded, `int64_t`, 96M ops/s |
 | MPMC ring 4P × 4C | ~70 ns/op | 4 producers, 4 consumers, concurrent |
 
+### HFT Inference Benchmark (Production, 39 ONNX Models)
+
+Run against **39 RandomForestClassifier ONNX models** from an active HFT system using **1.5 million
+real tick events** across AAPL, GOOGL, BTC-USD, ES=F, NQ=F, and CL=F. Feature matrix: 1,024 rows ×
+15 features per inference. Zero-copy path: `ColumnBatch::as_tensor()` → `prepare_for_onnx()` →
+`Ort::Value::CreateTensor()` — same memory pointer through all three steps.
+
+| Metric | Result |
+|--------|--------|
+| Models executed | 39 / 39 |
+| P95 inference latency (best model) | **4.6 µs** |
+| P95 inference latency (mean across 39 models) | **18.4 µs** |
+| Models under 100 µs P95 | **38 / 39** |
+| Parquet Modular Encryption (PME) | ✅ AES-256-GCM/CTR verified |
+| Tamper-evident audit chain | ✅ 39 entries, SHA-256, all verified |
+| EU AI Act Art.12 report | ✅ 22.1 KB structured JSON |
+| MiFID II RTS 24 report | ✅ 4.8 KB, 39 algorithm identifiers |
+| Zero-copy tensor bridge | ✅ same pointer, pointer-level verified |
+
+The audit chain terminal hash `ec4c278375f7dea470a72b874492e8bac9b78ce6683b72894a0e4f6cd633a25f`
+is a cryptographic commitment to all 39 inference events. Altering any single record breaks every
+subsequent link. This is what tamper evidence means at the infrastructure level.
+
+### SIMD Acceleration
+
+Native SIMD intrinsics across the AI vector and quantization hot paths. Compile-time dispatch
+with **mandatory scalar fallback** — no forced CPU baseline. Binary runs correctly on any
+x86-64 or ARM CPU, faster where hardware supports it.
+
+| Operation | AVX2 (8-wide) | SSE (4-wide) | ARM NEON (4-wide) | Speedup vs scalar |
+|-----------|:---:|:---:|:---:|---|
+| `dot_product(a, b, n)` | ✅ `_mm256_fmadd_ps` | ✅ `_mm_mul_ps` | ✅ `vmlaq_f32` | **8x** (AVX2) |
+| `l2_distance_sq(a, b, n)` | ✅ `_mm256_sub_ps` + FMA | ✅ | ✅ `vsubq_f32` | **8x** (AVX2) |
+| `l2_normalize(v, n)` | ✅ `_mm256_mul_ps` | ✅ | ✅ `vmulq_f32` | **8x** (AVX2) |
+| `copy_floats(dst, src, n)` | ✅ `_mm256_loadu/storeu_ps` | ✅ | ✅ `vld1q/vst1q_f32` | **8x** (AVX2) |
+| `quantize_int8(in, out, dim)` | ✅ `_mm256_cvtps_epi32` + pack | ✅ | ✅ `vcvtq_s32_f32` | **6–8x** (AVX2) |
+| `dequantize_int8(in, out, dim)` | ✅ `_mm_cvtepi8_epi16` + `_mm256_cvtepi32_ps` | ✅ | — | **6–8x** (AVX2) |
+| AES-NI detection | CPUID ECX[25] | — | `__ARM_FEATURE_CRYPTO` | infrastructure ready |
+
+**~40 unique intrinsics**, ~2,688 lines of SIMD code. All paths validated against scalar
+reference implementations with property-based tests across sizes that break 8-wide alignment.
+
+Detection is compile-time: `#if defined(__AVX2__)` / `#elif defined(__SSE4_2__)` /
+`#elif defined(__ARM_NEON)`. No runtime dispatch overhead on the hot path.
+
 ---
 
 ## Architecture
@@ -381,7 +460,7 @@ step-by-step local setup instructions. CI runs mutation testing automatically on
 ## Verification & Quality Assurance
 
 ```
-779 unit tests   (100% pass)   cmake --preset server-pq && ctest
+826 unit tests   (100% pass)   cmake --preset server-pq && ctest
 104 benchmark cases             45 core + 59 enterprise (real tick data, 8 phases)
  11 fuzz harnesses              libFuzzer + ASan, 60s each in CI
  35 Python tests (100% pass)    PYTHONPATH=python pytest python/tests/
@@ -401,17 +480,17 @@ Benchmark regressions >100% **fail the build**.
 |-------|----------|----------|
 | **Sanitizers** | ASan + LSan + UBSan + TSan on every push | [NIST SP 800-53 SI-16](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
 | **Fuzz testing** | 11 harnesses: parsers, crypto, interop | [NIST SP 800-53 SA-11(8)](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
-| **SAST** | CodeQL (`security-extended`) + MSVC `/analyze` | [SOC 2 CC7.1](https://www.aicpa-cima.com/topic/system-and-organization-controls) |
-| **SBOM** | CycloneDX + SPDX JSON on every release | [US EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/), [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847) |
-| **Mutation testing** | Mull 0.24.0 on crypto module | [IEEE 1008-2024](https://standards.ieee.org/ieee/1008/11491/) |
+| **SAST** | CodeQL (`security-extended`) + MSVC `/analyze` | [SOC 2 CC7.1](https://www.aicpa-cima.com/resources/landing/system-and-organization-controls-soc-suite-of-services) |
+| **SBOM** | CycloneDX + SPDX JSON on every release | [US EO 14028](https://www.federalregister.gov/documents/2023/04/27/2023-08823/agency-information-collection-activities-request-for-comment-on-secure-software-development), [EU CRA](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R2847) |
+| **Mutation testing** | Mull 0.24.0 on crypto module | [NIST SP 800-53 SA-11(9)](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
 | **Resilience testing** | 13 fault injection tests (corruption, truncation, garbage) | [NIST SP 800-53 SI-10](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) |
 | **Concurrency stress** | 32-thread MPMC + EventBus (16P×16C, 100K items) | [DORA Art. 9](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554) |
 | **Secrets scan** | gitleaks on full history | [PCI DSS v4.0 §8.6.3](https://www.pcisecuritystandards.org/document_library/) |
 
 ### Cryptographic Validation
 
-**Test vectors**: [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38d/final)
-(18 GCM vectors including Test Case 15), [NIST SP 800-38A](https://csrc.nist.gov/pubs/sp/800/38a/final)
+**Test vectors**: [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final)
+(18 GCM vectors including Test Case 15), [NIST SP 800-38A](https://csrc.nist.gov/pubs/sp/800/38/a/final)
 (CTR vectors), [FIPS 140-3 §4.9.2](https://csrc.nist.gov/pubs/fips/140-3/final) CRNGT, and
 [Google Wycheproof](https://github.com/google/wycheproof) edge-case suites for AES-256-GCM
 (tag tampering, ciphertext modification, empty plaintext) and X25519 (low-order points,

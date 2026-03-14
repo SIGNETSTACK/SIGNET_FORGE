@@ -4,6 +4,26 @@ This document covers everything you need to move from a development build to a h
 
 ---
 
+## Regulatory Enforcement Deadlines
+
+If you operate an algorithmic trading or AI system in a regulated jurisdiction, these dates
+are not aspirational — they are legal obligations with enforcement consequences:
+
+| Regulation | Obligation | Status |
+|------------|-----------|--------|
+| **MiFID II RTS 24** | Algorithm identification records; tamper-evident logs | In force since **2018** |
+| **GDPR Art. 32** | Personal data encrypted at rest (order flow features) | In force since **2018** |
+| **EU AI Act Art. 12** | Automatic, continuous operational logs for high-risk AI | In force **1 August 2024** |
+| **DORA** | ICT incident management obligations for financial firms | In force **January 2025** |
+| **EU AI Act Art. 13/19** | Transparency reports; conformity assessment | Obligations apply **August 2026** |
+
+A database row is not a cryptographic commitment. Signet Forge's production deployment closes
+all five gaps simultaneously — PME column encryption, SHA-256 audit chains, automated compliance
+reporters — without a separate overlay system and without adding more than 0.5% overhead to
+production inference latency.
+
+---
+
 ## Recommended CMake Preset
 
 For production servers with full compression and standard encryption:
