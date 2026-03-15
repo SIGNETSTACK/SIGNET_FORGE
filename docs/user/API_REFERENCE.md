@@ -983,7 +983,7 @@ Benchmark: ~1.4 μs per `as_of()` call (with row group cache).
 
 **Header:** `include/signet/ai/audit_chain.hpp`
 
-**License:** BSL 1.1 (gated by `SIGNET_BUILD_AI_AUDIT`)
+**License:** AGPL-3.0-or-later (gated by `SIGNET_BUILD_AI_AUDIT`)
 
 ### `now_ns()`
 
@@ -1216,7 +1216,7 @@ struct ColumnBatch {
 
 **Header:** `include/signet/ai/compliance/`
 
-**License:** BSL 1.1. Requires `SIGNET_BUILD_AI_AUDIT=ON` (default).
+**License:** AGPL-3.0-or-later. Commercial License Exception available. Requires `SIGNET_BUILD_AI_AUDIT=ON` (default).
 
 ### `ReportFormat` enum
 

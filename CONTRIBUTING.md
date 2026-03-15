@@ -108,7 +108,7 @@ Every source file must start with an SPDX license header.
 
 **AGPL-3.0-or-later files** (all library code):
 ```cpp
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 ```
 

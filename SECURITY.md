@@ -64,7 +64,7 @@ We follow a **90-day coordinated disclosure** policy. If we are unable to produc
 |------|---------|
 | `SIGNET_ENABLE_CRYPTO` | Enables real AES-256-GCM/CTR encryption (otherwise stubs) |
 | `SIGNET_ENABLE_PQ` | Enables post-quantum crypto (Kyber-768, Dilithium-3) via liboqs |
-| `SIGNET_BUILD_AI_AUDIT` | Includes BSL 1.1 audit/compliance module (default ON) |
+| `SIGNET_BUILD_AI_AUDIT` | Includes AGPL-3.0 audit/compliance module (default ON) |
 | `SIGNET_REQUIRE_REAL_PQ` | Disallows bundled PQ stubs; requires real liboqs |
 | `SIGNET_REQUIRE_COMMERCIAL_LICENSE` | Enforces evaluation tier validation |
 

@@ -132,3 +132,9 @@ Benchmarking_Protocols/results/
 # ---------------------------------------------------------------------------
 rust/*/target/
 rust/*/Cargo.lock
+
+# Local notes and workspace files
+.obsidian/
+*.canvas
+*.base
+2026-*.md
