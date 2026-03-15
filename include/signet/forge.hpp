@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 #pragma once
 
@@ -12,7 +12,7 @@
 /// bloom filters, column/offset indexes, memory-mapped I/O, AI-native
 /// extensions (vector types, tensor bridge, WAL, streaming sink, feature
 /// store, MPMC event bus), interop bridges (Arrow, ONNX, NumPy/DLPack),
-/// and BSL 1.1-licensed AI audit/compliance modules (when enabled).
+/// and AGPL-3.0-licensed AI audit/compliance modules (when enabled).
 ///
 /// @code
 ///   #include "signet/forge.hpp"
@@ -90,14 +90,14 @@
 #endif
 /// @}
 
-/// @name AI-Native: vector types, quantized vectors, tensor bridge (Apache 2.0)
+/// @name AI-Native: vector types, quantized vectors, tensor bridge (AGPL-3.0-or-later)
 /// @{
 #include "signet/ai/vector_type.hpp"
 #include "signet/ai/quantized_vector.hpp"
 #include "signet/ai/tensor_bridge.hpp"
 /// @}
 
-/// @name Streaming WAL + Async Compaction (Apache 2.0)
+/// @name Streaming WAL + Async Compaction (AGPL-3.0-or-later)
 /// @{
 #include "signet/ai/wal.hpp"
 #ifndef __EMSCRIPTEN__
@@ -105,20 +105,20 @@
 #endif
 /// @}
 
-/// @name Feature Store: point-in-time feature retrieval (Apache 2.0)
+/// @name Feature Store: point-in-time feature retrieval (AGPL-3.0-or-later)
 /// @{
 #include "signet/ai/feature_writer.hpp"
 #include "signet/ai/feature_reader.hpp"
 /// @}
 
-/// @name MPMC ColumnBatch Event Bus (Apache 2.0)
+/// @name MPMC ColumnBatch Event Bus (AGPL-3.0-or-later)
 /// @{
 #include "signet/ai/mpmc_ring.hpp"
 #include "signet/ai/column_batch.hpp"
 #include "signet/ai/event_bus.hpp"
 /// @}
 
-/// @name AI Audit and Compliance (BSL 1.1) -- requires SIGNET_ENABLE_COMMERCIAL
+/// @name AI Audit and Compliance (AGPL-3.0 commercial tier) -- requires SIGNET_ENABLE_COMMERCIAL
 /// @{
 #if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
 #  include "signet/ai/audit_chain.hpp"

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // Fuzz harness for X25519 ECDH scalar multiplication (RFC 7748).
 // Gap T-3: Crypto fuzz harnesses for post-quantum/hybrid KEM compliance testing.

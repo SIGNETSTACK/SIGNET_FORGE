@@ -104,13 +104,13 @@ Python, WASM).
 
 | Tier | License | What's Included |
 |------|---------|-----------------|
-| **Core** (Apache 2.0) | Free for any use | Parquet read/write, all encodings, compression, encryption (including post-quantum), bloom filters, WAL, feature store, event bus, vector types, tensor bridge, Arrow/ONNX/NumPy interop |
-| **AI Audit** (BSL 1.1) | Free evaluation; commercial license for production | Audit chain, decision/inference logs, MiFID II reporter, EU AI Act reporter |
+| **Full library** (AGPL-3.0) | Free for AGPL-compliant use | Parquet read/write, all encodings, compression, encryption (including post-quantum), bloom filters, WAL, feature store, event bus, vector types, tensor bridge, Arrow/ONNX/NumPy interop |
+| **AI Audit** (AGPL-3.0 + Commercial) | AGPL-3.0 free; commercial license for proprietary use | Audit chain, decision/inference logs, MiFID II reporter, EU AI Act reporter |
 
 **Evaluation grant**: 30 days, 50M rows/month, 3 users, 1 node — no license key needed for
 development and testing.
 
-**Change Date**: January 1, 2030 — BSL 1.1 tier converts to Apache 2.0.
+**Commercial License Exception** available for proprietary and SaaS deployments. See LICENSE_COMMERCIAL.
 
 Build with `-DSIGNET_BUILD_AI_AUDIT=OFF` to exclude the BSL tier entirely.
 
@@ -222,13 +222,13 @@ signet/forge.hpp (single-include)
     +-- AI Vectors (FLOAT32_VECTOR, INT8/INT4 quantized)
     +-- Streaming (WAL fwrite + mmap, MPMC ring, EventBus, StreamingSink)
     +-- Feature Store (FeatureWriter, FeatureReader, point-in-time)
-    +-- Audit Trail (SHA-256 chain, decision log, inference log) [BSL 1.1]
-    +-- Compliance (MiFID II RTS 24, EU AI Act Art. 12/13/19) [BSL 1.1]
+    +-- Audit Trail (SHA-256 chain, decision log, inference log) [AGPL-3.0]
+    +-- Compliance (MiFID II RTS 24, EU AI Act Art. 12/13/19) [AGPL-3.0]
     +-- Interop (Arrow C Data, ONNX Runtime, NumPy/DLPack)
 ```
 
 ---
 
-*Signet Forge v0.1.0 | Apache 2.0 + BSL 1.1 | C++20 | github.com/SIGNETSTACK/signet-forge*
+*Signet Forge v0.1.0 | AGPL-3.0-or-later + Commercial License Exception | C++20 | github.com/SIGNETSTACK/signet-forge*
 
 *Contact: johnson@signetstack.io*

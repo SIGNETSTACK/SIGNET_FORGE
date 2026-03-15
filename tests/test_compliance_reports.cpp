@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // test_compliance_reports.cpp — Phase 10d: MiFID II + EU AI Act Report Generators
 // Tests for MiFID2Reporter and EUAIActReporter.

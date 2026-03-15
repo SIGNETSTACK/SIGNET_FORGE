@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 #pragma once
 
@@ -16,7 +16,7 @@
 // Wire format (unified across all ciphers):
 //   [1 byte: iv_size] [iv bytes] [ciphertext (+tag for GCM)]
 //
-// The interface is Apache 2.0 (core tier) — it's not gated by BSL.
+// The interface is AGPL-3.0-or-later (core tier) — always available with SIGNET_ENABLE_COMMERCIAL.
 // ---------------------------------------------------------------------------
 
 #include "signet/crypto/aes_gcm.hpp"

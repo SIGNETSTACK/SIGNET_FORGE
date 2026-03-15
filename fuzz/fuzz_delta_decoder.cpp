@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for delta::decode_int64 — DELTA_BINARY_PACKED decoding.
 
 #include "signet/encoding/delta.hpp"

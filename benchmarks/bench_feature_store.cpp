@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // bench_feature_store.cpp — Feature store latency benchmarks
 // Tests point-in-time correctness + retrieval speed

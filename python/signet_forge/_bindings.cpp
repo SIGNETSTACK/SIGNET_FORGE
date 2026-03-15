@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // python/signet_forge/_bindings.cpp
 // pybind11 Python bindings for Signet_Forge
@@ -413,7 +413,7 @@ PYBIND11_MODULE(_bindings, m) {
 
 #ifdef SIGNET_HAS_AI_AUDIT
     // -----------------------------------------------------------------------
-    // AI Audit & Compliance tier (BSL 1.1 — see LICENSE_COMMERCIAL)
+    // AI Audit & Compliance tier (AGPL-3.0 commercial tier — see LICENSE_COMMERCIAL)
     // -----------------------------------------------------------------------
 
     // Decision Log

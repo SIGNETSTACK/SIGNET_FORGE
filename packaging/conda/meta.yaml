@@ -52,8 +52,8 @@ outputs:
 
 about:
   home: https://github.com/SIGNETSTACK/signet-forge
-  license: Apache-2.0
-  license_family: Apache
+  license: AGPL-3.0-or-later
+  license_family: GPL
   license_file: LICENSE
   summary: Standalone C++20 Parquet library with AI-native extensions
   description: |

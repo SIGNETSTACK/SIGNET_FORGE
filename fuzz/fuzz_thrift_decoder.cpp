@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for ThriftCompactDecoder — all Thrift deserialization paths.
 
 #include "signet/thrift/compact.hpp"

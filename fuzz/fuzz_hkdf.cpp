@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // Fuzz harness for HKDF-Extract/Expand (RFC 5869) using HMAC-SHA256.
 // Gap T-3: Crypto fuzz harnesses for NIST SP 800-56C compliance testing.

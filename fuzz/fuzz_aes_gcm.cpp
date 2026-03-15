@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for AES-256-GCM encrypt/decrypt — exercises all GCM code paths.
 // Gap T-3: Crypto fuzz harnesses for NIST SP 800-38D compliance testing.
 

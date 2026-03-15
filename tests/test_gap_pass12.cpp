@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // Gap Fix Pass 12: D-12 (threat model), G-9 (data classification),
 // R-19 (incident response), R-20 (regulatory monitor), T-8 (HSM stub).

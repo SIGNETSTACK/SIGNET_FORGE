@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
-// Change Date: January 1, 2030 | Change License: Apache-2.0
 // See LICENSE_COMMERCIAL for full terms.
 #pragma once
 
 #if !defined(SIGNET_ENABLE_COMMERCIAL) || !SIGNET_ENABLE_COMMERCIAL
-#error "signet/ai/human_oversight.hpp is a BSL 1.1 commercial module. Build with -DSIGNET_ENABLE_COMMERCIAL=ON."
+#error "signet/ai/human_oversight.hpp requires SIGNET_ENABLE_COMMERCIAL=ON (AGPL-3.0 commercial tier). See LICENSE_COMMERCIAL."
 #endif
 
 // ---------------------------------------------------------------------------

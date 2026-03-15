@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for AES-GCM and AES-CTR crypto primitives used by PME.
 // Gap T-3: Crypto fuzz harnesses for PME spec compliance.
 //

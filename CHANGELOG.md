@@ -320,12 +320,12 @@ Initial public release of Signet Forge.
 - `ColumnBatch` — columnar batch container with zero-copy TensorView access
 - `EventBus` — three-tier event router (topic → subscriber → handler)
 
-#### AI Audit Trail (BSL 1.1)
+#### AI Audit Trail (AGPL-3.0)
 - `AuditChain` — SHA-256 hash chain across row groups for tamper detection
 - `DecisionLogWriter` / `DecisionLogReader` — structured AI decision logging
 - `InferenceLogWriter` / `InferenceLogReader` — ML inference audit trail
 
-#### Compliance Reporters (BSL 1.1)
+#### Compliance Reporters (AGPL-3.0)
 - `MiFID2Reporter` — MiFID II RTS 24 Annex I report generation (JSON/NDJSON/CSV)
 - `EUAIActReporter` — EU AI Act Articles 12, 13, and 19 conformity assessment
 

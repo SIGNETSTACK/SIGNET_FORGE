@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 /// @file wal_mapped_segment.hpp
 /// @brief Cross-platform memory-mapped WAL segment and ring writer.

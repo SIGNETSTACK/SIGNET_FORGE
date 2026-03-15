@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 #pragma once
 
@@ -266,7 +266,7 @@ private:
 /// Commercial licensing and evaluation-tier usage enforcement.
 ///
 /// This namespace contains the license validation gate, usage metering, and
-/// evaluation-mode policy enforcement used by the BSL 1.1 AI audit tier.
+/// evaluation-mode policy enforcement used by the AGPL-3.0 commercial tier.
 /// All symbols are header-only and thread-safe (guarded by `usage_state_mutex()`).
 namespace commercial {
 
@@ -907,7 +907,7 @@ inline void load_usage_state_from_file(const std::string& path, UsageState& st) 
 #if !defined(SIGNET_ENABLE_COMMERCIAL) || !SIGNET_ENABLE_COMMERCIAL
     return Error{ErrorCode::LICENSE_ERROR,
                  "commercial feature disabled in this Apache build; "
-                 "rebuild with -DSIGNET_ENABLE_COMMERCIAL=ON under BSL 1.1"};
+                 "rebuild with -DSIGNET_ENABLE_COMMERCIAL=ON (AGPL-3.0 commercial tier)"};
 #else
 #  if defined(SIGNET_REQUIRE_COMMERCIAL_LICENSE) && SIGNET_REQUIRE_COMMERCIAL_LICENSE
 #    if !defined(SIGNET_COMMERCIAL_LICENSE_HASH_U64)
@@ -1105,7 +1105,7 @@ inline void ensure_usage_state_loaded_locked(UsageState& st) {
 
 /// Gate access to a commercial feature: validate the license and enforce evaluation limits.
 ///
-/// This is the primary entry point for BSL 1.1 feature gating. On first call
+/// This is the primary entry point for AGPL-3.0 commercial tier gating. On first call
 /// it validates the license key (cached), then delegates to `enforce_eval_limits()`
 /// for per-operation metering. Callers in the AI audit tier invoke this at the
 /// start of every write or log operation.

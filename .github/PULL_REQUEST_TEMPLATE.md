@@ -24,9 +24,9 @@ cd build && ctest --output-on-failure
 
 - [ ] All tests pass (`ctest --output-on-failure`)
 - [ ] No new compiler warnings
-- [ ] SPDX license headers on new files (Apache-2.0 or BSL-1.1)
+- [ ] SPDX license headers on new files (AGPL-3.0-or-later)
 - [ ] CHANGELOG.md updated (if user-facing change)
 - [ ] Code formatted with `.clang-format`
 - [ ] New public API has tests in `tests/` and benchmark in `benchmarks/`
 - [ ] Compliance-related code cites the specific regulatory article
-- [ ] BSL 1.1 files reviewed by maintainer (if applicable)
+- [ ] Commercial tier files reviewed by maintainer (if applicable)

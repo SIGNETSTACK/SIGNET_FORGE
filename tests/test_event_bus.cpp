@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // test_event_bus.cpp — Phase 9b: MPMC ColumnBatch Event Bus
 // Tests for MpmcRing, ColumnBatch, and EventBus.

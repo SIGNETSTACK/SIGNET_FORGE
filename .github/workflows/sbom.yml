@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # CycloneDX SBOM generation via anchore/syft
 # Gap T-2: US Executive Order 14028, EU Cyber Resilience Act (CRA) compliance
 name: SBOM

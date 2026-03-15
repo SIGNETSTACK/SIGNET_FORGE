@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // bench_phase8_compliance.cpp — MiFID II + EU AI Act report generation benchmarks (6 cases)
 //
@@ -9,7 +9,7 @@
 // CR5: EU AI Act Art.13  — EUAIActReporter::generate_article13() (transparency)
 // CR6: EU AI Act Art.19  — EUAIActReporter::generate_article19() (conformity)
 //
-// ALL cases require SIGNET_ENABLE_COMMERCIAL (BSL 1.1 tier).
+// ALL cases require SIGNET_ENABLE_COMMERCIAL (AGPL-3.0 commercial tier).
 //
 // Build: cmake --preset benchmarks && cmake --build build-benchmarks
 // Run:   ./build-benchmarks/signet_ebench "[bench-enterprise][compliance]"

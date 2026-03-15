@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright 2026 Johnson Ogundeji
 # run_full_suite.sh — Orchestrator for the enterprise benchmark suite
 #

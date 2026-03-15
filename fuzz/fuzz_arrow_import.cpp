@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for Arrow C Data Interface import bridge — corrupted ArrowArray/ArrowSchema.
 
 #include "signet/interop/arrow_bridge.hpp"

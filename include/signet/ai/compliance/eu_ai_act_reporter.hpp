@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
-// Change Date: January 1, 2030 | Change License: Apache-2.0
 // See LICENSE_COMMERCIAL for full terms.
 // eu_ai_act_reporter.hpp — EU AI Act Compliance Reporter
 // Phase 10d: Compliance Report Generators
@@ -38,7 +37,7 @@
 #pragma once
 
 #if !defined(SIGNET_ENABLE_COMMERCIAL) || !SIGNET_ENABLE_COMMERCIAL
-#error "signet/ai/compliance/eu_ai_act_reporter.hpp is a BSL 1.1 commercial module. Build with -DSIGNET_ENABLE_COMMERCIAL=ON."
+#error "signet/ai/compliance/eu_ai_act_reporter.hpp requires SIGNET_ENABLE_COMMERCIAL=ON (AGPL-3.0 commercial tier). See LICENSE_COMMERCIAL."
 #endif
 
 #include "signet/error.hpp"

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 #pragma once
 
@@ -6,7 +6,7 @@
 /// @brief SHA-256 hash function (NIST FIPS 180-4).
 ///
 /// Public-standard cryptographic hash — no proprietary IP.
-/// Extracted for clean tier separation: Tier 1 (Apache 2.0) consumers
+/// Extracted for clean tier separation: Tier 1 (AGPL-3.0-or-later) consumers
 /// (hkdf.hpp, audit_chain.hpp, row_lineage.hpp) can use SHA-256 without
 /// depending on any commercial or proprietary header.
 ///

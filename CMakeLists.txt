@@ -25,7 +25,7 @@ option(SIGNET_ENABLE_GZIP    "Enable Gzip compression"   OFF)
 option(SIGNET_ENABLE_CRYPTO  "Enable AES/PME encryption"  OFF)
 option(SIGNET_ENABLE_PQ      "Enable post-quantum crypto" OFF)
 option(SIGNET_BUILD_PYTHON    "Build pybind11 Python module"              OFF)
-option(SIGNET_ENABLE_COMMERCIAL "Enable BSL 1.1 commercial tier (encryption + stamps/compliance)" OFF)
+option(SIGNET_ENABLE_COMMERCIAL "Enable AGPL-3.0 commercial tier (encryption + compliance reporters)" OFF)
 option(SIGNET_BUILD_AI_AUDIT "Deprecated alias for SIGNET_ENABLE_COMMERCIAL" OFF)
 option(SIGNET_BUILD_FUZZ      "Build libFuzzer fuzz harnesses" OFF)
 option(SIGNET_REQUIRE_COMMERCIAL_LICENSE "Require runtime commercial license validation (SIGNET_COMMERCIAL_LICENSE_KEY)" OFF)
@@ -50,17 +50,17 @@ option(SIGNET_MINIMAL_DEPS    "Disable ALL optional external dependencies (for e
 if(SIGNET_BUILD_AI_AUDIT)
     message(WARNING "SIGNET_BUILD_AI_AUDIT is deprecated; use SIGNET_ENABLE_COMMERCIAL instead.")
     set(SIGNET_ENABLE_COMMERCIAL ON CACHE BOOL
-        "Enable BSL 1.1 commercial tier (encryption + stamps/compliance)" FORCE)
+        "Enable AGPL-3.0 commercial tier (encryption + compliance reporters)" FORCE)
 endif()
 
 if(SIGNET_ENABLE_CRYPTO)
     message(WARNING "SIGNET_ENABLE_CRYPTO now maps to the commercial tier; enabling SIGNET_ENABLE_COMMERCIAL.")
     set(SIGNET_ENABLE_COMMERCIAL ON CACHE BOOL
-        "Enable BSL 1.1 commercial tier (encryption + stamps/compliance)" FORCE)
+        "Enable AGPL-3.0 commercial tier (encryption + compliance reporters)" FORCE)
 endif()
 
 if(SIGNET_ENABLE_PQ AND NOT SIGNET_ENABLE_COMMERCIAL)
-    message(FATAL_ERROR "SIGNET_ENABLE_PQ requires SIGNET_ENABLE_COMMERCIAL=ON under BSL 1.1.")
+    message(FATAL_ERROR "SIGNET_ENABLE_PQ requires SIGNET_ENABLE_COMMERCIAL=ON.")
 endif()
 
 foreach(_eval_var
@@ -262,7 +262,7 @@ if(SIGNET_ENABLE_COMMERCIAL)
         target_compile_definitions(signet_forge INTERFACE SIGNET_REQUIRE_COMMERCIAL_LICENSE=0)
     endif()
 
-    message(STATUS "SIGNET_ENABLE_COMMERCIAL=ON: BSL 1.1 commercial tier enabled")
+    message(STATUS "SIGNET_ENABLE_COMMERCIAL=ON: AGPL-3.0 commercial tier enabled")
 else()
     target_compile_definitions(signet_forge INTERFACE
         SIGNET_ENABLE_COMMERCIAL=0

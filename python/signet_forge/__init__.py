@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright 2026 Johnson Ogundeji
 # signet_forge — Python bindings for Signet Forge C++20 library
 # Import everything from the compiled pybind11 extension module.
-# AI Audit types (BSL 1.1) are optional — gracefully degrade when
+# AI Audit types (AGPL-3.0 commercial tier) are optional — gracefully degrade when
 # built without SIGNET_BUILD_AI_AUDIT.
 
 from signet_forge._bindings import (
@@ -38,7 +38,7 @@ __all__ = [
     "FeatureReaderOptions", "FeatureReader",
 ]
 
-# AI Audit & Compliance tier (BSL 1.1) — only present when built with
+# AI Audit & Compliance tier (AGPL-3.0 commercial tier) — only present when built with
 # SIGNET_BUILD_AI_AUDIT=ON (which defines SIGNET_HAS_AI_AUDIT in the
 # pybind11 module). Gracefully degrade so OSS users don't get ImportError.
 try:

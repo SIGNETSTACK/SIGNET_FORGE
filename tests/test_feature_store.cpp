@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // test_feature_store.cpp — Phase 9a: Feature Store Foundation
 // Tests for FeatureWriter and FeatureReader: point-in-time correctness,

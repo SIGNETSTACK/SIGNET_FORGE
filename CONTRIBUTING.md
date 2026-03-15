@@ -106,17 +106,16 @@ Do **not** reformat existing files in a separate commit — this makes review di
 
 Every source file must start with an SPDX license header.
 
-**Apache 2.0 files** (core library):
+**AGPL-3.0-or-later files** (all library code):
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Johnson Ogundeji
 ```
 
-**BUSL-1.1 files** (audit/compliance tier):
+**AGPL-3.0-or-later commercial tier files** (audit/compliance):
 ```cpp
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
-// Change Date: January 1, 2030 | Change License: Apache-2.0
 // See LICENSE_COMMERCIAL for full terms.
 ```
 
@@ -186,7 +185,7 @@ Before submitting, verify:
 - [ ] Code formatted with `.clang-format`
 - [ ] Commit messages follow the format above
 
-## BSL 1.1 Code
+## AGPL-3.0 Commercial Tier Code
 
 PRs touching any of the following files require maintainer review (enforced via CODEOWNERS):
 
@@ -200,7 +199,7 @@ PRs touching any of the following files require maintainer review (enforced via 
 - `include/signet/crypto/pme.hpp`
 - `include/signet/crypto/post_quantum.hpp`
 
-These files are licensed under BSL 1.1. By contributing to them, you agree that your contributions
+These files are licensed under AGPL-3.0-or-later. By contributing to them, you agree that your contributions
 will be licensed under the same terms as the existing code.
 
 ## Questions?

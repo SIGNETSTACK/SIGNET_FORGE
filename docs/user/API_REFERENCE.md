@@ -20,11 +20,11 @@ All public APIs live in the `signet::forge` namespace. Single include: `#include
 12. [Streaming WAL](#streaming-wal)
 13. [Feature Store](#feature-store)
 14. [AI Audit Chain](#ai-audit-chain)
-15. [Decision Log (BSL 1.1)](#decision-log-bsl-11)
-16. [Inference Log (BSL 1.1)](#inference-log-bsl-11)
+15. [Decision Log (AGPL-3.0)](#decision-log-agpl-30)
+16. [Inference Log (AGPL-3.0)](#inference-log-agpl-30)
 17. [StreamingSink](#streamingsink)
 18. [MPMC Event Bus](#mpmc-event-bus)
-19. [Compliance Reporters (BSL 1.1)](#compliance-reporters-bsl-11)
+19. [Compliance Reporters (AGPL-3.0)](#compliance-reporters-agpl-30)
 
 ---
 
@@ -534,7 +534,7 @@ class FileDecryptor {
 
 **Headers:** `include/signet/crypto/sha256.hpp`, `include/signet/crypto/sha512.hpp`
 
-**License:** Apache 2.0 (Tier 1) — NIST public standard, no proprietary content. Always available, no build flags required.
+**License:** AGPL-3.0-or-later — NIST public standard implementation. Always available, no build flags required.
 
 Standalone implementations of FIPS 180-4 hash functions, extracted into their own headers for clean tier separation. Tier 1 consumers (`hkdf.hpp`, `audit_chain.hpp`, `row_lineage.hpp`) use SHA-256 without depending on any commercial or proprietary header.
 
@@ -1019,11 +1019,11 @@ class AuditChain {
 
 ---
 
-## Decision Log (BSL 1.1)
+## Decision Log (AGPL-3.0)
 
 **Header:** `include/signet/ai/decision_log.hpp`
 
-**License:** BSL 1.1
+**License:** AGPL-3.0-or-later (Commercial License Exception available)
 
 ### `DecisionRecord` struct
 
@@ -1071,11 +1071,11 @@ class DecisionLogReader {
 
 ---
 
-## Inference Log (BSL 1.1)
+## Inference Log (AGPL-3.0)
 
 **Header:** `include/signet/ai/inference_log.hpp`
 
-**License:** BSL 1.1
+**License:** AGPL-3.0-or-later (Commercial License Exception available)
 
 ### `InferenceRecord` struct
 
@@ -1212,7 +1212,7 @@ struct ColumnBatch {
 
 ---
 
-## Compliance Reporters (BSL 1.1)
+## Compliance Reporters (AGPL-3.0)
 
 **Header:** `include/signet/ai/compliance/`
 

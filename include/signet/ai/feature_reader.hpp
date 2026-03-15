@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 /// @file feature_reader.hpp
 /// @brief Versioned ML feature store reader with point-in-time queries.

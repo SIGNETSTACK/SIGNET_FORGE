@@ -511,7 +511,7 @@ for (const auto& fv : *history) {
 
 **Header:** `include/signet/ai/decision_log.hpp`
 
-**License:** BSL 1.1
+**License:** AGPL-3.0-or-later (Commercial License Exception available)
 
 Every AI system that makes consequential decisions should be able to answer: "What did the model decide, when, with what confidence, and was the record tampered with?" Signet's decision log answers all of these.
 
@@ -574,7 +574,7 @@ auto valid = reader->verify_chain();
 
 **Header:** `include/signet/ai/inference_log.hpp`
 
-**License:** BSL 1.1
+**License:** AGPL-3.0-or-later (Commercial License Exception available)
 
 Inference logs record every model invocation: which model, which version, what the inputs were (by hash), what the outputs were (by hash), and how long it took. This enables **ML reproducibility** — given a logged inference, you can rerun it with the same model and the same inputs and verify you get the same output hash.
 
@@ -686,7 +686,7 @@ Concurrent 4P × 4C (Tier 2):       ~70 ns per operation  (57 M ops/s)
 
 ---
 
-## MiFID II Compliance Reports (BSL 1.1)
+## MiFID II Compliance Reports (AGPL-3.0)
 
 **Header:** `include/signet/ai/compliance/mifid2_reporter.hpp`
 
@@ -741,7 +741,7 @@ The generated JSON includes all fields required by Commission Delegated Regulati
 
 ---
 
-## EU AI Act Compliance Reports (BSL 1.1)
+## EU AI Act Compliance Reports (AGPL-3.0)
 
 **Header:** `include/signet/ai/compliance/eu_ai_act_reporter.hpp`
 

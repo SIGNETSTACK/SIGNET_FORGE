@@ -4,7 +4,7 @@
 Zero mandatory dependencies. Header-mostly. Interoperable with Arrow, DuckDB, Spark, and Polars.
 
 [![CI](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](python/)
 [![codecov](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE/graph/badge.svg)](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE)
@@ -549,42 +549,46 @@ Signet Forge follows [Semantic Versioning](https://semver.org/).
 
 ## Licensing
 
-Signet Forge uses a **dual-license model**:
+Signet Forge is licensed under the **[GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)](LICENSE)**
+with a **[Commercial License Exception](LICENSE_COMMERCIAL)** available for proprietary and hosted deployments.
 
-| Module | License | Files |
-|--------|---------|-------|
-| Core Parquet engine | [Apache 2.0](LICENSE) | `include/signet/` (all except AI audit tier) |
-| Encodings, compression, crypto (SHA-256/512, AES, HKDF), bloom, thrift, interop | [Apache 2.0](LICENSE) | Same |
-| AI vector types, feature store, streaming WAL | [Apache 2.0](LICENSE) | `include/signet/ai/` (wal, feature_writer, feature_reader, vector_type, etc.) |
-| **AI Audit & Compliance tier** | [BSL 1.1](LICENSE_COMMERCIAL) | `include/signet/ai/audit_chain.hpp`, `decision_log.hpp`, `inference_log.hpp`, `ai/compliance/` |
+### AGPL-3.0 (open source)
 
-### Apache 2.0 (core + AI infrastructure)
+The full Signet Forge codebase — Parquet engine, all encodings, compression, post-quantum
+encryption, bloom filters, AI audit trail, MiFID II / EU AI Act reporters, streaming WAL,
+feature store, and all compliance modules — is freely available under AGPL-3.0.
 
-The core library — Parquet read/write, all encodings, compression, post-quantum encryption, bloom filters, vector types, feature store, and streaming WAL — is Apache 2.0. Use it freely in any project, including commercial products.
+**You may use Signet Forge at no cost provided your project complies with AGPL-3.0.**
+This means: if you distribute a product incorporating Signet Forge, or operate it as a
+network-accessible service, you must make the complete corresponding source code of that
+product/service available under AGPL-3.0.
 
-### BSL 1.1 (AI Audit & Compliance tier)
+Open source projects, academic research, and government use under AGPL-3.0 require no
+additional agreement.
 
-The AI audit and compliance module (`audit_chain`, `decision_log`, `inference_log`, and the MiFID II / EU AI Act reporters) is licensed under the [Business Source License 1.1](LICENSE_COMMERCIAL).
+### Commercial License Exception
 
-**Free testing/evaluation grant**: Internal non-production use is permitted up to the thresholds in `LICENSE_COMMERCIAL` (default policy: 30 days, 50,000,000 rows/month, 3 users, 1 node).
+Organisations that cannot or do not wish to comply with AGPL-3.0's source-disclosure
+obligations may purchase a **Commercial License Exception** from Signet Stack. This grants:
 
-**Commercial licensing required** for production use beyond those thresholds, hosted third-party service use, or distributed SDK/library use.
+- The right to incorporate Signet Forge in closed-source, proprietary products
+- The right to operate Signet Forge as a SaaS or hosted service without triggering AGPL §13
+- The right to modify Signet Forge internally without publishing modifications
 
-**Runtime enforcement**: Commercial builds validate `SIGNET_COMMERCIAL_LICENSE_KEY` and enforce eval thresholds when the key contains `tier=eval` claims (for example: `tier=eval;max_rows_month=50000000;max_users=3;max_nodes=1;max_days=30`).
+See [LICENSE_COMMERCIAL](LICENSE_COMMERCIAL) for tier details and terms.
 
-**Change Date**: January 1, 2030 — after which the BSL 1.1 tier also converts to Apache 2.0.
+**Commercial licensing inquiries**: **johnson@signetstack.io**
 
-**Disable the BSL tier**: Build with `-DSIGNET_BUILD_AI_AUDIT=OFF` to exclude it entirely from your build.
+### Contributor License Agreement
 
-### Commercial Licensing
-
-For commercial licensing inquiries: **johnson@signetstack.io**
+External contributors must sign the [CLA](CLA.md) before pull requests can be merged.
+The CLA grants Signet Stack the rights needed to offer the dual-license model.
 
 ---
 
 ## Contributing
 
-1. Fork → branch → PR against `main`
+1. Fork → branch → PR against `main` (CLA required — see [CLA.md](CLA.md))
 2. `cmake --preset dev-tests && cmake --build build && cd build && ctest` must be green
 3. New public API requires tests in `tests/` and a benchmark in `benchmarks/`
 4. Compliance-related code (audit trail, reporters) must cite the specific regulatory article

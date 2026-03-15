@@ -1,17 +1,16 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
-// Change Date: January 1, 2030 | Change License: Apache-2.0
 // See LICENSE_COMMERCIAL for full terms.
 
 /// @file row_lineage.hpp
 /// @brief Per-row lineage tracking (Iceberg V3-style) with monotonic row IDs,
 ///        mutation versioning, and SHA-256 per-row hash chain for tamper evidence.
-/// @note This is a BSL 1.1 commercial module. Build with -DSIGNET_ENABLE_COMMERCIAL=ON.
+/// @note This is an AGPL-3.0 commercial module. See LICENSE_COMMERCIAL for proprietary use.
 
 #pragma once
 
 #if !defined(SIGNET_ENABLE_COMMERCIAL) || !SIGNET_ENABLE_COMMERCIAL
-#error "signet/ai/row_lineage.hpp is a BSL 1.1 commercial module. Build with -DSIGNET_ENABLE_COMMERCIAL=ON."
+#error "signet/ai/row_lineage.hpp requires SIGNET_ENABLE_COMMERCIAL=ON (AGPL-3.0 commercial tier). See LICENSE_COMMERCIAL."
 #endif
 
 // ---------------------------------------------------------------------------
@@ -63,7 +62,7 @@ public:
                                 int32_t initial_version = 1)
         : origin_file_(origin_file)
         , version_(initial_version) {
-        // BSL 1.1 license gating: the license check result is intentionally
+        // AGPL-3.0 commercial tier gating: the license check result is intentionally
         // discarded here. In demo/dev mode (SIGNET_REQUIRE_COMMERCIAL_LICENSE=OFF),
         // require_feature() always succeeds. In production mode, a missing license
         // causes a hard error at a higher level (InferenceLogWriter /

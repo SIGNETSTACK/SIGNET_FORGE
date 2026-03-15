@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Fuzz harness for key metadata TLV parsing — exercises deserialization of
 // encrypted key material from untrusted Parquet file metadata.
 // Gap T-3: Crypto fuzz harnesses for key metadata TLV parsing.

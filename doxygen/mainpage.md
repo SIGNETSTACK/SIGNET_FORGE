@@ -95,4 +95,4 @@ target_link_libraries(your_target PRIVATE signet::forge)
 ## License
 
 - **Core library** (Phases 1–9): Apache License 2.0
-- **AI Audit & Compliance tier**: Business Source License 1.1
+- **AI Audit & Compliance tier**: AGPL-3.0-or-later + Commercial License Exception

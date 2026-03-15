@@ -7,10 +7,9 @@ name = "signet-forge"
 version = "0.1.0"
 description = "Standalone C++20 Parquet library with AI-native extensions — Python bindings"
 readme = "README.md"
-# Core library: Apache-2.0. AI Audit & Compliance tier (audit_chain, decision_log,
-# inference_log, MiFID II + EU AI Act reporters): BSL 1.1 (see LICENSE_COMMERCIAL).
-# Build with SIGNET_BUILD_AI_AUDIT=OFF to exclude the BSL tier entirely.
-license = {text = "Apache-2.0 AND LicenseRef-Signet-BUSL-1.1"}
+# Licensed under AGPL-3.0-or-later (open source) with a Commercial License Exception
+# for proprietary/hosted use (see LICENSE_COMMERCIAL). CLA required for contributions.
+license = {text = "AGPL-3.0-or-later"}
 requires-python = ">=3.10"
 keywords = ["parquet", "columnar", "ai", "compliance", "mifid2", "eu-ai-act", "audit-trail", "feature-store"]
 classifiers = [
@@ -18,8 +17,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

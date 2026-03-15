@@ -503,7 +503,7 @@ jobs:
           bandit -r python/ --severity-level medium --confidence-level medium
 
   # ---------------------------------------------------------------------------
-  # Gap T-17: License compliance scanner — verify Apache-2.0 + BSL 1.1
+  # Gap T-17: License compliance scanner — verify AGPL-3.0-or-later
   # ---------------------------------------------------------------------------
   license-check:
     name: License Compliance
@@ -521,14 +521,18 @@ jobs:
       - name: Check project license
         run: licensee detect --json .
 
-      - name: Verify no GPL/AGPL contamination in headers
+      - name: Verify AGPL-3.0-or-later headers present, no GPL-2.0-only contamination
         run: |
-          echo "Scanning for incompatible license headers..."
-          if grep -rli "GNU General Public License\|AGPL\|GPL-3" \
-               include/ python/ ffi/ rust/ wasm/ tools/ 2>/dev/null; then
-            echo "::error::Found GPL/AGPL license headers in source — incompatible with Apache-2.0"
+          echo "Scanning for GPL-2.0-only headers (incompatible with AGPL-3.0)..."
+          if grep -rli "GNU General Public License.*version 2" \
+               include/ python/ ffi/ rust/ wasm/ tools/ 2>/dev/null | \
+               grep -v "or.*later\|or-later\|v2 or"; then
+            echo "::error::Found GPL-2.0-only headers — incompatible with AGPL-3.0-or-later"
             exit 1
           fi
+          echo "Verifying AGPL-3.0-or-later SPDX identifiers..."
+          count=$(grep -rli "SPDX-License-Identifier: AGPL-3.0-or-later" include/ 2>/dev/null | wc -l)
+          echo "Files with AGPL-3.0-or-later SPDX: $count"
           echo "No incompatible licenses found."
 
       - name: Verify SPDX identifiers present

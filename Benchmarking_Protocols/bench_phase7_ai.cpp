@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // bench_phase7_ai.cpp — AI-native benchmarks (5 cases)
 //
-// AI1: DecisionLog 10K records      — BSL 1.1 commercial gate
-// AI2: InferenceLog 10K records     — BSL 1.1 commercial gate
-// AI3: verify_chain                 — BSL 1.1 commercial gate
-// AI4: column_view 1M doubles       — zero-copy tensor view (Apache 2.0)
-// AI5: EventBus 4P4C 100K           — MPMC throughput (Apache 2.0)
+// AI1: DecisionLog 10K records      — AGPL-3.0 commercial gate
+// AI2: InferenceLog 10K records     — AGPL-3.0 commercial gate
+// AI3: verify_chain                 — AGPL-3.0 commercial gate
+// AI4: column_view 1M doubles       — zero-copy tensor view (AGPL-3.0-or-later)
+// AI5: EventBus 4P4C 100K           — MPMC throughput (AGPL-3.0-or-later)
 //
 // Build: cmake --preset benchmarks && cmake --build build-benchmarks
 // Run:   ./build-benchmarks/signet_ebench "[bench-enterprise][ai]"

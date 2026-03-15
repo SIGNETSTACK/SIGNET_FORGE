@@ -3,7 +3,7 @@ class SignetForge < Formula
   homepage "https://github.com/SIGNETSTACK/signet-forge"
   url "https://github.com/SIGNETSTACK/signet-forge/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "PLACEHOLDER"  # Updated on release
-  license "Apache-2.0"
+  license "AGPL-3.0-or-later"
   head "https://github.com/SIGNETSTACK/signet-forge.git", branch: "main"
 
   depends_on "cmake" => :build

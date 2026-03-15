@@ -437,5 +437,5 @@ external data service.
 
 ---
 
-*This document was written for `signet-forge` v0.1.0 (Apache 2.0). All benchmark numbers
+*This document was written for `signet-forge` v0.1.0 (AGPL-3.0-or-later). All benchmark numbers
 were measured on macOS x86_64 with Apple Clang 17, Release build, tmpfs storage, 100–200 samples.*

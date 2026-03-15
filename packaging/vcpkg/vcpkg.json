@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Standalone C++20 Parquet library with AI-native extensions",
   "homepage": "https://github.com/SIGNETSTACK/signet-forge",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "supports": "!uwp",
   "dependencies": [
     {

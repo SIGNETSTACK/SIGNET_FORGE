@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright 2026 Johnson Ogundeji
 // bench_phase10_roundtrip.cpp — Roundtrip fidelity benchmarks
 //
@@ -130,7 +130,7 @@ TEST_CASE("RT2: roundtrip 1M optimal Snappy", "[bench-enterprise][roundtrip]") {
 // ===========================================================================
 // Full roundtrip with Parquet Modular Encryption (AES-GCM footer + AES-CTR
 // column encryption).  Gated behind SIGNET_ENABLE_COMMERCIAL because the
-// PME writer/reader paths are part of the BSL 1.1 commercial tier.
+// PME writer/reader paths are part of the AGPL-3.0 commercial tier.
 //
 // NOTE: Full PME integration requires the encryption-aware writer path.
 // This case exercises the same write + read pipeline under the commercial
