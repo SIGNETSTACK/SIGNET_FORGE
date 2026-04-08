@@ -1,0 +1,105 @@
+id	file	kind	suite	status
+RT1: roundtrip 1M PLAIN	Benchmarking_Protocols/bench_phase10_roundtrip.cpp	protocol	phase10_roundtrip	active
+RT2: roundtrip 1M optimal Snappy	Benchmarking_Protocols/bench_phase10_roundtrip.cpp	protocol	phase10_roundtrip	active
+RT3: roundtrip 1M PME	Benchmarking_Protocols/bench_phase10_roundtrip.cpp	protocol	phase10_roundtrip	active
+RT4: roundtrip 1M PQ	Benchmarking_Protocols/bench_phase10_roundtrip.cpp	protocol	phase10_roundtrip	active
+W1: 1K PLAIN uncompressed	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W2: 100K PLAIN uncompressed	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W3: 1M PLAIN uncompressed	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W4: 10M PLAIN uncompressed	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W5: 1M PLAIN Snappy	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W6: 1M PLAIN ZSTD	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W7: 1M PLAIN LZ4	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W8: 1M PLAIN Gzip	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W9: 1M optimal Snappy	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W10: 1M optimal ZSTD	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W11: 1M optimal Snappy PME	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W12: 1M optimal Snappy PQ	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W13: 10M optimal Snappy	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+W14: 10M optimal Snappy PME	Benchmarking_Protocols/bench_phase2_write.cpp	protocol	phase2_write	active
+R1: read all 1M PLAIN	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R2: projection bid+ask 1M	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R3: read 1M optimal Snappy	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R4: mmap read 1M optimal Snappy	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R5: typed read 1M optimal Snappy	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R6: read 1M optimal ZSTD	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R7: read 1M PME	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R8: read 1M PQ	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R9: read all 10M PLAIN	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+R10: read 10M optimal Snappy	Benchmarking_Protocols/bench_phase3_read.cpp	protocol	phase3_read	active
+P1: filter symbol 1M	Benchmarking_Protocols/bench_phase4_predicate.cpp	protocol	phase4_predicate	active
+P2: filter symbol+exchange 1M	Benchmarking_Protocols/bench_phase4_predicate.cpp	protocol	phase4_predicate	active
+P3: time range filter 1M	Benchmarking_Protocols/bench_phase4_predicate.cpp	protocol	phase4_predicate	active
+P4: bloom probe 1M	Benchmarking_Protocols/bench_phase4_predicate.cpp	protocol	phase4_predicate	active
+P5: filter symbol 10M	Benchmarking_Protocols/bench_phase4_predicate.cpp	protocol	phase4_predicate	active
+WAL1: 100K WalWriter	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL2: 100K WalMmapWriter	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL3: 100K WalManager	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL4: 1M WalWriter	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL5: 1M WalMmapWriter	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL6: 1M WAL write + read_all	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+WAL7: 100K WalWriter (encrypted)	Benchmarking_Protocols/bench_phase5_wal.cpp	protocol	phase5_wal	active
+FS1: write 100K vectors	Benchmarking_Protocols/bench_phase6_features.cpp	protocol	phase6_features	active
+FS2: get latest 1000x	Benchmarking_Protocols/bench_phase6_features.cpp	protocol	phase6_features	active
+FS3: as_of 1000x	Benchmarking_Protocols/bench_phase6_features.cpp	protocol	phase6_features	active
+FS4: as_of_batch 6 entities	Benchmarking_Protocols/bench_phase6_features.cpp	protocol	phase6_features	active
+FS5: history 1000 records	Benchmarking_Protocols/bench_phase6_features.cpp	protocol	phase6_features	active
+AI1: DecisionLog 10K records	Benchmarking_Protocols/bench_phase7_ai.cpp	protocol	phase7_ai	active
+AI2: InferenceLog 10K records	Benchmarking_Protocols/bench_phase7_ai.cpp	protocol	phase7_ai	active
+AI3: verify_chain	Benchmarking_Protocols/bench_phase7_ai.cpp	protocol	phase7_ai	active
+AI4: column_view 1M doubles	Benchmarking_Protocols/bench_phase7_ai.cpp	protocol	phase7_ai	active
+AI5: EventBus 4P4C 100K	Benchmarking_Protocols/bench_phase7_ai.cpp	protocol	phase7_ai	active
+CR1: MiFID2 JSON	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+CR2: MiFID2 NDJSON	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+CR3: MiFID2 CSV	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+CR4: EU AI Act Art.12	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+CR5: EU AI Act Art.13	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+CR6: EU AI Act Art.19	Benchmarking_Protocols/bench_phase8_compliance.cpp	protocol	phase8_compliance	active
+I1: Arrow export 1M doubles	Benchmarking_Protocols/bench_phase9_interop.cpp	protocol	phase9_interop	active
+I2: tensor wrap 1M doubles	Benchmarking_Protocols/bench_phase9_interop.cpp	protocol	phase9_interop	active
+I3: batch tensor 1M x 6	Benchmarking_Protocols/bench_phase9_interop.cpp	protocol	phase9_interop	active
+enc_delta_enc_ts_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_delta_dec_ts_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_bss_enc_px_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_bss_dec_px_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_rle_enc_bw1_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_rle_dec_bw1_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_delta_ts_10k_plain	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_plain_copy_ts_10k	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_bss_enc_px_10k_sz	benchmarks/bench_encodings.cpp	micro	encodings	active
+enc_bss_dec_px_10k_sz	benchmarks/bench_encodings.cpp	micro	encodings	active
+ring_push_pop_1t	benchmarks/bench_event_bus.cpp	micro	event_bus	active
+ring_batch_4p4c_4k	benchmarks/bench_event_bus.cpp	micro	event_bus	active
+batch_push_1k_view	benchmarks/bench_event_bus.cpp	micro	event_bus	active
+batch_tensor_1024x8	benchmarks/bench_event_bus.cpp	micro	event_bus	active
+bus_pub_pop_1k_1t	benchmarks/bench_event_bus.cpp	micro	event_bus	active
+feat_wr_batch_10k	benchmarks/bench_feature_store.cpp	micro	feature_store	active
+feat_get_latest_1k	benchmarks/bench_feature_store.cpp	micro	feature_store	active
+feat_asof_mid_1k	benchmarks/bench_feature_store.cpp	micro	feature_store	active
+feat_asof_batch_100e	benchmarks/bench_feature_store.cpp	micro	feature_store	active
+feat_hist_100	benchmarks/bench_feature_store.cpp	micro	feature_store	active
+rd_price_f64_50k	benchmarks/bench_read.cpp	micro	read	active
+rd_all_str_50k	benchmarks/bench_read.cpp	micro	read	active
+rd_proj_px_qty_50k	benchmarks/bench_read.cpp	micro	read	active
+rd_ts_i64_50k	benchmarks/bench_read.cpp	micro	read	active
+rd_footer_rows_50k	benchmarks/bench_read.cpp	micro	read	active
+wal_writer_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_writer_256b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_writer_1k_batch	benchmarks/bench_wal.cpp	micro	wal	active
+wal_writer_flush_nofs	benchmarks/bench_wal.cpp	micro	wal	active
+wal_mgr_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_read_all_10k	benchmarks/bench_wal.cpp	micro	wal	active
+wal_mmap_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_mmap_256b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_mmap_1k_batch	benchmarks/bench_wal.cpp	micro	wal	active
+wal_mmap_flush_noms	benchmarks/bench_wal.cpp	micro	wal	active
+wal_cmp_fwrite_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_cmp_mmap_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_3way_writer_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_3way_mgr_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wal_3way_mmap_32b	benchmarks/bench_wal.cpp	micro	wal	active
+wr_i64_10k_raw	benchmarks/bench_write.cpp	micro	write	active
+wr_f64_10k_bss_raw	benchmarks/bench_write.cpp	micro	write	active
+wr_mix5_10k_raw	benchmarks/bench_write.cpp	micro	write	active
+wr_i64_f64_100k_10rgs	benchmarks/bench_write.cpp	micro	write	active
+wr_str_10k_dict_raw	benchmarks/bench_write.cpp	micro	write	active
