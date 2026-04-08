@@ -1,0 +1,7 @@
+# LeakSanitizer suppression file for Signet Forge
+#
+# Known libstdc++ leak in std::filesystem::path component parsing.
+# This is an internal allocation in _M_split_cmpts() that is not freed
+# on process exit — a confirmed libstdc++ behavior, not a Signet Forge bug.
+# See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109354
+leak:std::filesystem::__cxx11::path::_M_split_cmpts

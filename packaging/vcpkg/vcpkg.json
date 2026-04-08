@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "signet-forge",
+  "version": "0.1.0",
+  "description": "Standalone C++20 Parquet library with AI-native extensions",
+  "homepage": "https://github.com/SIGNETSTACK/signet-forge",
+  "license": "AGPL-3.0-or-later",
+  "supports": "!uwp",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ],
+  "features": {
+    "zstd": {
+      "description": "Enable ZSTD compression codec",
+      "dependencies": ["zstd"]
+    },
+    "lz4": {
+      "description": "Enable LZ4 compression codec",
+      "dependencies": ["lz4"]
+    },
+    "gzip": {
+      "description": "Enable Gzip/zlib compression codec",
+      "dependencies": ["zlib"]
+    }
+  }
+}

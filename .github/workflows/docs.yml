@@ -1,0 +1,62 @@
+name: Docs
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'include/signet/**'
+      - 'doxygen/**'
+      - 'Doxyfile'
+      - 'wasm/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Install Doxygen
+        run: sudo apt-get install -y doxygen
+
+      - name: Build API reference
+        run: doxygen Doxyfile
+
+      - name: Install Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Build WASM module
+        run: |
+          emcmake cmake --preset wasm
+          cmake --build build-wasm
+
+      - name: Add WASM demo to site
+        run: |
+          mkdir -p html/demo
+          cp build-wasm/signet_wasm.js  html/demo/
+          cp build-wasm/signet_wasm.wasm html/demo/
+          cp wasm/sample.parquet html/demo/
+          cp doxygen/favicon.png html/demo/
+          cp doxygen/logo.png    html/demo/
+          # Copy demo.html with fixed script path
+          sed 's|../build-wasm/signet_wasm.js|signet_wasm.js|' wasm/demo.html > html/demo/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: html
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

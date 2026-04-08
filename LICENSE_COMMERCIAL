@@ -1,0 +1,132 @@
+Signet Forge — Commercial License Exception
+Copyright 2026 Johnson Ogundeji. All Rights Reserved.
+
+AGPL-3.0 Commercial Exception Agreement
+Version 1.0, March 2026
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. PURPOSE
+
+Signet Forge is licensed under the GNU Affero General Public License v3.0
+or later (AGPL-3.0-or-later). This Commercial License Exception ("Exception")
+grants the purchasing organisation a private contractual right to use Signet
+Forge in proprietary, closed-source, and hosted service deployments without
+the source-disclosure obligations imposed by AGPL-3.0 §§4, 5, and 13.
+
+This Exception does not replace the AGPL-3.0. It supplements it for
+organisations that cannot or do not wish to comply with AGPL-3.0's copyleft
+and network-use provisions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2. WHAT THE COMMERCIAL LICENSE GRANTS
+
+Upon execution of a commercial license agreement and payment of applicable
+fees, Signet Stack grants the licensee a non-exclusive, non-transferable,
+non-sublicensable right to:
+
+  (a) Incorporate Signet Forge into proprietary, closed-source products and
+      distribute those products to customers without disclosing source code;
+
+  (b) Operate Signet Forge as part of a hosted, cloud, or SaaS service
+      without triggering AGPL-3.0 §13 network-use copyleft obligations;
+
+  (c) Modify Signet Forge internally without any obligation to publish or
+      contribute those modifications back to the public repository;
+
+  (d) Sub-license the Exception rights to subsidiaries within the licensee's
+      corporate group, subject to the seat or deployment limits in the
+      applicable order form.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3. WHAT THE COMMERCIAL LICENSE DOES NOT GRANT
+
+  (a) The right to remove or alter copyright notices or SPDX identifiers
+      in source files;
+
+  (b) The right to use Signet Stack's trademarks, trade names, logos, or
+      service marks;
+
+  (c) Any warranty beyond what is expressly stated in the commercial
+      agreement;
+
+  (d) Rights to any version of Signet Forge released after the licensee's
+      subscription or maintenance period expires, unless renewed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4. LICENSE TIERS
+
+Signet Stack offers the following standard tiers. All pricing is annual
+subscription. Perpetual licenses with annual maintenance are available on
+request.
+
+  Starter       — Up to 5 developers, 1 production deployment node.
+                  Includes email support (2 business day SLA).
+
+  Professional  — Up to 25 developers, up to 10 production deployment nodes.
+                  Includes priority email + video support (1 business day SLA),
+                  quarterly dependency and CVE review.
+
+  Enterprise    — Unlimited developers and deployment nodes.
+                  Includes dedicated support channel, indemnification clause,
+                  custom SLA, SBOM attestation, and audit assistance.
+
+  OEM / ISV     — Redistribution rights: embed Signet Forge in a product
+                  shipped to your customers. Pricing based on deployment volume.
+                  Requires separate OEM agreement.
+
+Exact pricing, order forms, and contract terms are available directly from
+Signet Stack.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5. HOW TO OBTAIN A COMMERCIAL LICENSE
+
+Contact Signet Stack directly:
+
+  Email:   johnson@signetstack.io
+  Subject: Commercial License Inquiry — Signet Forge
+
+Please include your organisation name, intended use case, expected deployment
+scale, and any compliance framework requirements (FIPS 140-3, FedRAMP, MiFID
+II, EU AI Act, HIPAA, etc.). You will receive a response within 2 business
+days.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6. OPEN SOURCE USE
+
+If you are using Signet Forge in an open source project licensed under
+AGPL-3.0 or a compatible copyleft license, no commercial license is required.
+The full text of the AGPL-3.0 is in the LICENSE file in this repository.
+
+Academic and government users may use Signet Forge under AGPL-3.0 without
+a commercial license, provided their use complies with AGPL-3.0's terms.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7. CONTRIBUTOR LICENSE AGREEMENT
+
+External contributors to Signet Forge must sign a Contributor License
+Agreement (CLA) before their contributions can be merged. The CLA assigns
+Signet Stack sufficient rights to offer Signet Forge under both AGPL-3.0
+and this Commercial License Exception. See CLA.md for details.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8. DISCLAIMER
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SIGNET FORGE IS PROVIDED
+"AS IS" WITHOUT WARRANTY OF ANY KIND. SIGNET STACK DISCLAIMS ALL WARRANTIES,
+EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL SIGNET STACK BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF
+SIGNET FORGE.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Signet Stack
+Copyright 2026 Johnson Ogundeji. All Rights Reserved.

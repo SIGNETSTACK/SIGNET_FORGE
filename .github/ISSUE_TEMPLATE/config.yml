@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: mailto:johnson@signetstack.io
+    about: Do NOT open a public issue for security vulnerabilities. Email us instead.
+  - name: Commercial Licensing
+    url: mailto:johnson@signetstack.io
+    about: For commercial licensing inquiries about the AGPL-3.0 commercial tier.

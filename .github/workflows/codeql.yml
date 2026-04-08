@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# CodeQL Static Application Security Testing (SAST)
+# Gap T-1: SOC 2 Type II CC7.1, ISO 27001, FedRAMP control requirement
+name: CodeQL SAST
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC for continuous monitoring
+    - cron: '0 0 * * 0'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'c-cpp' ]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended includes security + quality queries
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - build*
+              - '**/catch2-src/**'
+              - '**/pybind11-src/**'
+
+      - name: Install Ninja
+        run: sudo apt-get install -y ninja-build
+
+      - name: Configure (full build with commercial + crypto)
+        run: |
+          cmake -S . -B build-codeql -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_ENABLE_COMMERCIAL=ON
+
+      - name: Build
+        run: cmake --build build-codeql --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

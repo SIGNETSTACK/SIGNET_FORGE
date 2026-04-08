@@ -1,0 +1,628 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Standard build + test (Linux + macOS)
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, macos-14 ]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install ninja
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci --parallel
+
+      - name: Test
+        run: ctest --preset ci
+
+  # ---------------------------------------------------------------------------
+  # AddressSanitizer + UndefinedBehaviorSanitizer (Ubuntu only)
+  # ---------------------------------------------------------------------------
+  asan:
+    name: ASan + UBSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+
+      # Gap T-15b: Enable commercial tier so crypto code gets ASan/UBSan coverage
+      - name: Configure (with commercial crypto)
+        run: |
+          cmake -S . -B build-asan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_ENABLE_COMMERCIAL=ON \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build-asan --parallel
+
+      - name: Test
+        run: ctest --test-dir build-asan --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions.txt
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+  # ---------------------------------------------------------------------------
+  # ThreadSanitizer (Ubuntu only — TSan + macOS is unreliable)
+  # ---------------------------------------------------------------------------
+  tsan:
+    name: TSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+
+      # Gap T-15b: Enable commercial tier so crypto code gets TSan coverage
+      - name: Configure (with commercial crypto)
+        run: |
+          cmake -S . -B build-tsan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_ENABLE_COMMERCIAL=ON \
+            -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+
+      - name: Build
+        run: cmake --build build-tsan --parallel
+
+      - name: Test
+        run: ctest --test-dir build-tsan --output-on-failure
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+
+  # ---------------------------------------------------------------------------
+  # UBSan standalone — stricter flags, all-recover=no (Ubuntu)
+  # ---------------------------------------------------------------------------
+  ubsan:
+    name: UBSan (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Clang 18 + Ninja
+        run: |
+          sudo apt-get install -y ninja-build clang-18
+
+      - name: Configure
+        run: cmake --preset ubsan
+
+      - name: Build
+        run: cmake --build --preset ubsan --parallel
+
+      - name: Test
+        run: ctest --preset ubsan
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+  # ---------------------------------------------------------------------------
+  # Windows (MSVC) — header-only core only, no sanitizers
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Build & Test (Windows / MSVC)
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure
+        run: cmake -B build-win -G "Visual Studio 17 2022" -A x64
+             -DSIGNET_BUILD_TESTS=ON -DSIGNET_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build-win --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build-win -C Debug --output-on-failure
+
+      - name: Static Analysis (MSVC /analyze)
+        continue-on-error: true
+        run: cmake --build build-win --config Debug --target ALL_BUILD -- /p:EnableCodeAnalysis=true
+
+  # ---------------------------------------------------------------------------
+  # Server codecs: ZSTD + LZ4 + Gzip enabled (Ubuntu)
+  # ---------------------------------------------------------------------------
+  server-codecs:
+    name: Server Codecs (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja + codec libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build libzstd-dev liblz4-dev zlib1g-dev
+
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-server -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_BUILD_EXAMPLES=ON \
+            -DSIGNET_ENABLE_ZSTD=ON \
+            -DSIGNET_ENABLE_LZ4=ON \
+            -DSIGNET_ENABLE_GZIP=ON \
+            -DSIGNET_BUILD_AI_AUDIT=ON
+
+      - name: Build
+        run: cmake --build build-server --parallel
+
+      - name: Test
+        run: ctest --test-dir build-server --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Full commercial-tier test suite (394/394) — Gap T-15
+  # Ensures ALL encryption/PME/compliance tests run in CI, not just locally.
+  # ---------------------------------------------------------------------------
+  commercial-full:
+    name: Full Suite 394/394 (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja + codec libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build libzstd-dev liblz4-dev zlib1g-dev
+
+
+      - name: Configure (commercial + all codecs)
+        run: |
+          cmake -S . -B build-full -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_BUILD_EXAMPLES=ON \
+            -DSIGNET_ENABLE_COMMERCIAL=ON \
+            -DSIGNET_ENABLE_ZSTD=ON \
+            -DSIGNET_ENABLE_LZ4=ON \
+            -DSIGNET_ENABLE_GZIP=ON
+
+      - name: Build
+        run: cmake --build build-full --parallel
+
+      - name: Test (expect 394/394)
+        run: ctest --test-dir build-full --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Post-quantum: real Kyber-768 + Dilithium-3 via liboqs (Ubuntu)
+  # ---------------------------------------------------------------------------
+  post-quantum:
+    name: Post-Quantum PQ (Ubuntu)
+    runs-on: ubuntu-24.04
+    env:
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja + build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build cmake
+
+
+      - name: Build + install liboqs (minimal Kyber-768 + Dilithium-3)
+        run: |
+          git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs
+          cmake -S /tmp/liboqs -B /tmp/liboqs-build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DOQS_MINIMAL_BUILD="KEM_kyber_768;KEM_ml_kem_768;SIG_dilithium_3;SIG_ml_dsa_65" \
+            -DOQS_USE_OPENSSL=OFF
+          cmake --build /tmp/liboqs-build --parallel
+          sudo cmake --install /tmp/liboqs-build
+
+      - name: Configure (PQ enabled)
+        run: |
+          cmake -S . -B build-pq -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSIGNET_BUILD_TESTS=ON \
+            -DSIGNET_ENABLE_PQ=ON \
+            -DSIGNET_BUILD_AI_AUDIT=ON
+
+      - name: Build
+        run: cmake --build build-pq --parallel
+
+      - name: Test (PQ tag first, then full suite)
+        run: |
+          ctest --test-dir build-pq --output-on-failure -L "pq"
+          ctest --test-dir build-pq --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Fuzz testing (libFuzzer + ASan, Clang-18, 60s per harness)
+  # ---------------------------------------------------------------------------
+  fuzz:
+    name: Fuzz (Ubuntu, Clang-18)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Clang 18 + Ninja
+        run: sudo apt-get install -y ninja-build clang-18
+
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-fuzz -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSIGNET_BUILD_FUZZ=ON \
+            -DSIGNET_ENABLE_COMMERCIAL=ON
+
+      - name: Build
+        run: cmake --build build-fuzz --parallel
+
+      - name: Restore fuzz corpus cache
+        uses: actions/cache@v4
+        with:
+          path: fuzz-corpus
+          key: fuzz-corpus-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-
+
+      - name: Run fuzzers (60s each)
+        env:
+          ASAN_OPTIONS: allocator_may_return_null=1:detect_leaks=0
+        run: |
+          mkdir -p fuzz-artifacts
+          for target in fuzz_parquet_reader fuzz_thrift_decoder fuzz_wal_reader \
+                        fuzz_rle_decoder fuzz_delta_decoder fuzz_arrow_import \
+                        fuzz_aes_gcm fuzz_pme fuzz_key_metadata \
+                        fuzz_hkdf fuzz_x25519; do
+            echo "=== Fuzzing $target for 60s ==="
+            mkdir -p fuzz-artifacts/$target fuzz-corpus/$target
+            ./build-fuzz/$target \
+              fuzz-corpus/$target \
+              -max_total_time=60 \
+              -rss_limit_mb=2048 \
+              -malloc_limit_mb=2048 \
+              -print_final_stats=1 \
+              -artifact_prefix=fuzz-artifacts/$target/ \
+              || true
+          done
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crash-artifacts
+          path: fuzz-artifacts/
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Fail if crashes found
+        if: always()
+        run: |
+          crashes=$(find fuzz-artifacts -name 'crash-*' -o -name 'leak-*' 2>/dev/null)
+          timeouts=$(find fuzz-artifacts -name 'timeout-*' 2>/dev/null)
+          if [ -n "$timeouts" ]; then
+            echo "::warning::Fuzz timeouts detected (non-fatal — expected with short budgets):"
+            echo "$timeouts"
+          fi
+          if [ -n "$crashes" ]; then
+            echo "::error::Fuzz crashes detected — check fuzz-crash-artifacts"
+            echo "$crashes"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Code coverage (Clang source-based → Codecov)
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage (Ubuntu, Clang-18)
+    runs-on: ubuntu-24.04
+    env:
+      CC:  clang-18
+      CXX: clang++-18
+      SIGNET_COMMERCIAL_LICENSE_KEY: ${{ secrets.SIGNET_FORGE_COMMERCIAL_LICENSE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Clang 18 + Ninja + llvm-tools
+        run: |
+          sudo apt-get install -y ninja-build clang-18 llvm-18
+
+
+      - name: Configure
+        run: cmake --preset coverage
+
+      - name: Build
+        run: cmake --build --preset coverage --parallel
+
+      - name: Test
+        run: ctest --preset coverage
+        env:
+          LLVM_PROFILE_FILE: "${{ github.workspace }}/build-coverage/default-%p.profraw"
+
+      - name: Merge profiles + export LCOV
+        run: |
+          llvm-profdata-18 merge -sparse build-coverage/*.profraw \
+            -o build-coverage/merged.profdata
+          llvm-cov-18 export \
+            --format=lcov \
+            --instr-profile=build-coverage/merged.profdata \
+            build-coverage/signet_tests \
+            > build-coverage/lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: build-coverage/lcov.info
+          flags: unittests
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Benchmark ID registry validation (all pushes and PRs)
+  # ---------------------------------------------------------------------------
+  benchmark-registry:
+    name: Benchmark Registry
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate benchmark registry
+        run: ./scripts/validate_benchmark_registry.sh
+
+  # ---------------------------------------------------------------------------
+  # Benchmark regression detection (push to main only)
+  # ---------------------------------------------------------------------------
+  benchmarks:
+    name: Benchmarks (Ubuntu)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: benchmark-registry
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja
+        run: sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake --preset benchmarks
+
+      - name: Build
+        run: cmake --build --preset benchmarks --parallel
+
+      - name: Run benchmarks
+        run: |
+          ./build-benchmarks/signet_benchmarks "[bench]" \
+            --benchmark-samples 50 \
+            --reporter console::out=benchmark_results.txt
+
+      - name: Ensure gh-pages branch exists
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            git checkout --orphan gh-pages
+            git reset --hard
+            git commit --allow-empty -m "Initialize gh-pages"
+            git push origin gh-pages
+            git checkout main
+          fi
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: catch2
+          output-file-path: benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          auto-push: true
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: false
+
+  # ---------------------------------------------------------------------------
+  # Gap T-15d: Secrets scanning (gitleaks) — detect accidental key commits
+  # ---------------------------------------------------------------------------
+  secrets-scan:
+    name: Secrets Scan (gitleaks)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
+            | sudo tar xz -C /usr/local/bin gitleaks
+
+      - name: Run gitleaks
+        run: gitleaks detect --source . --verbose --redact --config .gitleaks.toml
+
+  # ---------------------------------------------------------------------------
+  # Gap T-16: Python SAST (bandit) — security scanning for Python bindings
+  # ---------------------------------------------------------------------------
+  python-sast:
+    name: Python SAST (bandit)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit on Python bindings
+        run: |
+          bandit -r python/ -f json -o bandit-report.json \
+            --severity-level medium \
+            --confidence-level medium \
+            || true
+          bandit -r python/ --severity-level medium --confidence-level medium
+
+  # ---------------------------------------------------------------------------
+  # Gap T-17: License compliance scanner — verify AGPL-3.0-or-later
+  # ---------------------------------------------------------------------------
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install licensee
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ruby ruby-dev cmake pkg-config
+          sudo gem install licensee
+
+      - name: Check project license
+        run: licensee detect --json .
+
+      - name: Verify AGPL-3.0-or-later headers present, no GPL-2.0-only contamination
+        run: |
+          echo "Scanning for GPL-2.0-only headers (incompatible with AGPL-3.0)..."
+          if grep -rli "GNU General Public License.*version 2" \
+               include/ python/ ffi/ rust/ wasm/ tools/ 2>/dev/null | \
+               grep -v "or.*later\|or-later\|v2 or"; then
+            echo "::error::Found GPL-2.0-only headers — incompatible with AGPL-3.0-or-later"
+            exit 1
+          fi
+          echo "Verifying AGPL-3.0-or-later SPDX identifiers..."
+          count=$(grep -rli "SPDX-License-Identifier: AGPL-3.0-or-later" include/ 2>/dev/null | wc -l)
+          echo "Files with AGPL-3.0-or-later SPDX: $count"
+          echo "No incompatible licenses found."
+
+      - name: Verify SPDX identifiers present
+        run: |
+          missing=0
+          for f in $(find include/signet -name '*.hpp' -type f); do
+            if ! head -3 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "::warning::Missing SPDX header: $f"
+              missing=$((missing + 1))
+            fi
+          done
+          echo "$missing files missing SPDX headers"
+          if [ "$missing" -gt 5 ]; then
+            echo "::error::Too many files missing SPDX license identifiers"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Gap T-12: Mutation testing baseline (push to main only)
+  # ---------------------------------------------------------------------------
+  mutation-baseline:
+    name: Mutation Testing Baseline (Ubuntu)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Ninja + Clang 18
+        run: sudo apt-get install -y ninja-build clang-18
+
+      - name: Install Mull
+        run: |
+          curl -sSfL https://github.com/mull-project/mull/releases/download/0.24.0/Mull-18-0.24.0-LLVM-18.1-ubuntu-24.04.deb -o mull.deb
+          sudo dpkg -i mull.deb || sudo apt-get install -f -y
+
+      - name: Create mull compiler wrapper
+        run: |
+          # Wrapper applies mull plugin only to project sources, not third-party deps
+          printf '#!/bin/bash\nfor arg in "$@"; do\n  case "$arg" in\n    *_deps/*|*catch2*|*Catch2*)\n      exec /usr/bin/clang++-18 "$@"\n      ;;\n  esac\ndone\nexec /usr/bin/clang++-18 -fpass-plugin=/usr/lib/mull-ir-frontend-18 -g -grecord-command-line "$@"\n' > /tmp/clang++-18-mull
+          chmod +x /tmp/clang++-18-mull
+
+      - name: Configure (with Mull wrapper)
+        run: |
+          cmake -S . -B build-mull -G Ninja \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=/tmp/clang++-18-mull \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSIGNET_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build-mull --parallel
+
+      - name: Run Mull mutation testing (encryption module)
+        run: |
+          mull-runner-18 build-mull/signet_tests \
+            --reporters=Elements \
+            --report-name=mutation-report \
+            --include-path="include/signet/crypto/*" \
+            -- "[encryption]" || true
+          echo "Mutation testing baseline established"

@@ -1,0 +1,67 @@
+{% set name = "signet-forge" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/SIGNETSTACK/signet-forge/archive/v{{ version }}.tar.gz
+  sha256: PLACEHOLDER  # Updated on release
+
+build:
+  number: 0
+
+outputs:
+  - name: signet-forge
+    build:
+      script: build.sh   # [unix]
+      script: bld.bat     # [win]
+    requirements:
+      build:
+        - {{ compiler('cxx') }}
+        - cmake >=3.20
+        - ninja
+      host: []
+      run: []
+    test:
+      commands:
+        - test -f $PREFIX/include/signet/forge.hpp       # [unix]
+        - if not exist %LIBRARY_INC%\signet\forge.hpp exit 1  # [win]
+
+  - name: python-signet-forge
+    build:
+      script: pip install . -vv --no-deps --no-build-isolation
+    requirements:
+      build:
+        - {{ compiler('cxx') }}
+        - cmake >=3.20
+        - ninja
+      host:
+        - python
+        - pip
+        - scikit-build-core >=0.9
+        - pybind11 >=2.13
+        - numpy >=1.24
+      run:
+        - python
+        - numpy >=1.24
+    test:
+      imports:
+        - signet_forge
+
+about:
+  home: https://github.com/SIGNETSTACK/signet-forge
+  license: AGPL-3.0-or-later
+  license_family: GPL
+  license_file: LICENSE
+  summary: Standalone C++20 Parquet library with AI-native extensions
+  description: |
+    Signet Forge is a standalone, header-only C++20 Parquet library with
+    AI-native extensions for decision logging, audit chains, and inference
+    recording. Zero mandatory external dependencies.
+  dev_url: https://github.com/SIGNETSTACK/signet-forge
+
+extra:
+  recipe-maintainers:
+    - Johnson-Ogundeji
