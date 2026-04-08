@@ -1,0 +1,19 @@
+[package]
+name = "signet-forge"
+version = "0.1.0"
+edition = "2021"
+authors = ["Johnson Ogundeji"]
+license = "AGPL-3.0-or-later"
+description = "Safe Rust bindings for Signet Forge — standalone C++20 Parquet library"
+repository = "https://github.com/SIGNETSTACK/signet-forge"
+readme = "README.md"
+
+[dependencies]
+signet-forge-sys = { path = "../signet-forge-sys" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+commercial = ["signet-forge-sys/commercial"]
