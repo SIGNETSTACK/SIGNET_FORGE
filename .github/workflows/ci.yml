@@ -484,7 +484,10 @@ jobs:
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           auto-push: true
-          alert-threshold: "200%"
+          # 300% threshold — multi-threaded benchmarks (4P×4C MPMC ring)
+          # are inherently noisy on shared CI runners due to thread
+          # scheduling variance. 200% produced false alerts.
+          alert-threshold: "300%"
           comment-on-alert: true
           fail-on-alert: false
 
