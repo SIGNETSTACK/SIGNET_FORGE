@@ -474,7 +474,7 @@ public:
         const bool auto_start = impl->opts_.auto_start;
         StreamingSink sink(std::move(impl));
         if (auto_start) sink.impl_->start();
-        return std::move(sink);  // StreamingSink is movable (unique_ptr<Impl>)
+        return sink;  // NRVO — std::move is redundant here (GCC -Wredundant-move)
     }
 
     // -------------------------------------------------------------------------
