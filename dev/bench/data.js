@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776174616801,
+  "lastUpdate": 1776626646712,
   "repoUrl": "https://github.com/SIGNETSTACK/SIGNET_FORGE",
   "entries": {
     "Benchmark": [
@@ -14914,6 +14914,345 @@ window.BENCHMARK_DATA = {
             "name": "bus_pub_pop_1k_1t",
             "value": 32.5797,
             "range": "± 3.91222",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "committer": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "distinct": true,
+          "id": "c6a3ba298af7cf31f260c015acd2f2bda4931701",
+          "message": "fix(ci): Docker root bypass, ZSTD read safety, bench timeout, PME facade, boundary tests\n\n- test_resilience: running_as_root() guard skips nonexistent dir/file tests\n- bench_phase3_read: REQUIRE(r.has_value()) before accessing ZSTD read result\n- Benchmarking_Protocols/CMakeLists: enterprise bench TIMEOUT 3600s\n- pme_facade.hpp: PME encryption facade header\n- test_boundary_constants.cpp: boundary value property tests\n- sha256.hpp, forge.hpp, CMakeLists: minor updates\n- Python bindings: __init__.py + _bindings.cpp updates",
+          "timestamp": "2026-04-19T20:21:52+01:00",
+          "tree_id": "7bd9829daf8ebce933eb54a75e69c82da18f5bfa",
+          "url": "https://github.com/SIGNETSTACK/SIGNET_FORGE/commit/c6a3ba298af7cf31f260c015acd2f2bda4931701"
+        },
+        "date": 1776626645879,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "wr_i64_10k_raw",
+            "value": 568.328,
+            "range": "± 26.0996",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_f64_10k_bss_raw",
+            "value": 571.379,
+            "range": "± 24.4216",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_mix5_10k_raw",
+            "value": 2.80748,
+            "range": "± 32.7818",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_i64_f64_100k_10rgs",
+            "value": 10.4331,
+            "range": "± 62.9205",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_str_10k_dict_raw",
+            "value": 679.901,
+            "range": "± 20.844",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_price_f64_50k",
+            "value": 0.958838,
+            "range": "± 0.0205684",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_all_str_50k",
+            "value": 18.9916,
+            "range": "± 82.9426",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_proj_px_qty_50k",
+            "value": 15.4403,
+            "range": "± 73.3705",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_ts_i64_50k",
+            "value": 0.9577720000000001,
+            "range": "± 0.014458",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_footer_rows_50k",
+            "value": 107.584,
+            "range": "± 18.8532",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_writer_32b",
+            "value": 281.354,
+            "range": "± 60.1721",
+            "unit": "ns",
+            "extra": "50 samples\n88 iterations"
+          },
+          {
+            "name": "wal_writer_256b",
+            "value": 0.932063,
+            "range": "± 0.19608799999999998",
+            "unit": "us",
+            "extra": "50 samples\n27 iterations"
+          },
+          {
+            "name": "wal_writer_1k_batch",
+            "value": 275.937,
+            "range": "± 15.7799",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_writer_flush_nofs",
+            "value": 1.31406,
+            "range": "± 290.246",
+            "unit": "us",
+            "extra": "50 samples\n21 iterations"
+          },
+          {
+            "name": "wal_mgr_32b",
+            "value": 315.866,
+            "range": "± 236.67",
+            "unit": "ns",
+            "extra": "50 samples\n23 iterations"
+          },
+          {
+            "name": "wal_read_all_10k",
+            "value": 1.94785,
+            "range": "± 19.6801",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_mmap_32b",
+            "value": 305.558,
+            "range": "± 56.1059",
+            "unit": "ns",
+            "extra": "50 samples\n85 iterations"
+          },
+          {
+            "name": "wal_mmap_256b",
+            "value": 0.9052380000000001,
+            "range": "± 0.164643",
+            "unit": "us",
+            "extra": "50 samples\n28 iterations"
+          },
+          {
+            "name": "wal_mmap_1k_batch",
+            "value": 293.645,
+            "range": "± 7.72067",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_mmap_flush_noms",
+            "value": 706.156,
+            "range": "± 133.32",
+            "unit": "ns",
+            "extra": "50 samples\n36 iterations"
+          },
+          {
+            "name": "wal_cmp_fwrite_32b",
+            "value": 294.692,
+            "range": "± 63.9595",
+            "unit": "ns",
+            "extra": "50 samples\n86 iterations"
+          },
+          {
+            "name": "wal_cmp_mmap_32b",
+            "value": 296.291,
+            "range": "± 53.9013",
+            "unit": "ns",
+            "extra": "50 samples\n85 iterations"
+          },
+          {
+            "name": "wal_3way_writer_32b",
+            "value": 294.094,
+            "range": "± 71.1637",
+            "unit": "ns",
+            "extra": "50 samples\n86 iterations"
+          },
+          {
+            "name": "wal_3way_mgr_32b",
+            "value": 341.479,
+            "range": "± 293.072",
+            "unit": "ns",
+            "extra": "50 samples\n22 iterations"
+          },
+          {
+            "name": "wal_3way_mmap_32b",
+            "value": 257.734,
+            "range": "± 56.1886",
+            "unit": "ns",
+            "extra": "50 samples\n97 iterations"
+          },
+          {
+            "name": "enc_delta_enc_ts_10k",
+            "value": 23.1574,
+            "range": "± 1.14813",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_delta_dec_ts_10k",
+            "value": 33.2787,
+            "range": "± 1.44474",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_bss_enc_px_10k",
+            "value": 22.65,
+            "range": "± 862.056",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_bss_dec_px_10k",
+            "value": 22.6529,
+            "range": "± 748.282",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_rle_enc_bw1_10k",
+            "value": 40.5479,
+            "range": "± 1.67628",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_rle_dec_bw1_10k",
+            "value": 54.3833,
+            "range": "± 1.65001",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_delta_ts_10k_plain",
+            "value": 23.423,
+            "range": "± 1.02851",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_plain_copy_ts_10k",
+            "value": 2.29465,
+            "range": "± 148.41",
+            "unit": "us",
+            "extra": "50 samples\n11 iterations"
+          },
+          {
+            "name": "enc_bss_enc_px_10k_sz",
+            "value": 22.6849,
+            "range": "± 882.341",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_bss_dec_px_10k_sz",
+            "value": 44.4592,
+            "range": "± 1.51048",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_wr_batch_10k",
+            "value": 10.304,
+            "range": "± 108.748",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_get_latest_1k",
+            "value": 107.74,
+            "range": "± 2.30407",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_asof_mid_1k",
+            "value": 107.092,
+            "range": "± 2.5931",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_asof_batch_100e",
+            "value": 14.4629,
+            "range": "± 3.59099",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "feat_hist_100",
+            "value": 10.9896,
+            "range": "± 2.30923",
+            "unit": "us",
+            "extra": "50 samples\n3 iterations"
+          },
+          {
+            "name": "ring_push_pop_1t",
+            "value": 6.12559,
+            "range": "± 0.253288",
+            "unit": "ns",
+            "extra": "50 samples\n3919 iterations"
+          },
+          {
+            "name": "ring_batch_4p4c_4k",
+            "value": 335.658,
+            "range": "± 66.593",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "batch_push_1k_view",
+            "value": 9.62539,
+            "range": "± 544.833",
+            "unit": "us",
+            "extra": "50 samples\n3 iterations"
+          },
+          {
+            "name": "batch_tensor_1024x8",
+            "value": 46.2341,
+            "range": "± 2.33809",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "bus_pub_pop_1k_1t",
+            "value": 24.4131,
+            "range": "± 2.18174",
             "unit": "us",
             "extra": "50 samples\n1 iterations"
           }
