@@ -40,7 +40,11 @@ if(SIGNET_ENABLE_PQ)
     target_compile_definitions(signet_enterprise_bench PRIVATE SIGNET_HAS_LIBOQS=1)
 endif()
 
-catch_discover_tests(signet_enterprise_bench)
+# Enterprise benchmarks may take >25 min on constrained Docker VMs (Colima).
+# Set a generous timeout to prevent false failures in CI.
+catch_discover_tests(signet_enterprise_bench
+    PROPERTIES TIMEOUT 3600
+)
 
 # --- Compression size report tool ---
 add_executable(compression_sizes compression_sizes.cpp)

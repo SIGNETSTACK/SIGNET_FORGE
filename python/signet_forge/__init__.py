@@ -65,3 +65,24 @@ try:
     ]
 except ImportError:
     pass  # AI Audit tier not available in this build
+
+# Encrypted Parquet I/O — PME Facade (commercial tier, requires SIGNET_ENABLE_COMMERCIAL)
+# Provides opaque KeyHandle (raw key bytes never cross FFI boundary),
+# EncryptedWriterOptions/EncryptedReaderOptions with RBAC, and
+# open_encrypted_writer/reader factory functions.
+try:
+    from signet_forge._bindings import (
+        ColumnClassification,
+        KeyHandle,
+        EncryptedWriterOptions,
+        EncryptedReaderOptions,
+        open_encrypted_writer,
+        open_encrypted_reader,
+    )
+    __all__ += [
+        "ColumnClassification", "KeyHandle",
+        "EncryptedWriterOptions", "EncryptedReaderOptions",
+        "open_encrypted_writer", "open_encrypted_reader",
+    ]
+except ImportError:
+    pass  # PME facade not available in this build

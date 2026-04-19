@@ -241,9 +241,15 @@ TEST_CASE("R5: typed read 1M optimal Snappy", "[bench-enterprise][read]") {
 TEST_CASE("R6: read 1M optimal ZSTD", "[bench-enterprise][read]") {
     (void)W10_path();
 
+    // Verify the file can be opened before benchmarking
+    auto check = ParquetReader::open(W10_path());
+    REQUIRE(check.has_value());
+
     BENCHMARK("R6: read 1M optimal ZSTD") {
         auto r = ParquetReader::open(W10_path());
-        auto result = (*r).read_all();
+        if (!r.has_value()) return std::size_t{0};
+        auto result = r->read_all();
+        if (!result.has_value()) return std::size_t{0};
         std::size_t total = 0;
         for (auto& col_data : *result)
             total += col_data.size();

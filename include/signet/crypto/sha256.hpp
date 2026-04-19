@@ -56,7 +56,12 @@ static constexpr uint32_t K[64] = {
 };
 
 /// Right-rotate a 32-bit word by n bits.
+// BVP FIX (2026-04-17): guard n==0 which causes UB (x << 32 is
+// undefined for uint32_t in C/C++). SHA-256 never uses n=0, but
+// the function should be correct at all boundary inputs per the
+// Boundary Verification Protocol.
 inline constexpr uint32_t rotr(uint32_t x, int n) {
+    if (n == 0) return x;
     return (x >> n) | (x << (32 - n));
 }
 

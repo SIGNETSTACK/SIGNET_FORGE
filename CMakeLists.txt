@@ -313,6 +313,7 @@ if(SIGNET_BUILD_TESTS)
         tests/test_thrift_snappy_vectors.cpp
         tests/test_bloom_vectors.cpp
         tests/test_thrift_types.cpp
+        tests/test_boundary_constants.cpp
     )
     if(SIGNET_ENABLE_COMMERCIAL)
         list(APPEND SIGNET_TEST_SOURCES

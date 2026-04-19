@@ -579,6 +579,104 @@ PYBIND11_MODULE(_bindings, m) {
 #endif // SIGNET_HAS_AI_AUDIT
 
     // -----------------------------------------------------------------------
+    // Encrypted Parquet I/O — PME Facade (commercial tier)
+    // -----------------------------------------------------------------------
+#if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
+    {
+        using namespace crypto;
+
+        // ColumnClassification enum
+        py::enum_<ColumnClassification>(m, "ColumnClassification")
+            .value("REFERENCE",  ColumnClassification::REFERENCE)
+            .value("FINANCIAL",  ColumnClassification::FINANCIAL)
+            .value("PII",        ColumnClassification::PII)
+            .value("HEALTH",     ColumnClassification::HEALTH)
+            .value("RESTRICTED", ColumnClassification::RESTRICTED)
+            .export_values();
+
+        // KeyHandle — opaque, move-only, no __bytes__ or __str__
+        // Raw key material NEVER crosses FFI boundary.
+        py::class_<KeyHandle>(m, "KeyHandle")
+            .def_static("generate", &KeyHandle::generate,
+                "Generate a new AES-256 key via platform CSPRNG (mlock + zeroing RAII)")
+            .def_static("from_seed", &KeyHandle::from_seed, py::arg("seed"),
+                "Derive a deterministic key from a seed string via HKDF (testing only)")
+            .def_property_readonly("is_valid", &KeyHandle::is_valid)
+            .def("__repr__", [](const KeyHandle& k) {
+                return k.is_valid()
+                    ? "<KeyHandle valid=True key_size=32>"
+                    : "<KeyHandle valid=False (moved)>";
+            })
+            .def("__bool__", &KeyHandle::is_valid);
+            // NOTE: No __bytes__, no __str__, no data() — key material stays in C++
+
+        // EncryptedWriterOptions
+        py::class_<EncryptedWriterOptions>(m, "EncryptedWriterOptions")
+            .def(py::init<>())
+            .def_readwrite("encrypt_footer", &EncryptedWriterOptions::encrypt_footer)
+            .def_readwrite("aad_prefix",     &EncryptedWriterOptions::aad_prefix)
+            .def("classify", &EncryptedWriterOptions::classify,
+                py::arg("column_name"), py::arg("classification"),
+                "Classify a column for encryption (PII/FINANCIAL/HEALTH/RESTRICTED/REFERENCE)")
+            .def("__repr__", [](const EncryptedWriterOptions& o) {
+                return "<EncryptedWriterOptions columns=" +
+                    std::to_string(o.column_classes.size()) +
+                    " encrypt_footer=" + (o.encrypt_footer ? "True" : "False") + ">";
+            });
+
+        // EncryptedReaderOptions
+        py::class_<EncryptedReaderOptions>(m, "EncryptedReaderOptions")
+            .def(py::init<>())
+            .def_readwrite("encrypted_footer", &EncryptedReaderOptions::encrypted_footer)
+            .def_readwrite("aad_prefix",       &EncryptedReaderOptions::aad_prefix)
+            .def("classify", &EncryptedReaderOptions::classify,
+                py::arg("column_name"), py::arg("classification"),
+                "Classify a column (must match writer for correct HKDF derivation)")
+            .def("authorise", &EncryptedReaderOptions::authorise,
+                py::arg("column_name"),
+                "Authorise a column for decryption (RBAC). Empty = full access.")
+            .def("is_authorised", &EncryptedReaderOptions::is_authorised,
+                py::arg("column_name"))
+            .def("__repr__", [](const EncryptedReaderOptions& o) {
+                return "<EncryptedReaderOptions columns=" +
+                    std::to_string(o.column_classes.size()) +
+                    " authorised=" + (o.authorised_columns.empty()
+                        ? "ALL" : std::to_string(o.authorised_columns.size())) + ">";
+            });
+
+        // Encrypted ParquetWriter — static open_encrypted()
+        m.def("open_encrypted_writer",
+            [](const std::string& path, const Schema& schema,
+               KeyHandle& master_key, const EncryptedWriterOptions& eopts,
+               const WriterOptions& wopts) {
+                auto config = eopts.build_config(master_key);
+                WriterOptions opts = wopts;
+                opts.encryption = std::move(config);
+                return unwrap(ParquetWriter::open(path, schema, opts));
+            },
+            py::arg("path"), py::arg("schema"),
+            py::arg("master_key"), py::arg("encryption_options"),
+            py::arg("writer_options") = WriterOptions{},
+            "Open an encrypted Parquet file for writing.\n"
+            "Key material stays in C++ SecureKeyBuffer — Python never sees raw bytes.\n"
+            "Per-column DEKs are derived via HKDF-SHA256 from the master key.");
+
+        // Encrypted ParquetReader — static open_encrypted()
+        m.def("open_encrypted_reader",
+            [](const std::string& path, KeyHandle& master_key,
+               const EncryptedReaderOptions& ropts) {
+                auto config = ropts.build_config(master_key);
+                return unwrap(ParquetReader::open(path, std::move(config)));
+            },
+            py::arg("path"), py::arg("master_key"),
+            py::arg("decryption_options"),
+            "Open an encrypted Parquet file for reading.\n"
+            "Only authorised columns (per RBAC) can be decrypted.\n"
+            "Unauthorised columns produce an error on read.");
+    }
+#endif // SIGNET_ENABLE_COMMERCIAL
+
+    // -----------------------------------------------------------------------
     // Version info
     // -----------------------------------------------------------------------
     m.attr("__version__")    = "0.1.0";

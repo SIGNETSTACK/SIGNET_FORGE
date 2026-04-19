@@ -72,6 +72,7 @@
 #include "signet/crypto/cipher_interface.hpp"
 #if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
 #include "signet/crypto/pme.hpp"
+#include "signet/crypto/pme_facade.hpp"
 #include "signet/crypto/post_quantum.hpp"
 #endif
 /// @}
