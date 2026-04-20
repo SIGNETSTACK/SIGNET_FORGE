@@ -43,7 +43,7 @@ endif()
 # Enterprise benchmarks may take >25 min on constrained Docker VMs (Colima).
 # Set a generous timeout to prevent false failures in CI.
 catch_discover_tests(signet_enterprise_bench
-    PROPERTIES TIMEOUT 3600
+    PROPERTIES TIMEOUT 7200
 )
 
 # --- Compression size report tool ---
