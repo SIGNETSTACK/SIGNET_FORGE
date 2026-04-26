@@ -13,7 +13,7 @@ Zero mandatory dependencies. Header-mostly. Interoperable with Arrow, DuckDB, Sp
 
 ---
 
-## Why Signet?
+## Why Signet Forge?
 
 Every existing C++ Parquet library requires Apache Arrow (~400 MB). Nobody has built the
 AI-native capabilities the regulation-era demands. SignetForge fills five white spaces:
