@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "signet-forge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Standalone C++20 Parquet library with AI-native extensions — Python bindings"
 readme = "README.md"
 # Licensed under AGPL-3.0-or-later (open source) with a Commercial License Exception

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-01
+
+This release rolls up all post-v0.1.0 security, correctness, and CI work:
+external pentest remediation (5 findings, 2 HIGH), Audit #8 (21 findings),
+Thrift Correctness Phase (47 new tests), 73 → 92 enterprise compliance gap
+fixes, EventBus and FeatureReader performance improvements, local KMS key
+store for on-premise deployments, and Windows MSVC + Ubuntu CI green across
+17 jobs. 779 → 830 unit tests, all passing. No public C++ API breaks; the
+Rust `ParquetReader::schema()` return type changed from `Schema` to
+`SchemaRef<'a>` to fix CWE-416 — see migration note below.
+
+### Migration
+
+- **Rust**: `ParquetReader::schema()` now returns `SchemaRef<'a>` (lifetime
+  bound to the reader). Existing `let s = reader.schema();` continues to
+  compile; storing the schema beyond the reader's lifetime now fails at
+  compile time as intended.
+
 **2026-03-30 — External Pentest Remediation (Strix.ai)**
 
 ### Security — External Pentest Remediation (5 findings, Strix.ai)
@@ -411,5 +429,6 @@ Initial public release of Signet Forge.
   - *Keygen*: parse_hex_hash bare "0x" rejection, expiry_date overflow clamp [1,36500 days], semicolon injection prevention in custom claims
 - 423 total unit tests + 5 Rust integration tests + 5 doc-compile tests, all passing across all 5 hardening passes plus static audit follow-up
 
-[Unreleased]: https://github.com/SIGNETSTACK/signet-forge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/SIGNETSTACK/signet-forge/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/SIGNETSTACK/signet-forge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/SIGNETSTACK/signet-forge/releases/tag/v0.1.0

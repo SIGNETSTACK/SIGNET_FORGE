@@ -3,7 +3,7 @@
 
 PROJECT_NAME           = "Signet Forge"
 PROJECT_BRIEF          = "C++20 Parquet library with AI-native extensions"
-PROJECT_NUMBER         = 0.1.0
+PROJECT_NUMBER         = 0.1.1
 OUTPUT_DIRECTORY       =
 PROJECT_LOGO           = doxygen/logo.png
 INPUT                  = include/signet doxygen wasm

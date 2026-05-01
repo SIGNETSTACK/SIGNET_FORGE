@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(signet_forge
-    VERSION 0.1.0
+    VERSION 0.1.1
     DESCRIPTION "SignetStack — Standalone C++20 Parquet library with AI-native extensions"
     HOMEPAGE_URL "https://github.com/SIGNETSTACK/signet-forge"
     LANGUAGES CXX

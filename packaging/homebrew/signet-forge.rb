@@ -1,7 +1,7 @@
 class SignetForge < Formula
   desc "Standalone C++20 Parquet library with AI-native extensions"
   homepage "https://github.com/SIGNETSTACK/signet-forge"
-  url "https://github.com/SIGNETSTACK/signet-forge/archive/refs/tags/v0.1.0.tar.gz"
+  url "https://github.com/SIGNETSTACK/signet-forge/archive/refs/tags/v0.1.1.tar.gz"
   sha256 "PLACEHOLDER"  # Updated on release
   license "AGPL-3.0-or-later"
   head "https://github.com/SIGNETSTACK/signet-forge.git", branch: "main"

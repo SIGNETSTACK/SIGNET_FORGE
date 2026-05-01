@@ -6,7 +6,7 @@ import os
 
 class SignetForgeConan(ConanFile):
     name = "signet_forge"
-    version = "0.1.0"
+    version = "0.1.1"
     license = "AGPL-3.0-or-later"
     author = "SIGNETSTACK"
     url = "https://github.com/SIGNETSTACK/signet-forge"
