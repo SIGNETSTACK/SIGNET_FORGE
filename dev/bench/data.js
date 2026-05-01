@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777664139806,
+  "lastUpdate": 1777668915065,
   "repoUrl": "https://github.com/SIGNETSTACK/SIGNET_FORGE",
   "entries": {
     "Benchmark": [
@@ -16609,6 +16609,345 @@ window.BENCHMARK_DATA = {
             "name": "bus_pub_pop_1k_1t",
             "value": 31.4534,
             "range": "± 2.2784",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "committer": {
+            "email": "ogundeji.ja@gmail.com",
+            "name": "Johnson Ogundeji",
+            "username": "Johnson-Ogundeji"
+          },
+          "distinct": true,
+          "id": "123492f8ac53c5a1f195f830d1fa66e673f51295",
+          "message": "fix(ci): drop § from TEST_CASE names — Windows ctest mangles UTF-8\n\nWindows MSVC build/test ran clean except for 13 boundary tests reporting\n\"Unrecognised token: -�BV-01\". CMake's ctest passes Catch2 test names as\ncommand-line arguments; on Windows the U+00A7 (§) byte sequence gets\nmangled by the console code page before reaching Catch2, which then can't\nfind the test by name.\n\nStripped the § prefix from all 14 TEST_CASE names in\ntests/test_boundary_constants.cpp (this is the only test file in the\nrepo using §; every other file is ASCII-only). § is preserved in\ncomment headers — those never reach ctest.\n\nTags ([boundary][constants]) are unchanged, so ctest -L boundary still\nselects the suite.\n\nVerified locally:\n  - non-commercial build: 13/13 boundary cases pass\n  - 3,333 assertions",
+          "timestamp": "2026-05-01T21:52:37+01:00",
+          "tree_id": "add3d61154ebbbf9da68dd886ed5df7f524e0560",
+          "url": "https://github.com/SIGNETSTACK/SIGNET_FORGE/commit/123492f8ac53c5a1f195f830d1fa66e673f51295"
+        },
+        "date": 1777668914143,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "wr_i64_10k_raw",
+            "value": 761.581,
+            "range": "± 28.3483",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_f64_10k_bss_raw",
+            "value": 832.819,
+            "range": "± 19.8259",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_mix5_10k_raw",
+            "value": 3.66526,
+            "range": "± 66.3442",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_i64_f64_100k_10rgs",
+            "value": 13.7391,
+            "range": "± 62.8762",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wr_str_10k_dict_raw",
+            "value": 912.366,
+            "range": "± 63.6742",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_price_f64_50k",
+            "value": 1.1419,
+            "range": "± 25.7363",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_all_str_50k",
+            "value": 25.8868,
+            "range": "± 116.261",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_proj_px_qty_50k",
+            "value": 21.6622,
+            "range": "± 85.5487",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_ts_i64_50k",
+            "value": 1.13406,
+            "range": "± 22.2253",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "rd_footer_rows_50k",
+            "value": 139.422,
+            "range": "± 36.6264",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_writer_32b",
+            "value": 350.986,
+            "range": "± 156.642",
+            "unit": "ns",
+            "extra": "50 samples\n90 iterations"
+          },
+          {
+            "name": "wal_writer_256b",
+            "value": 1.0625,
+            "range": "± 217.432",
+            "unit": "us",
+            "extra": "50 samples\n29 iterations"
+          },
+          {
+            "name": "wal_writer_1k_batch",
+            "value": 326.117,
+            "range": "± 15.0347",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_writer_flush_nofs",
+            "value": 1.28958,
+            "range": "± 211.017",
+            "unit": "us",
+            "extra": "50 samples\n23 iterations"
+          },
+          {
+            "name": "wal_mgr_32b",
+            "value": 354.716,
+            "range": "± 75.8365",
+            "unit": "ns",
+            "extra": "50 samples\n74 iterations"
+          },
+          {
+            "name": "wal_read_all_10k",
+            "value": 2.28111,
+            "range": "± 17.485",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_mmap_32b",
+            "value": 309.554,
+            "range": "± 113.532",
+            "unit": "ns",
+            "extra": "50 samples\n107 iterations"
+          },
+          {
+            "name": "wal_mmap_256b",
+            "value": 1.00218,
+            "range": "± 215.866",
+            "unit": "us",
+            "extra": "50 samples\n35 iterations"
+          },
+          {
+            "name": "wal_mmap_1k_batch",
+            "value": 320.164,
+            "range": "± 36.5984",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "wal_mmap_flush_noms",
+            "value": 516.426,
+            "range": "± 36.752",
+            "unit": "ns",
+            "extra": "50 samples\n55 iterations"
+          },
+          {
+            "name": "wal_cmp_fwrite_32b",
+            "value": 341.303,
+            "range": "± 64.4937",
+            "unit": "ns",
+            "extra": "50 samples\n87 iterations"
+          },
+          {
+            "name": "wal_cmp_mmap_32b",
+            "value": 312.53,
+            "range": "± 113.449",
+            "unit": "ns",
+            "extra": "50 samples\n107 iterations"
+          },
+          {
+            "name": "wal_3way_writer_32b",
+            "value": 346.322,
+            "range": "± 70",
+            "unit": "ns",
+            "extra": "50 samples\n88 iterations"
+          },
+          {
+            "name": "wal_3way_mgr_32b",
+            "value": 362.695,
+            "range": "± 78.3967",
+            "unit": "ns",
+            "extra": "50 samples\n76 iterations"
+          },
+          {
+            "name": "wal_3way_mmap_32b",
+            "value": 337.603,
+            "range": "± 116.283",
+            "unit": "ns",
+            "extra": "50 samples\n101 iterations"
+          },
+          {
+            "name": "enc_delta_enc_ts_10k",
+            "value": 35.242,
+            "range": "± 2.01778",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_delta_dec_ts_10k",
+            "value": 41.5802,
+            "range": "± 1.72862",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_bss_enc_px_10k",
+            "value": 36.0298,
+            "range": "± 9.7453",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_bss_dec_px_10k",
+            "value": 31.9659,
+            "range": "± 7.98598",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_rle_enc_bw1_10k",
+            "value": 53.7661,
+            "range": "± 2.39376",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_rle_dec_bw1_10k",
+            "value": 65.8938,
+            "range": "± 3.16002",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_delta_ts_10k_plain",
+            "value": 34.1678,
+            "range": "± 2.47596",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "enc_plain_copy_ts_10k",
+            "value": 2.81322,
+            "range": "± 170.169",
+            "unit": "us",
+            "extra": "50 samples\n11 iterations"
+          },
+          {
+            "name": "enc_bss_enc_px_10k_sz",
+            "value": 31.4736,
+            "range": "± 7.32289",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "enc_bss_dec_px_10k_sz",
+            "value": 58.569,
+            "range": "± 10.1429",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_wr_batch_10k",
+            "value": 14.4647,
+            "range": "± 105.478",
+            "unit": "ms",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_get_latest_1k",
+            "value": 136.817,
+            "range": "± 7.78052",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_asof_mid_1k",
+            "value": 136.348,
+            "range": "± 4.22258",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "feat_asof_batch_100e",
+            "value": 19.5213,
+            "range": "± 3.08027",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "feat_hist_100",
+            "value": 15.3135,
+            "range": "± 2.07971",
+            "unit": "us",
+            "extra": "50 samples\n3 iterations"
+          },
+          {
+            "name": "ring_push_pop_1t",
+            "value": 7.07315,
+            "range": "± 0.290709",
+            "unit": "ns",
+            "extra": "50 samples\n4110 iterations"
+          },
+          {
+            "name": "ring_batch_4p4c_4k",
+            "value": 365.482,
+            "range": "± 73.7274",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "batch_push_1k_view",
+            "value": 26.8223,
+            "range": "± 1.98223",
+            "unit": "us",
+            "extra": "50 samples\n2 iterations"
+          },
+          {
+            "name": "batch_tensor_1024x8",
+            "value": 58.2744,
+            "range": "± 6.80406",
+            "unit": "us",
+            "extra": "50 samples\n1 iterations"
+          },
+          {
+            "name": "bus_pub_pop_1k_1t",
+            "value": 32.8669,
+            "range": "± 3.22209",
             "unit": "us",
             "extra": "50 samples\n1 iterations"
           }
