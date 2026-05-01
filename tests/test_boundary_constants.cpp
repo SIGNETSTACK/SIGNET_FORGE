@@ -11,7 +11,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include "signet/crypto/sha256.hpp"
 #include "signet/crypto/aes_core.hpp"
+#if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
 #include "signet/crypto/pme.hpp"
+#endif
 
 #include <cstdint>
 #include <array>
@@ -20,7 +22,9 @@
 using namespace signet::forge::crypto;
 namespace sha = signet::forge::crypto::detail::sha256;
 namespace aes = signet::forge::crypto::detail::aes;
+#if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
 namespace pme = signet::forge::crypto::detail::pme;
+#endif
 
 // ═══════════════════════════════════════════════════════════════════════
 // §BV-01: SHA-256 Initial Hash Values (FIPS 180-4 §5.3.3)
@@ -155,9 +159,10 @@ TEST_CASE("§BV-08 GF(2^8) multiplication identities", "[boundary][constants]") 
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// §BV-09: PME Constants
+// §BV-09: PME Constants (commercial tier only)
 // ═══════════════════════════════════════════════════════════════════════
 
+#if defined(SIGNET_ENABLE_COMMERCIAL) && SIGNET_ENABLE_COMMERCIAL
 TEST_CASE("§BV-09 PME key and module type constants", "[boundary][constants]") {
     REQUIRE(PME_REQUIRED_KEY_SIZE == 32);      // AES-256
     REQUIRE(signet::forge::crypto::PME_AES128_KEY_SIZE == 16);        // AES-128 (for AAD)
@@ -171,6 +176,7 @@ TEST_CASE("§BV-09 PME key and module type constants", "[boundary][constants]") 
         for (int j = i+1; j < 4; ++j)
             REQUIRE(mods[i] != mods[j]);
 }
+#endif
 
 // ═══════════════════════════════════════════════════════════════════════
 // §BV-10: SHA-256 rotr at boundary rotations
