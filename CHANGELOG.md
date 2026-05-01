@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — 2026-03-30
+## [Unreleased]
+
+**2026-03-30 — External Pentest Remediation (Strix.ai)**
 
 ### Security — External Pentest Remediation (5 findings, Strix.ai)
 
@@ -25,7 +27,7 @@ Five external pentest findings fully remediated. 826 → 830 unit tests. Zero op
 
 ---
 
-## [Unreleased] — 2026-03-10
+**2026-03-10 — Audit #8 + Performance**
 
 ### Performance
 - **EventBus**: Replace mutex-guarded `shared_ptr<StreamingSink>` with `std::atomic_load/store` — publish() hot path is now lock-free (~53 ns, down from ~94 ns)
@@ -59,7 +61,7 @@ Five external pentest findings fully remediated. 826 → 830 unit tests. Zero op
 - **Audit #8 documentation**: Comprehensive internal audit report (docs/internal/AUDIT_8_DOCUMENTATION.md) with CWE references, CVSS scores, risk analysis, and cross-references to NIST/OWASP/CERT/RFC publications
 - Updated 10 documentation files with Audit #8 findings: internal architecture docs (encryption, thread model, AI subsystem, encoding codecs), product-knowledge docs (security hardening, cross-language bindings), and client-facing docs (SECURITY.md, CHANGELOG.md, QUALITY_ASSURANCE.md)
 
-## [Unreleased]
+**2026-03-09 — Enterprise Compliance & Hardening**
 
 ### Enterprise Compliance — 73 of 92 Gaps Resolved (2026-03-09)
 

@@ -3,8 +3,11 @@
 **Standalone C++20 Parquet library with AI-native extensions.**
 Zero mandatory dependencies. Header-mostly. Interoperable with Arrow, DuckDB, Spark, and Polars.
 
-[![CI](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions)
-[[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![CI](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/codeql.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/codeql.yml)
+[![SBOM](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/sbom.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/sbom.yml)
+[![Docs](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/docs.yml/badge.svg)](https://github.com/SIGNETSTACK/SIGNET_FORGE/actions/workflows/docs.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](python/)
 [![codecov](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE/graph/badge.svg)](https://codecov.io/gh/SIGNETSTACK/SIGNET_FORGE)

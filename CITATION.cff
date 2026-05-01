@@ -1,0 +1,53 @@
+cff-version: 1.2.0
+message: "If you use Signet Forge in your research, please cite it as below."
+title: "Signet Forge: Standalone C++20 Parquet library with AI-native, post-quantum, and compliance-native extensions"
+abstract: >-
+  Signet Forge is a standalone, header-mostly C++20 Parquet read/write library
+  with zero mandatory dependencies. It uniquely ships post-quantum encryption
+  (Kyber-768 KEM, Dilithium-3 signatures, X25519 hybrid KEM per FIPS 203/204),
+  cryptographic AI decision audit trails compliant with MiFID II RTS 24 and
+  EU AI Act Articles 12, 13, and 19, sub-microsecond streaming WAL, and a
+  Parquet-native feature store with point-in-time correct retrieval.
+type: software
+authors:
+  - family-names: Ogundeji
+    given-names: Johnson A.
+    email: johnson@signetstack.io
+    affiliation: "Signet Stack Ltd"
+license: AGPL-3.0-or-later
+license-url: "https://github.com/SIGNETSTACK/SIGNET_FORGE/blob/main/LICENSE"
+repository-code: "https://github.com/SIGNETSTACK/SIGNET_FORGE"
+url: "https://signetstack.github.io/SIGNET_FORGE/"
+version: 0.1.0
+date-released: 2026-03-04
+keywords:
+  - parquet
+  - cpp20
+  - post-quantum-cryptography
+  - fips-203
+  - fips-204
+  - mifid-ii
+  - eu-ai-act
+  - dora
+  - gdpr
+  - feature-store
+  - audit-trail
+  - header-only
+  - zero-dependency
+identifiers:
+  - type: url
+    value: "https://github.com/SIGNETSTACK/SIGNET_FORGE"
+    description: "Source repository"
+references:
+  - type: standard
+    title: "FIPS 203 — Module-Lattice-Based Key-Encapsulation Mechanism Standard"
+    institution:
+      name: "National Institute of Standards and Technology (NIST)"
+    year: 2024
+    url: "https://csrc.nist.gov/pubs/fips/203/final"
+  - type: standard
+    title: "FIPS 204 — Module-Lattice-Based Digital Signature Standard"
+    institution:
+      name: "National Institute of Standards and Technology (NIST)"
+    year: 2024
+    url: "https://csrc.nist.gov/pubs/fips/204/final"
