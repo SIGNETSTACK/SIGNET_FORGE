@@ -283,6 +283,12 @@ static int cmd_convert(int argc, char* argv[]) {
     Compression compression = Compression::UNCOMPRESSED;
     bool auto_enc = true;
     int64_t row_group_size = 65536;
+    // Optional repeatable footer KeyValue metadata. Each `--meta-kv key=value`
+    // flag adds one entry to WriterOptions::file_metadata (Apache Parquet thrift
+    // FileMetaData::key_value_metadata field — see include/signet/writer.hpp,
+    // parquet-format spec §4.4). Useful for embedding signing traces, lineage
+    // tokens, or any string metadata that needs to travel with the file.
+    std::vector<thrift::KeyValue> meta_kvs;
 
     for (int i = 4; i < argc; ++i) {
         std::string arg = argv[i];
@@ -311,6 +317,19 @@ static int cmd_convert(int argc, char* argv[]) {
                 std::cerr << "Invalid row group size\n";
                 return 1;
             }
+        } else if (arg == "--meta-kv" && i + 1 < argc) {
+            // Format: key=value. The first '=' delimits; subsequent '=' chars
+            // belong to the value (so base64 / JSON / URLs round-trip cleanly).
+            std::string kv = argv[++i];
+            auto eq = kv.find('=');
+            if (eq == std::string::npos || eq == 0) {
+                std::cerr << "Invalid --meta-kv (must be key=value): " << kv << "\n";
+                return 1;
+            }
+            thrift::KeyValue entry;
+            entry.key   = kv.substr(0, eq);
+            entry.value = kv.substr(eq + 1);
+            meta_kvs.push_back(std::move(entry));
         } else {
             std::cerr << "Unknown option: " << arg << "\n";
             return 1;
@@ -330,6 +349,7 @@ static int cmd_convert(int argc, char* argv[]) {
     opts.compression    = compression;
     opts.auto_encoding  = auto_enc;
     opts.row_group_size = row_group_size;
+    opts.file_metadata  = std::move(meta_kvs);
 
     auto result = ParquetWriter::csv_to_parquet(csv_path, parquet_path, opts);
     if (!result) {

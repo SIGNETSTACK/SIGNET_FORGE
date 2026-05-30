@@ -1,0 +1,126 @@
+# Signet Forge supply-chain workflow lint
+#
+# Runs in shadow mode (warn-only) before promoting to a required status check,
+# so the rules can stabilise without blocking developers.
+#
+#   Phase 1: violations logged via ::warning::, never fail (EXCEPT B3 which hard-enforces day-1).
+#   Phase 2: violations fail; bypass via `# allow-X-here` comment.
+#   Phase 3: violations fail; no inline bypass.
+#
+# Complements existing surfaces: sbom.yml (CycloneDX via anchore/sbom-action)
+# and codeql.yml (SAST).
+
+name: supply-chain-lint
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'package.json'
+      - 'Dockerfile*'
+      - 'doxygen-awesome-css/package.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'package.json'
+      - 'Dockerfile*'
+      - 'doxygen-awesome-css/package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29  # v4.1.6 (SHA-pin per B1)
+
+      - name: B1 — Floating action tags (Phase 1 shadow)
+        run: |
+          UNPINNED=$(grep -rE 'uses: [^@]+@v[0-9]+($|[^a-f0-9])' .github/workflows/ 2>/dev/null || true)
+          if [ -n "$UNPINNED" ]; then
+            echo "::warning::B1 violation — unpinned actions (Phase 1 advisory; bump to SHA via pin-github-action):"
+            echo "$UNPINNED"
+          else
+            echo "✓ B1 — all actions SHA-pinned"
+          fi
+
+      - name: B2 — Missing permissions block (Phase 1 shadow)
+        run: |
+          MISSING=()
+          for f in .github/workflows/*.yml; do
+            if ! grep -q "^permissions:" "$f"; then
+              MISSING+=("$f")
+            fi
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::warning::B2 violation — workflows missing permissions: block:"
+            printf '  - %s\n' "${MISSING[@]}"
+          else
+            echo "✓ B2 — all workflows have explicit permissions block"
+          fi
+
+      - name: B3 — pull_request_target with secrets (HARD-ENFORCE)
+        run: |
+          MATCHES=$(grep -lE 'pull_request_target' .github/workflows/*.yml 2>/dev/null | \
+            xargs grep -lE 'secrets\.' 2>/dev/null || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::B3 violation — pull_request_target with secrets is the EXACT TanStack attack vector."
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "✓ B3 — no pull_request_target+secrets misuse"
+
+      - name: B-pinning — Unpinned deps (Phase 1 shadow)
+        run: |
+          VIOLATIONS=0
+          # package.json (vendored doxygen-awesome) ^ or ~
+          for pj in package.json doxygen-awesome-css/package.json; do
+            if [ -f "$pj" ]; then
+              U=$(grep -E '"[^"]+":[[:space:]]*"[\^~]' "$pj" 2>/dev/null | wc -l | tr -d ' ')
+              if [ "$U" -gt 0 ]; then
+                echo "::warning::$pj has $U unpinned deps (use exact version)"
+                VIOLATIONS=$((VIOLATIONS+U))
+              fi
+            fi
+          done
+          # Dockerfile FROM without @sha256:
+          while IFS= read -r DF; do
+            U=$(grep -E '^FROM ' "$DF" 2>/dev/null | grep -vE '@sha256:' | wc -l | tr -d ' ')
+            if [ "$U" -gt 0 ]; then
+              echo "::warning::$DF has $U unpinned FROM lines (use @sha256:)"
+              VIOLATIONS=$((VIOLATIONS+U))
+            fi
+          done < <(find . -maxdepth 3 -name 'Dockerfile*' -type f 2>/dev/null)
+          # requirements*.txt without hashes
+          for rt in requirements*.txt; do
+            if [ -f "$rt" ] && ! grep -q 'sha256:' "$rt"; then
+              echo "::warning::$rt has no sha256 hashes (use pip-compile --generate-hashes)"
+              VIOLATIONS=$((VIOLATIONS+1))
+            fi
+          done
+          if [ "$VIOLATIONS" -eq 0 ]; then
+            echo "✓ B-pinning — all deps pinned"
+          else
+            echo "Total pinning violations (Phase 1 advisory): $VIOLATIONS"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Signet Forge supply-chain lint" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Phase: **1 (advisory)** — warnings only; B3 hard-enforces." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Existing Forge surfaces complement this: \`sbom.yml\` (CycloneDX) + \`codeql.yml\` (SAST)." >> $GITHUB_STEP_SUMMARY

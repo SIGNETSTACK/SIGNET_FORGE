@@ -1,0 +1,43 @@
+# .pre-commit-config.yaml — Signet Forge supply-chain hardening
+#
+# Hooks ship in shadow mode (warn-only) before promoting to enforce, so
+# developers can iterate without being blocked while the rules stabilise.
+#
+# The Forge-specific operator hook (blocks .env/.pem/.key patterns +
+# docs/internal/ + docs/product-knowledge/ paths) is preserved as
+# scripts/dev/legacy-pre-commit-checks.sh and invoked here as a local hook.
+repos:
+  # ── Local: PRESERVE existing Forge-specific operator hook ──
+  - repo: local
+    hooks:
+      - id: forge-legacy-secret-and-internal-dir-guard
+        name: Forge legacy guard (.env/.pem/.key + docs/internal/ + docs/product-knowledge/)
+        entry: bash scripts/dev/legacy-pre-commit-checks.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pinning-lint
+        name: Signet pinning lint (refuse unpinned versions)
+        entry: bash scripts/dev/lint-pinning.sh
+        language: system
+        pass_filenames: false
+        # Phase 1 shadow: script exits 0 unless SIGNET_LINT_PHASE=enforce
+
+  # ── New: gitleaks (80+ secret patterns; superset of legacy `.env`/`.key` detection) ──
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ['--no-banner', '--verbose']
+
+  # ── New: standard catch-all hooks ────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        args: ['--allow-missing-credentials']
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+      - id: check-merge-conflict
