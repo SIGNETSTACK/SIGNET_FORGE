@@ -49,6 +49,11 @@
   .pager button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .pager button:disabled { opacity: 0.3; cursor: default; }
   .pager .page-info { color: var(--dim); font-size: 0.8rem; min-width: 120px; text-align: center; }
+  .toolbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .toolbar .toolbar-spacer { flex: 1; }
+  .toolbar button { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 5px 12px; cursor: pointer; font-family: inherit; font-size: 0.8rem; }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar .toolbar-note { color: var(--dim); font-size: 0.72rem; }
 </style>
 </head>
 <body>
@@ -101,6 +106,13 @@
   </div>
   <div class="card">
     <h2>Data Preview <span id="row-count" style="color:var(--dim);font-size:0.8rem"></span></h2>
+    <div class="toolbar" id="toolbar" style="display:none">
+      <button id="btn-download-parquet" title="Save the original .parquet file (passthrough — exactly the bytes you uploaded; encrypted files stay encrypted)">Download .parquet</button>
+      <button id="btn-download-csv" title="Download decrypted data as CSV (RFC 4180)">Download CSV</button>
+      <button id="btn-download-json" title="Download decrypted data as JSON (one object per row)">Download JSON</button>
+      <span class="toolbar-spacer"></span>
+      <span class="toolbar-note" id="toolbar-note"></span>
+    </div>
     <div class="table-scroll" id="data-scroll">
       <table id="data-table">
         <thead><tr></tr></thead>
@@ -135,6 +147,8 @@
   // Pagination state
   let allData = [];      // allData[col][row] = string
   let colHeaders = [];
+  let currentFileName = '';   // original .parquet name, used to derive download filenames
+  let currentFileBytes = null; // Uint8Array of the uploaded file — passthrough for "Download .parquet"
   let totalFileRows = 0;
   let loadedRows = 0;
   let currentPage = 0;
@@ -174,6 +188,72 @@
   document.getElementById('btn-next').addEventListener('click', () => goToPage(currentPage + 1));
   document.getElementById('btn-last').addEventListener('click', () => goToPage(totalPages - 1));
 
+  // ---------------------------------------------------------------------------
+  // Download helpers — turn the in-memory decrypted columns into a Blob and
+  // trigger a save. All client-side: the file is built in this tab and never
+  // touches the network. iframe parents must allow `allow-downloads` for the
+  // anchor click to be honoured.
+  // ---------------------------------------------------------------------------
+  function deriveDownloadName(ext) {
+    // mydata.parquet -> mydata.csv ; encrypted.parq -> encrypted.json ; '' -> download.<ext>
+    if (!currentFileName) return 'download.' + ext;
+    return currentFileName.replace(/\.(parquet|parq)$/i, '') + '.' + ext;
+  }
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  }
+  function csvEscape(v) {
+    // RFC 4180: wrap in double quotes if value contains comma, quote, CR or LF;
+    // double up internal quotes.
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    const rows = allData[0] ? allData[0].length : 0;
+    const cols = colHeaders.length;
+    const lines = [colHeaders.map(csvEscape).join(',')];
+    for (let r = 0; r < rows; r++) {
+      const row = new Array(cols);
+      for (let c = 0; c < cols; c++) row[c] = csvEscape(allData[c][r]);
+      lines.push(row.join(','));
+    }
+    return lines.join('\r\n');
+  }
+  function buildJson() {
+    const rows = allData[0] ? allData[0].length : 0;
+    const cols = colHeaders.length;
+    const out = new Array(rows);
+    for (let r = 0; r < rows; r++) {
+      const obj = {};
+      for (let c = 0; c < cols; c++) obj[colHeaders[c]] = allData[c][r];
+      out[r] = obj;
+    }
+    return JSON.stringify(out, null, 2);
+  }
+  document.getElementById('btn-download-csv').addEventListener('click', () => {
+    if (!allData[0] || allData[0].length === 0) return;
+    triggerDownload(new Blob([buildCsv()], { type: 'text/csv;charset=utf-8' }), deriveDownloadName('csv'));
+  });
+  document.getElementById('btn-download-json').addEventListener('click', () => {
+    if (!allData[0] || allData[0].length === 0) return;
+    triggerDownload(new Blob([buildJson()], { type: 'application/json;charset=utf-8' }), deriveDownloadName('json'));
+  });
+  document.getElementById('btn-download-parquet').addEventListener('click', () => {
+    // Passthrough — exactly the bytes the user uploaded. Encrypted files
+    // stay encrypted on download (we never re-write the file in the demo).
+    // application/vnd.apache.parquet is the IANA-registered media type.
+    if (!currentFileBytes) return;
+    const name = currentFileName || 'download.parquet';
+    triggerDownload(new Blob([currentFileBytes], { type: 'application/vnd.apache.parquet' }), name);
+  });
+
   function setStatus(msg, isError) {
     status.textContent = msg;
     status.className = isError ? 'error' : '';
@@ -183,6 +263,9 @@
     if (!Module) { setStatus('WASM module not loaded yet — please wait.', true); return; }
     setStatus('Reading file...', false);
     results.style.display = 'none';
+    currentFileName = file.name || '';
+    currentFileBytes = null;
+    document.getElementById('toolbar').style.display = 'none';
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -190,8 +273,13 @@
         const arrayBuffer = e.target.result;
         const memfsPath = '/tmp/' + file.name;
 
+        // Capture once — pass the SAME Uint8Array to both MEMFS and the
+        // Download .parquet button so we never duplicate the buffer in memory.
+        const bytes = new Uint8Array(arrayBuffer);
+        currentFileBytes = bytes;
+
         // Write to Emscripten MEMFS
-        Module.FS.writeFile(memfsPath, new Uint8Array(arrayBuffer));
+        Module.FS.writeFile(memfsPath, bytes);
 
         // Open with ParquetReader
         const pqReader = new Module.ParquetReader();
@@ -324,6 +412,18 @@
           : '';
         document.getElementById('row-count').textContent =
           '(' + totalFileRows.toLocaleString() + ' rows' + truncNote + ')';
+
+        // Reveal the download toolbar — honest about what each export does.
+        // .parquet = passthrough (original bytes, encrypted stays encrypted).
+        // CSV / JSON = decrypted plaintext, capped at MAX_LOADED_ROWS for preview.
+        const toolbar = document.getElementById('toolbar');
+        const toolbarNote = document.getElementById('toolbar-note');
+        toolbar.style.display = loadedRows > 0 ? 'flex' : 'none';
+        const passNote = '.parquet = original bytes' + (isEncrypted ? ' (still encrypted)' : '') + '.';
+        const rowsNote = loadedRows < totalFileRows
+          ? 'CSV / JSON = first ' + loadedRows.toLocaleString() + ' of ' + totalFileRows.toLocaleString() + ' rows (preview cap).'
+          : 'CSV / JSON = all ' + loadedRows.toLocaleString() + ' decrypted rows.';
+        toolbarNote.textContent = passNote + ' ' + rowsNote + ' All client-side.';
 
         results.style.display = 'block';
         setStatus('', false);
