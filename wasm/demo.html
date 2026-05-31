@@ -54,6 +54,21 @@
   .toolbar button { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 5px 12px; cursor: pointer; font-family: inherit; font-size: 0.8rem; }
   .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
   .toolbar .toolbar-note { color: var(--dim); font-size: 0.72rem; }
+  /* CSV → encrypted Parquet panel */
+  #encrypt-panel { width: 100%; max-width: 900px; margin-top: 1.5rem; display: none; }
+  #encrypt-panel.show { display: block; }
+  .ep-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .ep-row label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; min-width: 120px; }
+  .ep-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px; color: var(--text); font-family: inherit; font-size: 0.85rem; min-width: 200px; }
+  .ep-row .small-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 6px 10px; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+  .ep-row .small-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #encrypt-panel .key-display { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.78rem; letter-spacing: 0.02em; word-break: break-all; }
+  #encrypt-panel .primary-action { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  #encrypt-panel .primary-action button { background: var(--accent); border: 1px solid var(--accent); border-radius: 6px; color: #fff; padding: 10px 20px; cursor: pointer; font-family: inherit; font-size: 0.9rem; font-weight: 600; }
+  #encrypt-panel .primary-action button:hover { filter: brightness(1.1); }
+  #encrypt-panel .primary-action .ghost { background: transparent; color: var(--accent); }
+  #encrypt-panel .warn-note { background: rgba(245,158,11,0.08); border-left: 3px solid #F59E0B; padding: 10px 14px; margin-top: 0.6rem; font-size: 0.82rem; color: var(--text); border-radius: 4px; }
+  #encrypt-panel .ok-note { background: rgba(46,204,113,0.08); border-left: 3px solid #2ecc71; padding: 10px 14px; margin-top: 0.6rem; font-size: 0.82rem; color: var(--text); border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -65,9 +80,9 @@
 <p class="subtitle" id="version-text">Loading WASM module...</p>
 
 <div id="drop-zone">
-  <p>Drop a <strong>.parquet</strong> file here</p>
-  <p class="hint">or click to browse</p>
-  <input type="file" id="file-input" accept=".parquet,.parq">
+  <p>Drop a <strong>.parquet</strong> or <strong>.csv</strong> file here</p>
+  <p class="hint">Parquet → preview &amp; decrypt · CSV → encrypt &amp; download · or click to browse</p>
+  <input type="file" id="file-input" accept=".parquet,.parq,.csv">
 </div>
 
 <div id="encryption-panel">
@@ -87,6 +102,36 @@
     <label for="column-keys">Per-column keys (optional JSON)</label>
     <input type="text" id="column-keys" placeholder='{"price":"hex64...","volume":"hex64..."}' spellcheck="false" autocomplete="off">
     <div class="hint">Override specific columns with different keys: {"column_name": "hex_key"}</div>
+  </div>
+</div>
+
+<!-- CSV → encrypted Parquet panel. Appears when a .csv is dropped. -->
+<div id="encrypt-panel">
+  <div class="card">
+    <h2>Encrypt this CSV to Parquet</h2>
+    <p class="hint" style="font-size:0.82rem;margin-bottom:0.8rem">Conversion + AES-256-GCM encryption happens entirely in this tab. The CSV bytes, the keys and the resulting Parquet never leave your browser. Save the key and AAD prefix below — they are the only way to decrypt the file later.</p>
+    <div class="ep-row">
+      <label>Source file</label>
+      <span id="ep-source" style="flex:1;font-size:0.85rem;color:var(--text)"></span>
+    </div>
+    <div class="ep-row">
+      <label for="ep-key">Encryption key</label>
+      <input type="text" id="ep-key" class="key-display" maxlength="64" spellcheck="false" autocomplete="off">
+      <button class="small-btn" id="ep-key-regen" title="Generate a fresh AES-256 key via crypto.getRandomValues">Regenerate</button>
+      <button class="small-btn" id="ep-key-copy" title="Copy key to clipboard">Copy</button>
+    </div>
+    <div class="hint" style="font-size:0.72rem;margin-bottom:0.6rem">64 hex chars = 32 bytes. Generated via <code>crypto.getRandomValues</code> on first load — applied to both the footer and every column.</div>
+    <div class="ep-row">
+      <label for="ep-aad">AAD prefix</label>
+      <input type="text" id="ep-aad" spellcheck="false" autocomplete="off" placeholder="e.g. mydata-2026-05-31">
+    </div>
+    <div class="hint" style="font-size:0.72rem;margin-bottom:0.6rem">Bound into every GCM authentication tag. The same prefix is required at decrypt time — character for character.</div>
+    <div class="warn-note"><strong>Save the key + AAD prefix now</strong> — close the tab without copying them and the encrypted file becomes unrecoverable. This is by design.</div>
+    <div class="primary-action">
+      <button id="ep-encrypt-btn">Encrypt &amp; download .parquet</button>
+      <button id="ep-cancel-btn" class="ghost">Cancel</button>
+    </div>
+    <div id="ep-result" class="ok-note" style="display:none"></div>
   </div>
 </div>
 
@@ -149,6 +194,23 @@
   let colHeaders = [];
   let currentFileName = '';   // original .parquet name, used to derive download filenames
   let currentFileBytes = null; // Uint8Array of the uploaded file — passthrough for "Download .parquet"
+
+  // CSV-encrypt panel state — populated when a .csv is dropped, consumed on
+  // the Encrypt button click.
+  let pendingCsvBytes = null;
+  let pendingCsvName  = '';
+
+  // ----- Hex / key helpers ---------------------------------------------------
+  function genKeyHex() {
+    const buf = new Uint8Array(32);
+    crypto.getRandomValues(buf);
+    let h = '';
+    for (let i = 0; i < buf.length; i++) h += buf[i].toString(16).padStart(2, '0');
+    return h;
+  }
+  function deriveStem(name) {
+    return (name || 'data').replace(/\.[^.]+$/, '');
+  }
   let totalFileRows = 0;
   let loadedRows = 0;
   let currentPage = 0;
@@ -254,6 +316,120 @@
     triggerDownload(new Blob([currentFileBytes], { type: 'application/vnd.apache.parquet' }), name);
   });
 
+  // ----- CSV → encrypted Parquet panel wiring ------------------------------
+  const ep        = document.getElementById('encrypt-panel');
+  const epSource  = document.getElementById('ep-source');
+  const epKey     = document.getElementById('ep-key');
+  const epAad     = document.getElementById('ep-aad');
+  const epResult  = document.getElementById('ep-result');
+  const epEncBtn  = document.getElementById('ep-encrypt-btn');
+
+  function showEncryptPanel(name, sizeBytes) {
+    pendingCsvName = name;
+    epSource.textContent = name + '  (' + formatBytes(sizeBytes) + ')';
+    epKey.value = genKeyHex();
+    epAad.value = deriveStem(name) + '-' + new Date().toISOString().slice(0, 10);
+    epResult.style.display = 'none';
+    epEncBtn.disabled = false;
+    epEncBtn.textContent = 'Encrypt & download .parquet';
+    ep.classList.add('show');
+    results.style.display = 'none';
+    setStatus('', false);
+    setTimeout(() => ep.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+  function hideEncryptPanel() {
+    ep.classList.remove('show');
+    pendingCsvBytes = null;
+    pendingCsvName  = '';
+  }
+
+  document.getElementById('ep-key-regen').addEventListener('click', () => { epKey.value = genKeyHex(); });
+  document.getElementById('ep-key-copy').addEventListener('click', () => {
+    if (!epKey.value) return;
+    navigator.clipboard.writeText(epKey.value).then(() => {
+      const btn = document.getElementById('ep-key-copy');
+      const orig = btn.textContent; btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }).catch(() => { /* clipboard blocked — user can select manually */ });
+  });
+  document.getElementById('ep-cancel-btn').addEventListener('click', hideEncryptPanel);
+
+  epEncBtn.addEventListener('click', () => {
+    if (!Module) { setStatus('WASM module not loaded yet — please wait.', true); return; }
+    if (!pendingCsvBytes) { setStatus('No CSV staged. Drop a .csv file first.', true); return; }
+    const key = (epKey.value || '').trim().toLowerCase();
+    if (key.length !== 64 || !/^[0-9a-f]{64}$/.test(key)) {
+      setStatus('Encryption key must be exactly 64 hex characters (lowercase 0-9a-f).', true);
+      return;
+    }
+    const aad = (epAad.value || '').trim();
+    if (typeof Module.csvToParquet !== 'function') {
+      setStatus('CSV→Parquet conversion not available in this WASM build.', true);
+      return;
+    }
+
+    epEncBtn.disabled = true;
+    epEncBtn.textContent = 'Encrypting…';
+
+    // Defer to next tick so the UI updates before the synchronous WASM call.
+    setTimeout(() => {
+      const csvPath = '/tmp/' + pendingCsvName;
+      const outName = deriveStem(pendingCsvName) + '.parquet';
+      const outPath = '/tmp/' + outName;
+      try {
+        Module.FS.writeFile(csvPath, pendingCsvBytes);
+        const opts = new Module.WriterOptions();
+        if (typeof opts.setEncryption !== 'function') {
+          setStatus('Encryption not available — WASM built without SIGNET_ENABLE_COMMERCIAL.', true);
+          opts.delete(); return;
+        }
+        const ok = opts.setEncryption(key, key, aad);
+        if (!ok) {
+          setStatus('setEncryption rejected the keys (must be 64 hex chars each).', true);
+          opts.delete(); return;
+        }
+        const wrote = Module.csvToParquet(csvPath, outPath, opts);
+        opts.delete();
+        if (!wrote) {
+          setStatus('Encryption / conversion failed. Check the CSV is well-formed (header + comma-separated rows).', true);
+          return;
+        }
+        const out = Module.FS.readFile(outPath);
+        // Trigger download
+        triggerDownload(new Blob([out], { type: 'application/vnd.apache.parquet' }), outName);
+        // Success note — and a one-click "decrypt right here" button to close the loop.
+        epResult.innerHTML =
+          '<strong>Encrypted Parquet downloaded as <code>' + outName + '</code></strong> · ' +
+          formatBytes(out.length) + ' written. ' +
+          'Keep your key and AAD prefix safe — they\'re the only way back to the data.<br><br>' +
+          '<button class="small-btn" id="ep-verify-btn" style="padding:6px 14px">Decrypt it here to verify ↓</button>';
+        epResult.style.display = 'block';
+        epEncBtn.disabled = false;
+        epEncBtn.textContent = 'Encrypt & download .parquet';
+        document.getElementById('ep-verify-btn').addEventListener('click', () => {
+          // Prefill the existing decrypt flow with the key+AAD we just used
+          // and feed the just-generated bytes back through handleFile().
+          encryptToggle.checked = true;
+          keyInputs.classList.add('show');
+          document.getElementById('footer-key').value = key;
+          document.getElementById('column-key').value = key;
+          document.getElementById('aad-prefix').value = aad;
+          // Synthesise a File-like wrapper that handleFile() can consume.
+          const blob = new Blob([out], { type: 'application/vnd.apache.parquet' });
+          const fake = new File([blob], outName, { type: blob.type });
+          handleFile(fake);
+        });
+        // Clean up MEMFS to keep the in-tab heap tidy.
+        try { Module.FS.unlink(csvPath); Module.FS.unlink(outPath); } catch (e) {}
+      } catch (err) {
+        setStatus('Error: ' + (err && err.message ? err.message : err), true);
+        epEncBtn.disabled = false;
+        epEncBtn.textContent = 'Encrypt & download .parquet';
+        console.error(err);
+      }
+    }, 30);
+  });
+
   function setStatus(msg, isError) {
     status.textContent = msg;
     status.className = isError ? 'error' : '';
@@ -261,6 +437,24 @@
 
   function handleFile(file) {
     if (!Module) { setStatus('WASM module not loaded yet — please wait.', true); return; }
+
+    // Branch on extension. .csv → open the encrypt panel and stop here;
+    // the user picks their key + AAD prefix and triggers the conversion.
+    if (/\.csv$/i.test(file.name || '')) {
+      setStatus('Reading CSV...', false);
+      const r = new FileReader();
+      r.onload = (e) => {
+        pendingCsvBytes = new Uint8Array(e.target.result);
+        showEncryptPanel(file.name, file.size);
+        setStatus('', false);
+      };
+      r.onerror = () => setStatus('Failed to read CSV.', true);
+      r.readAsArrayBuffer(file);
+      return;
+    }
+
+    // .parquet (or anything else) → the existing decode path
+    hideEncryptPanel();
     setStatus('Reading file...', false);
     results.style.display = 'none';
     currentFileName = file.name || '';

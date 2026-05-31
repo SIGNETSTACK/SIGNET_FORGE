@@ -276,7 +276,50 @@ public:
 
     /// Get the current row group size setting.
     int64_t getRowGroupSize() const { return opts.row_group_size; }
+
+#if SIGNET_ENABLE_COMMERCIAL
+    /// Configure AES-256 PME encryption with raw hex keys.
+    /// Round-trip-compatible with WasmParquetReader::openEncrypted — i.e.,
+    /// a file written with these settings can be decrypted with the same
+    /// footer key, column key and AAD prefix.
+    /// @param footerKeyHex  Required. 64 hex chars (32-byte AES-256).
+    /// @param columnKeyHex  Optional. 64 hex chars; empty = no column encryption.
+    /// @param aadPrefix     Optional free-text. Bound into every GCM tag.
+    /// @return true on success, false if any key is malformed.
+    bool setEncryption(const std::string& footerKeyHex,
+                       const std::string& columnKeyHex,
+                       const std::string& aadPrefix) {
+        crypto::EncryptionConfig cfg;
+        cfg.footer_key = hexToBytes(footerKeyHex);
+        if (cfg.footer_key.size() != 32) return false;
+        if (!columnKeyHex.empty()) {
+            cfg.default_column_key = hexToBytes(columnKeyHex);
+            if (cfg.default_column_key.size() != 32) return false;
+        }
+        if (!aadPrefix.empty()) cfg.aad_prefix = aadPrefix;
+        opts.encryption = std::move(cfg);
+        return true;
+    }
+#endif
 };
+
+// ---------------------------------------------------------------------------
+// CSV-to-Parquet one-call wrapper (uses ParquetWriter::csv_to_parquet)
+// ---------------------------------------------------------------------------
+
+/// JavaScript-facing wrapper around `ParquetWriter::csv_to_parquet`. Reads a
+/// CSV file from MEMFS, auto-detects column types, and writes a Parquet file
+/// (encrypted if `opts.setEncryption(...)` was called on commercial builds).
+/// @param csvPath      MEMFS source path (caller must write the CSV first).
+/// @param parquetPath  MEMFS destination path.
+/// @param opts         WriterOptions — row group size, optional encryption.
+/// @return true on success, false on any read/write/encryption error.
+static bool wasmCsvToParquet(const std::string& csvPath,
+                              const std::string& parquetPath,
+                              const WasmWriterOptions& opts) {
+    auto result = ParquetWriter::csv_to_parquet(csvPath, parquetPath, opts.opts);
+    return result.has_value();
+}
 
 // ---------------------------------------------------------------------------
 // ParquetWriter wrapper
@@ -649,7 +692,13 @@ EMSCRIPTEN_BINDINGS(signet_forge) {
         .constructor<>()
         .function("setRowGroupSize", &WasmWriterOptions::setRowGroupSize)
         .function("getRowGroupSize", &WasmWriterOptions::getRowGroupSize)
+#if SIGNET_ENABLE_COMMERCIAL
+        .function("setEncryption",   &WasmWriterOptions::setEncryption)
+#endif
         ;
+
+    // One-call CSV-to-Parquet (honours encryption set on WriterOptions)
+    em::function("csvToParquet", &wasmCsvToParquet);
 
     // ParquetWriter
     em::class_<WasmParquetWriter>("ParquetWriter")
