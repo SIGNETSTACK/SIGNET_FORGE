@@ -9,6 +9,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default-deny the workflow token: read the code, nothing else. A job that needs more grants it
+# itself (this file's publish jobs keep their own id-token: write). Mini Shai-Hulud, May 2026:
+# an over-scoped default token is what turns one compromised action into a repo takeover.
+permissions:
+  contents: read
+
 jobs:
   # ---------------------------------------------------------------------------
   # Build wheels (Linux / macOS / Windows) via cibuildwheel

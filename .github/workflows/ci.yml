@@ -10,6 +10,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default-deny the workflow token: read the code, nothing else. A job needing more grants it itself.
+permissions:
+  contents: read
+
 jobs:
   # ---------------------------------------------------------------------------
   # Standard build + test (Linux + macOS)
